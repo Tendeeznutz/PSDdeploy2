@@ -1,0 +1,1 @@
+# run python manage.py loaddata backend_api/seed/seed.json
