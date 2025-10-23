@@ -1,0 +1,108 @@
+### add new appt
+POST http://127.0.0.1:8000/api/appointments/
+
+{
+"dateTime": "2024-12-20T11:16:00Z",
+"customerId": "223e4567-e89b-12d3-a456-426614174000",
+"airconToService": ["323e4567-e89b-12d3-a456-426614174000"]
+}
+
+### send customer enquiry
+POST http://127.0.0.1:8000/api/appointments/sendEnquiry/
+
+{
+"customerId": "74179e5eb3e54fb182deabcbbecc5781",
+"emailSubject": "TESTING AGAIN",
+"emailBody": "NIHAO"
+}
+### get appt
+GET http://127.0.0.1:8000/api/appointments/
+
+### get appt by id
+GET http://127.0.0.1:8000/api/appointments/623e4567-e89b-12d3-a456-426614174000
+
+### update appt
+PATCH http://127.0.0.1:8000/api/appointments/623e4567-e89b-12d3-a456-426614174000/
+
+{"dateTime":"2023-12-05T06:00:00.000Z","airconToService":["323e4567-e89b-12d3-a456-426614174000"],"customerFeedback":"good!!"}
+
+### delete appt
+DELETE http://127.0.0.1:8000/api/appointments/623e4567-e89b-12d3-a456-426614174000/
+
+### from customer id
+GET http://127.0.0.1:8000/api/appointments/fromCustomer/?id=223e4567-e89b-12d3-a456-426614174000
+
+### from customer name
+GET http://127.0.0.1:8000/api/appointments/fromCustomer/?name=joh
+
+### from customer phone
+GET http://127.0.0.1:8000/api/appointments/fromCustomer/?phone=88884444
+
+### from customer email
+GET http://127.0.0.1:8000/api/appointments/fromCustomer/?email=richie
+
+### from technician id
+GET http://127.0.0.1:8000/api/appointments/fromTechnician/?id=423e4567-e89b-12d3-a456-426614174000
+
+### from technician name
+GET http://127.0.0.1:8000/api/appointments/fromTechnician/?name=ben
+
+### from technician phone
+GET http://127.0.0.1:8000/api/appointments/fromTechnician/?phone=88884444
+
+### from technician postal code
+GET http://127.0.0.1:8000/api/appointments/fromTechnician/?postal=123456
+
+### from status
+GET http://127.0.0.1:8000/api/appointments/fromTechnician/?status=5
+
+### from date
+GET http://127.0.0.1:8000/api/appointments/byDate/?date=2023-11-20
+
+
+### add new customer
+POST http://127.0.0.1:8000/api/customers/
+
+{
+        "customerName": "richie",
+        "customerAddress": "earth",
+        "customerPhone": "88884443",
+        "customerPassword": "password",
+        "customerEmail": "richie1@gmail.com",
+        "customerPostalCode": "123456"
+}
+
+### list all customers
+GET http://127.0.0.1:8000/api/customers/
+
+### get customer by id
+GET http://127.0.0.1:8000/api/customers/3d3e5677-2f3c-425f-829f-2948df06b18a/
+
+### update customer
+PATCH http://127.0.0.1:8000/api/customers/3d3e5677-2f3c-425f-829f-2948df06b18a/
+
+{
+"customerName": "Ben"
+}
+
+### delete customer
+DELETE http://127.0.0.1:8000/api/customers/3d3e5677-2f3c-425f-829f-2948df06b18a/
+
+
+### Login
+POST http://127.0.0.1:8000/api/customers/login/
+
+{
+"customerEmail": "janesmith@email.com",
+"customerPassword": "password"
+}
+
+### get customer aircons
+GET http://127.0.0.1:8000/api/customers/customeraircondevices/?customerId=3d3e5677-2f3c-425f-829f-2948df06b18a
+
+### get aircon catalog list
+GET http://127.0.0.1:8000/api/airconcatalogs/
+
+
+### get technician list
+GET http://127.0.0.1:8000/api/technicians/

@@ -1,0 +1,17 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+
+from .views import AppointmentViewSet, CustomerViewSet, TechnicianViewSet, \
+    AirconCatalogViewSet, CoordinatorViewSet, CustomerAirconDeviceViewSet
+
+router = DefaultRouter()
+router.register(r'appointments', AppointmentViewSet, basename='appointments')
+router.register(r'customers', CustomerViewSet, basename='customers')
+router.register(r'technicians', TechnicianViewSet, basename='technicians')
+router.register(r'airconcatalogs', AirconCatalogViewSet, basename='airconcatalogs')
+router.register(r'coordinators', CoordinatorViewSet, basename='coordinators')
+router.register(r'customeraircondevices', CustomerAirconDeviceViewSet, basename='customeraircondevices')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]
