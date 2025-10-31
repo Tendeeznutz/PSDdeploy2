@@ -9,19 +9,24 @@ SG_PHONE_VALIDATOR = RegexValidator(r'^\d{8}$', 'Phone must be exactly 8 digits.
 SG_POSTAL_VALIDATOR = RegexValidator(r'^\d{6}$', 'Postal code must be exactly 6 digits.')
 
 # Create your models here.
-class AirconCatalogs(models.Model):
+
+class TimeStampedModel(models.Model):
+    """Adds created_at/updated_at to all inheriting models."""
+    created_at = models.DateTimeField(auto_now_add=True)  # set once on insert
+    updated_at = models.DateTimeField(auto_now=True)      # refresh on every save
+
+    class Meta:
+        abstract = True
+
+class AirconCatalogs(TimeStampedModel):  # was: models.Model
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
     airconBrand = models.CharField(max_length=50, null=False)
     airconModel = models.CharField(max_length=50, null=False)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         constraints = [
-            UniqueConstraint(fields=['airconBrand', 'airconModel'], 
-                             name='unique_aircon_brand_model')
-            ]
+            UniqueConstraint(fields=['airconBrand', 'airconModel'], name='unique_aircon_brand_model')
+        ]
         indexes = [
             models.Index(fields=['airconBrand'], name='aircon_brand_idx'),
             models.Index(fields=['airconModel'], name='aircon_model_idx'),
@@ -31,61 +36,45 @@ class AirconCatalogs(models.Model):
     def __str__(self):
         return f'{self.airconBrand} {self.airconModel}'
 
-
-class Customers(models.Model):
+class Customers(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
     customerName = models.CharField(max_length=50, null=False)
     customerPostalCode = models.CharField(max_length=6, null=False, validators=[SG_POSTAL_VALIDATOR])
     customerLocation = models.CharField(max_length=32, null=True)
     customerAddress = models.CharField(max_length=50, null=False)
     customerPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
-    # should be hashed
-    customerPassword = models.CharField(max_length=50, null=False)
+    customerPassword = models.CharField(max_length=50, null=False)  # TODO: hash later
     customerEmail = models.CharField(max_length=50, unique=True, null=False, validators=[validate_email])
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         indexes = [
             Index(fields=['customerPhone'], name='customer_phone_idx'),
             Index(fields=['customerEmail'], name='customer_email_idx'),
         ]
+
     def __str__(self):
         return f'{self.customerName} ({self.customerEmail})'
-    
 
-class CustomerAirconDevices(models.Model):
+class CustomerAirconDevices(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, null=False)
     airconName = models.CharField(max_length=50, null=True)
     airconCatalogId = models.ForeignKey(
-        AirconCatalogs, 
-        on_delete=models.CASCADE, 
-        db_column='airconCatalogId',
-        related_name='customer_devices',
+        AirconCatalogs, on_delete=models.CASCADE,
+        db_column='airconCatalogId', related_name='customer_devices',
         default=None, null=False
     )
     customerId = models.ForeignKey(
-        Customers, 
-        on_delete=models.CASCADE, 
-        db_column='customerId', 
-        related_name='aircon_devices',
-        default=None,
-        null=False
+        Customers, on_delete=models.CASCADE,
+        db_column='customerId', related_name='aircon_devices',
+        default=None, null=False
     )
-    # lastServiceDate = models.DateTimeField(default=None, null=True)
+    # Use epoch seconds for now (matches your current schema)
     lastServiceDate = models.BigIntegerField(null=True, default=None)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
     class Meta:
-        # Prevent duplicate device names for the same customer
         constraints = [
-            models.UniqueConstraint(
-                fields=['customerId', 'airconName'],
-                name='uniq_device_name_per_customer'
-            ),
+            models.UniqueConstraint(fields=['customerId', 'airconName'],
+                                    name='uniq_device_name_per_customer'),
         ]
         indexes = [
             models.Index(fields=['customerId']),
@@ -95,8 +84,6 @@ class CustomerAirconDevices(models.Model):
 
     def __str__(self):
         return self.airconName or f'Device {self.id}'
-
-
 
 class Technicians(models.Model):
     choices = (
@@ -131,15 +118,13 @@ class Technicians(models.Model):
         return f'{self.technicianName} ({self.get_technicianStatus_display()})'
     
 
-class Coordinators(models.Model):
+class Coordinators(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
     coordinatorName = models.CharField(max_length=50)
     coordinatorEmail = models.CharField(max_length=50, unique=True, null=False, validators=[validate_email])
-    coordinatorPhone = models.CharField(max_length=50, unique=True, null=False, validators=[RegexValidator(r'^\d{8}$')])
+    coordinatorPhone = models.CharField(max_length=50, unique=True, null=False,
+                                        validators=[RegexValidator(r'^\d{8}$')])
     coordinatorPassword = models.CharField(max_length=50)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
@@ -147,11 +132,12 @@ class Coordinators(models.Model):
             Index(fields=['coordinatorPhone'], name='coordinator_phone_idx'),
         ]
         ordering = ['coordinatorName']
-    
+
     def __str__(self):
         return f'{self.coordinatorName} ({self.coordinatorEmail})'
 
-class Appointments(models.Model):
+
+class Appointments(TimeStampedModel):
     choices = (
         ('1', 'Pending'),
         ('2', 'Confirmed'),
@@ -186,9 +172,6 @@ class Appointments(models.Model):
     airconToService = models.JSONField(default=list, help_text='List of customerAirconDevices IDs')
     customerFeedback = models.TextField(default=None, null=True, max_length=500)
     appointmentStatus = models.CharField(max_length=1, default=1, choices=choices)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     # def get_appointmentStatus_display(self):
     #     return self.choices[int(self.appointmentStatus) - 1][1]
