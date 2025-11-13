@@ -5,7 +5,7 @@ import randomname
 from rest_framework import serializers
 
 from .models import Appointments, AppointmentRequest, Customers, AirconCatalogs, Technicians, Coordinators, \
-    CustomerAirconDevices
+    CustomerAirconDevices, Messages
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -87,3 +87,10 @@ class CustomerAirconDeviceSerializer(serializers.ModelSerializer):
             return randomname.get_name()
         else:
             return value
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Messages
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']

@@ -172,6 +172,9 @@ class Appointments(TimeStampedModel):
     airconToService = models.JSONField(default=list, help_text='List of customerAirconDevices IDs')
     customerFeedback = models.TextField(default=None, null=True, max_length=500)
     appointmentStatus = models.CharField(max_length=1, default=1, choices=choices)
+    cancellationReason = models.TextField(default=None, null=True, blank=True, max_length=500, help_text='Reason for cancellation')
+    cancelledBy = models.CharField(max_length=50, null=True, blank=True, help_text='Role of person who cancelled (technician/coordinator)')
+    cancelledAt = models.DateTimeField(null=True, blank=True, help_text='Timestamp of cancellation')
 
     # def get_appointmentStatus_display(self):
     #     return self.choices[int(self.appointmentStatus) - 1][1]
@@ -188,3 +191,49 @@ class AppointmentRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     class Meta:
         managed = True
+
+class Messages(TimeStampedModel):
+    """
+    Internal messaging system for communication between customers, coordinators, and technicians
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
+
+    # Who sent the message
+    senderType = models.CharField(max_length=20, null=False, help_text='customer, coordinator, or technician')
+    senderId = models.UUIDField(null=False, help_text='ID of the sender')
+    senderName = models.CharField(max_length=50, null=False, help_text='Name of sender')
+
+    # Who receives the message
+    recipientType = models.CharField(max_length=20, null=False, help_text='customer, coordinator, or technician')
+    recipientId = models.UUIDField(null=False, help_text='ID of the recipient')
+    recipientName = models.CharField(max_length=50, null=False, help_text='Name of recipient')
+
+    # Message content
+    subject = models.CharField(max_length=200, null=False)
+    body = models.TextField(max_length=2000, null=False)
+
+    # Message metadata
+    isRead = models.BooleanField(default=False, help_text='Whether the recipient has read the message')
+    readAt = models.DateTimeField(null=True, blank=True, help_text='When the message was read')
+
+    # Optional reference to related appointment
+    relatedAppointment = models.ForeignKey(
+        Appointments,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='messages',
+        help_text='Optional related appointment'
+    )
+
+    class Meta:
+        indexes = [
+            Index(fields=['senderId', 'senderType']),
+            Index(fields=['recipientId', 'recipientType']),
+            Index(fields=['isRead']),
+            Index(fields=['-created_at']),  # For ordering by newest first
+        ]
+        ordering = ['-created_at']  # Newest first
+
+    def __str__(self):
+        return f'Message from {self.senderName} to {self.recipientName}: {self.subject}'

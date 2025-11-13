@@ -1,16 +1,39 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from datetime import datetime, timedelta
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .format_response import include_all_info
 from ..scheduling_algo import *
+from ..models import Appointments, Customers, Technicians
 from ..serializers import AppointmentSerializer
 from ..utils import sendMail
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
+    queryset = Appointments.objects.all()
     serializer_class = AppointmentSerializer
+
+    def check_monthly_cancellation_limit(self, technician_id):
+        """
+        Check if technician has reached monthly cancellation limit (3 per month)
+        Returns (is_allowed, count) tuple
+        """
+        # Get the first day of current month
+        now = timezone.now()
+        first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Count cancellations by this technician in current month
+        cancellation_count = Appointments.objects.filter(
+            appointmentStatus='4',  # Cancelled status
+            cancelledBy='technician',
+            technicianId=technician_id,
+            cancelledAt__gte=first_day_of_month
+        ).count()
+
+        return (cancellation_count < 3, cancellation_count)
 
     @action(detail=False, methods=['get'], url_path='unavailable')
     def unavailable(self, request, *args, **kwargs):
@@ -149,6 +172,30 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     # PATCH request
     def partial_update(self, request, pk=None):
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
+
+        # Check if this is a cancellation request (status changing to '4' which is Cancelled)
+        if request.data.get('appointmentStatus') == '4' or request.data.get('appointmentStatus') == 4:
+            # Check if cancellation reason is provided
+            cancellation_reason = request.data.get('cancellationReason')
+            if not cancellation_reason or cancellation_reason.strip() == '':
+                return Response({"error": "Cancellation reason is required."}, status=400)
+
+            # Determine who is cancelling (technician or coordinator)
+            cancelled_by = request.data.get('cancelledBy', 'technician')
+
+            # Only check limit for technicians and coordinators, not customers
+            if cancelled_by in ['technician', 'coordinator'] and item.technicianId:
+                is_allowed, count = self.check_monthly_cancellation_limit(item.technicianId.id)
+                if not is_allowed:
+                    return Response({
+                        "error": f"Monthly cancellation limit reached. You have already cancelled {count} appointments this month. Maximum is 3 per month."
+                    }, status=400)
+
+            # Set cancellation metadata
+            request.data['cancelledAt'] = timezone.now()
+            request.data['cancelledBy'] = cancelled_by
+            request.data['appointmentStatus'] = '4'
+
         nearby_technicians = get_nearby_technicians(item.customerId.id)
 
         if nearby_technicians is None:

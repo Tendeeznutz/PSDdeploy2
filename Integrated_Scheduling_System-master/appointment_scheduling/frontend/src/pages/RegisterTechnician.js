@@ -9,6 +9,7 @@ function RegisterTechnician() {
         address: '',
         phone: '',
         password: '',
+        travelType: 'drive',
     });
 
     const [errorMessage, setErrorMessage] = useState('');
@@ -40,6 +41,7 @@ function RegisterTechnician() {
                 technicianAddress: technicianObj.address,
                 technicianPhone: technicianObj.phone,
                 technicianPassword: technicianObj.password,
+                technicianTravelType: technicianObj.travelType,
             });
 
             if (response.status === 201) {
@@ -140,6 +142,22 @@ function RegisterTechnician() {
                                 value={technicianObj.password}
                                 onChange={(e) => setTechnicianObj(technicianObj => ({...technicianObj, password: e.target.value}))}
                             />
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block mb-2 text-sm font-bold text-gray-700">
+                                Travel Type
+                            </label>
+                            <select
+                                className="w-full p-2 leading-tight text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                id="travelType"
+                                value={technicianObj.travelType}
+                                onChange={(e) => setTechnicianObj(technicianObj => ({...technicianObj, travelType: e.target.value}))}
+                            >
+                                <option value="drive">Drive</option>
+                                <option value="walk">Walk</option>
+                                <option value="cycle">Cycle</option>
+                            </select>
                         </div>
 
                         {/* <div className="mb-6">

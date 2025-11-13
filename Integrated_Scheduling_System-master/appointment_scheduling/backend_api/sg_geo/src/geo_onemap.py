@@ -39,8 +39,18 @@ def get_location_from_postal(postal_code) -> str:
     :param postal_code: Singapore postal code
     :return: location in string with format 'latitude,longitude'
     """
-    response = search_address_from_postal(postal_code)
-    return str(response.json()['results'][0]['LATITUDE']) + ',' + str(response.json()['results'][0]['LONGITUDE'])
+    try:
+        response = search_address_from_postal(postal_code)
+        results = response.json().get('results', [])
+        if results and len(results) > 0:
+            return str(results[0]['LATITUDE']) + ',' + str(results[0]['LONGITUDE'])
+        else:
+            # Return null island coordinates if no results found
+            return '0,0'
+    except Exception as e:
+        print(f"Error getting location for postal code {postal_code}: {e}")
+        # Return default coordinates on error
+        return '0,0'
 
 
 def get_route(start_location, end_location, travel_type='walk') -> requests.Response:
@@ -101,11 +111,25 @@ def is_in_range(start_location, end_location, search_range, travel_type='walk') 
     :param travel_type: 'walk', 'drive' or 'cycle', default is 'walk'
     :return: True if the travel distance is within the range, False otherwise
     """
-    start = tuple(start_location.split(','))
-    end = tuple(end_location.split(','))
-    if search_range < distance(start, end).meters:  # straight line distance not in range
-        return False
-    elif search_range < get_travel_distance(start_location, end_location, travel_type):  # travel distance not in range
-        return False
-    else:
+    try:
+        start = tuple(start_location.split(','))
+        end = tuple(end_location.split(','))
+        straight_line_distance = distance(start, end).meters
+
+        if search_range < straight_line_distance:  # straight line distance not in range
+            return False
+
+        # Try to get travel distance from API, but fall back to straight-line distance if API fails
+        try:
+            travel_distance = get_travel_distance(start_location, end_location, travel_type)
+            if search_range < travel_distance:  # travel distance not in range
+                return False
+        except Exception as e:
+            print(f"Warning: Could not get travel distance from OneMap API, using straight-line distance instead: {e}")
+            # If API call fails, use straight-line distance (already checked above, so we're OK)
+            pass
+
         return True
+    except Exception as e:
+        print(f"Error in is_in_range: {e}")
+        return False

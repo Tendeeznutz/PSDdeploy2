@@ -143,7 +143,7 @@ function CoordinatorAppointmentUpdate() {
                     {/*/!* Render selected aircon section *!/*/}
                     <fieldset className="mb-4">
                         <legend className="block mb-2 text-sm font-bold text-gray-700">Aircons to service</legend>
-                        {updatedAppointment.display['airconBrand'].map((aircon, index) => (
+                        {updatedAppointment.display && updatedAppointment.display['airconBrand'] && updatedAppointment.display['airconBrand'].map((aircon, index) => (
                             <div key={index} className="mb-2 text-gray-900 text-sm">
                                 <input
                                     type="checkbox"

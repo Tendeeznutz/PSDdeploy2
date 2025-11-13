@@ -17,13 +17,13 @@ import CoordinatorHome from "./pages/CoordinatorHome";
 import TechnicianLogin from './pages/TechnicianLogin';
 import TechnicianHome from "./pages/TechnicianHome";
 import AirconCatalog from "./pages/AirconCatalog";
-import RescheduleAppointment from "./pages/RescheduleAppointment";
 import RescheduleCoordinator from './pages/RescheduleCoordinator';
 import CoordinatorAppointmentView from './pages/CoordinatorAppointmentView';
 import CustomerEnquiry from './pages/CustomerEnquiry';
 import TechnicianProfile from './pages/TechnicianProfile';
 import CoordinatorAppointmentUpdate from "./pages/CoordinatorAppointmentUpdate";
 import ReportIssues from './pages/ReportIssues';
+import Mailbox from './pages/Mailbox';
 // this will always be the last page
 import Error404 from './pages/Error404';
 
@@ -53,9 +53,9 @@ root.render(
             <Route path='/CoordinatorAppointmentUpdate' element={<CoordinatorAppointmentUpdate/>}/>
             <Route path='/TechnicianHome' element={<TechnicianHome/>}/>
             <Route path='/AirconCatalog' element={<AirconCatalog/>}/>
-            <Route path='/rescheduleAppointment' element={<RescheduleAppointment/>}/>
             <Route path='/rescheduleDetail' element={<RescheduleCoordinator/>}/>
             <Route path='/ReportIssues' element={<ReportIssues/>}/>
+            <Route path='/Mailbox' element={<Mailbox/>}/>
             <Route path='/error' element={<Error404/>}/>
             <Route path='*' element={<Error404/>}/>
         </Routes>

@@ -5,15 +5,39 @@ import ReportIssues from '../pages/ReportIssues';
 import { Box, ListItemIcon, MenuItem } from '@mui/material';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
 import { PageviewRounded } from '@mui/icons-material';
+import { MailOutlined } from '@ant-design/icons';
+import { Badge } from 'antd';
 
 function Home() {
     const customer_id = localStorage.getItem("customers_id");
     const navigate = useNavigate();
     const [appointmentList, setAppointmentList] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const goToReportIssues = () => {
         navigate('/ReportIssues');
     }
+
+    const goToMailbox = () => {
+        navigate('/Mailbox');
+    }
+
+    const fetchUnreadCount = async () => {
+        try {
+            const response = await axios.get(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/unread-count/`,
+                {
+                    params: {
+                        recipientId: customer_id,
+                        recipientType: 'customer'
+                    }
+                }
+            );
+            setUnreadCount(response.data.unreadCount);
+        } catch (error) {
+            console.error('Error fetching unread count:', error);
+        }
+    };
     
     const getAllAppointments = () => {
         try {
@@ -27,12 +51,19 @@ function Home() {
     // Function to convert Unix timestamp to formatted date string
     function formatUnixTimestamp(unixTimestamp) {
         // Convert Unix time to milliseconds
-    
+
         // Create a new Date object
         const date = new Date(unixTimestamp*1000);
-    
-        // Format the date as a string
-        return date.toLocaleString();
+
+        // Format the date as a string without seconds
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
     useEffect(() => {
@@ -40,6 +71,7 @@ function Home() {
             navigate('/error');
         } else {
             getAllAppointments().then((response) => { setAppointmentList(response.data) });
+            fetchUnreadCount();
         }
     }, []);
 
@@ -139,7 +171,24 @@ function Home() {
 
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-semibold mb-4">Appointments</h1>
-                <button onClick={goToReportIssues}>Report Issues</button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={goToMailbox}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                    >
+                        <MailOutlined style={{ fontSize: '18px' }} />
+                        Messages
+                        {unreadCount > 0 && (
+                            <Badge count={unreadCount} />
+                        )}
+                    </button>
+                    <button
+                        onClick={goToReportIssues}
+                        className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+                    >
+                        Report Issues
+                    </button>
+                </div>
             </div>
             <h1 className="text-2xl font-semibold mb-4">Upcoming Appointments</h1>
             <MaterialReactTable table={apptTable}/>

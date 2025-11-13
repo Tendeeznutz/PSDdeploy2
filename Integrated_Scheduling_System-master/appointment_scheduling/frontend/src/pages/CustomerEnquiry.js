@@ -23,14 +23,33 @@ const CustomerEnquiry = () => {
         e.preventDefault();
 
         try {
-            const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/sendEnquiry/`, formData);
-            // Handle successful response
-            console.log(response.data);
-            message.success('Enquiry email sent successfully!');
+            // Get coordinator info from localStorage
+            const coordinatorId = localStorage.getItem("coordinators_id");
+            const coordinatorName = localStorage.getItem("coordinators_name");
+
+            // Send email (existing functionality)
+            const emailResponse = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/sendEnquiry/`, formData);
+            console.log(emailResponse.data);
+
+            // Save message to database for in-app messaging system
+            if (coordinatorId && coordinatorName) {
+                await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/messages/`, {
+                    senderId: coordinatorId,
+                    senderType: 'coordinator',
+                    senderName: coordinatorName,
+                    recipientId: formData.customerId,
+                    recipientType: 'customer',
+                    recipientName: custName,
+                    subject: formData.emailSubject,
+                    body: formData.emailBody
+                });
+            }
+
+            message.success('Enquiry sent successfully! Customer will receive email and message notification.');
         } catch (error) {
             // Handle error
             console.error('Error submitting form:', error);
-            message.error('Error sending enquiry email');
+            message.error('Error sending enquiry');
         }
     };
 

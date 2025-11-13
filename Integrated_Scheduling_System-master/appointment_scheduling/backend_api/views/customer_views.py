@@ -58,16 +58,28 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request, *args, **kwargs):
-        email = request.data['email']
-        password = request.data['password']
-        customer = Customers.objects.get(customerEmail=email)
-        if check_password(password, customer.customerPassword):
-            response_data = {
-                'customer_id': customer.id,
-                'role': 'customer',
-            }
-            return Response(response_data, status=200)
-        return Response(status=400)
+        try:
+            email = request.data.get('email')
+            password = request.data.get('password')
+
+            if not email or not password:
+                return Response({'error': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            customer = Customers.objects.filter(customerEmail=email).first()
+
+            if customer is None:
+                return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            if check_password(password, customer.customerPassword):
+                response_data = {
+                    'customer_id': customer.id,
+                    'role': 'customer',
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'Incorrect password'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'Login failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def retrieve(self, request, pk=None):
         item = get_object_or_404(Customers.objects.all(), pk=pk)

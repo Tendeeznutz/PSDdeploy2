@@ -33,8 +33,15 @@ function TechnicianHome() {
         // Create a new Date object
         const date = new Date(unixTimestamp * 1000);
 
-        // Format the date as a string
-        return date.toLocaleString();
+        // Format the date as a string without seconds
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
     // const CheckIn = (appointmentId) => {

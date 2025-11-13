@@ -23,6 +23,17 @@ function Profile() {
         customerAddress: '',
         customerPostalCode: ''
     });
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedDetails, setEditedDetails] = useState({
+        customerName: '',
+        customerEmail: '',
+        customerPhone: '',
+        customerAddress: '',
+        customerPostalCode: '',
+        customerPassword: '',
+        customerPasswordConfirm: ''
+    });
+    const [editErrorMessage, setEditErrorMessage] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
     const [airconCatalogList, setAirCatalogList] = useState([]);
     // for the add aircon form submission
@@ -161,26 +172,112 @@ function Profile() {
         }
     };
 
+    const handleEditToggle = () => {
+        if (!isEditing) {
+            // Entering edit mode - populate edited details
+            setEditedDetails({
+                customerName: userObject.customerName,
+                customerEmail: userObject.customerEmail,
+                customerPhone: userObject.customerPhone.replace('+65 ', ''),
+                customerAddress: userObject.customerAddress,
+                customerPostalCode: userObject.customerPostalCode.replace('S', ''),
+                customerPassword: '',
+                customerPasswordConfirm: ''
+            });
+        }
+        setIsEditing(!isEditing);
+        setEditErrorMessage('');
+    };
+
+    const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        setEditErrorMessage('');
+
+        try {
+            // Singapore phone number validation (8 digits, starting with 6, 8, or 9)
+            const phoneRegex = /^(6|8|9)\d{7}$/;
+            if (!phoneRegex.test(editedDetails.customerPhone)) {
+                throw new Error("Please enter a valid Singapore phone number.");
+            }
+
+            // Check if password fields match if password is being changed
+            if (editedDetails.customerPassword || editedDetails.customerPasswordConfirm) {
+                if (editedDetails.customerPassword !== editedDetails.customerPasswordConfirm) {
+                    throw new Error("Passwords do not match.");
+                }
+                if (editedDetails.customerPassword.length < 6) {
+                    throw new Error("Password must be at least 6 characters long.");
+                }
+            }
+
+            const payload = {
+                customerName: editedDetails.customerName,
+                customerEmail: editedDetails.customerEmail,
+                customerPhone: editedDetails.customerPhone,
+                customerAddress: editedDetails.customerAddress,
+                customerPostalCode: editedDetails.customerPostalCode,
+            };
+
+            // Only include password if it's been entered
+            if (editedDetails.customerPassword) {
+                payload.customerPassword = editedDetails.customerPassword;
+            }
+
+            const response = await axios.patch(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/customers/${customer_id}/`,
+                payload
+            );
+
+            if (response.status === 200) {
+                setUserObject({
+                    customerName: response.data.customerName,
+                    customerEmail: response.data.customerEmail,
+                    customerPhone: '+65 ' + response.data.customerPhone,
+                    customerAddress: response.data.customerAddress,
+                    customerPostalCode: 'S' + response.data.customerPostalCode
+                });
+                setIsEditing(false);
+                setEditedDetails({...editedDetails, customerPassword: '', customerPasswordConfirm: ''});
+            }
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            if (error.message) {
+                setEditErrorMessage(error.message);
+            } else {
+                setEditErrorMessage('Failed to update profile. Please try again.');
+            }
+        }
+    };
+
     useEffect(() => {
         if (!customer_id) {
             navigate('/error');
         } else {
-            fetchUserData().then(data => 
+            fetchUserData().then(data => {
                 setUserObject({
                     customerName: data.customerName,
                     customerEmail: data.customerEmail,
                     customerPhone: '+65 ' + data.customerPhone,
                     customerAddress: data.customerAddress,
                     customerPostalCode: 'S' + data.customerPostalCode
-                })
-            );
+                });
+                setEditedDetails({
+                    customerName: data.customerName,
+                    customerEmail: data.customerEmail,
+                    customerPhone: data.customerPhone,
+                    customerAddress: data.customerAddress,
+                    customerPostalCode: data.customerPostalCode,
+                    customerPassword: '',
+                    customerPasswordConfirm: ''
+                });
+            });
 
             fetchUserAirconData().then(userAircondata => setUserAirconList(userAircondata));
 
             fetchAirconCatalogData().then(data => setAirCatalogList(data));
         }
 
-        
+
     }, []);
 
     /* change setAirconBrandModels everytime the selected aircon brand
@@ -204,24 +301,25 @@ function Profile() {
             <div className="flex items-center justify-center h-screen bg-gray-100">
                 <div className="p-20 bg-white rounded shadow-md">
                     <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Your Profile</h2>
-                    <form>
+                    <form onSubmit={handleSaveProfile}>
                         {/* Display User Details */}
-                        <div className="mb-4 w-full">
-                            <label className="block mb-2 text-lg font-bold text-gray-700" htmlFor="date-time">
-                                Name: {userObject.customerName}
-                            </label>
-                            <label className="block mb-2 text-lg font-bold text-gray-700" htmlFor="date-time">
-                                Email: {userObject.customerEmail}
-                            </label>
-                            <label className="block mb-2 text-lg font-bold text-gray-700" htmlFor="date-time">
-                                Phone: {userObject.customerPhone}
-                            </label>
-                            <label className="block mb-2 text-lg font-bold text-gray-700" htmlFor="date-time">
-                                Address: {userObject.customerAddress} {userObject.customerPostalCode}
-                            </label>
-                            <label className="block mb-2 text-lg font-bold text-gray-700" htmlFor="date-time">
-                                Aircon:
-                            </label>
+                        {!isEditing ? (
+                            <div className="mb-4 w-full">
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Name: {userObject.customerName}
+                                </label>
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Email: {userObject.customerEmail}
+                                </label>
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Phone: {userObject.customerPhone}
+                                </label>
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Address: {userObject.customerAddress} {userObject.customerPostalCode}
+                                </label>
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Aircon:
+                                </label>
                             {/* List of Aircons */}
                             {
                                 userAirconList.length === 0
@@ -244,14 +342,112 @@ function Profile() {
                             <button
                                 type="button"
                                 onClick={toggleModal}
-                                className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 border border-blue-700 rounded text-xs"
+                                className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 border border-blue-700 rounded text-xs mb-2"
                                 data-ripple-light="true"
                                 data-dialog-target="animated-dialog"
                             >
                                 Add Aircon
                             </button>
+                            {/* Edit Profile Button */}
+                            <button
+                                type="button"
+                                onClick={handleEditToggle}
+                                className="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 border border-green-700 rounded text-xs"
+                            >
+                                Edit Profile
+                            </button>
                             {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
                         </div>
+                        ) : (
+                            <div className="mb-4 w-full">
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Name</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="text"
+                                        value={editedDetails.customerName}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerName: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Email</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="email"
+                                        value={editedDetails.customerEmail}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerEmail: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Phone</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="text"
+                                        value={editedDetails.customerPhone}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerPhone: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Address</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="text"
+                                        value={editedDetails.customerAddress}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerAddress: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Postal Code</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="text"
+                                        value={editedDetails.customerPostalCode}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerPostalCode: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">New Password (leave blank to keep current)</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="password"
+                                        value={editedDetails.customerPassword}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerPassword: e.target.value})}
+                                        placeholder="Enter new password"
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Confirm New Password</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="password"
+                                        value={editedDetails.customerPasswordConfirm}
+                                        onChange={(e) => setEditedDetails({...editedDetails, customerPasswordConfirm: e.target.value})}
+                                        placeholder="Confirm new password"
+                                    />
+                                </div>
+                                {editErrorMessage && <div className="mb-4 text-sm text-red-500">{editErrorMessage}</div>}
+                                <div className="flex gap-2">
+                                    <button
+                                        className="flex-1 px-4 py-2 font-bold text-white bg-green-500 rounded hover:bg-green-700 focus:outline-none focus:shadow-outline"
+                                        type="submit"
+                                    >
+                                        Save Changes
+                                    </button>
+                                    <button
+                                        className="flex-1 px-4 py-2 font-bold text-white bg-gray-500 rounded hover:bg-gray-700 focus:outline-none focus:shadow-outline"
+                                        type="button"
+                                        onClick={handleEditToggle}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </form>
                 </div>
 
@@ -330,20 +526,16 @@ function Profile() {
                                                     </div>
                                                     <div>
                                                         <label className="mb-2 text-sm font-bold text-gray-700 mr-4">
-                                                            Last Service Date/Time
+                                                            Last Service Date
                                                         </label>
                                                         <DatePicker
                                                             id="date-time"
                                                             selected={dateTime}
                                                             onChange={(date) => setDateTime(date)}
-                                                            showTimeSelect
-                                                            timeFormat="HH:mm"
-                                                            timeIntervals={15}
-                                                            timeCaption="time"
-                                                            dateFormat="MMM d, yyyy h:mm aa"
+                                                            dateFormat="MMM d, yyyy"
                                                             className="w-full p-2 mb-6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                                             portalId="my-portal"
-                                                            placeholderText='Select Date and Time'
+                                                            placeholderText='Select Date'
                                                             {...(selectedAirconBrand !== "" ? {} : {disabled: true})}
                                                         />
                                                     </div>

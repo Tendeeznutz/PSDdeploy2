@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { Progress, Popconfirm } from 'antd';
+import { Progress, Popconfirm, Modal, Input } from 'antd';
+
+const { TextArea } = Input;
 
 function AppointmentDetails() {
     const techniciansPhone = localStorage.getItem("technicians_phone");
@@ -16,11 +18,14 @@ function AppointmentDetails() {
     const [technicianData, setTechnicianData] = useState({});
     const [customerData, setCustomerData] = useState({});
     const [apptStatus, setApptStatus] = useState('');
+    const [cancellationReason, setCancellationReason] = useState('');
+    const [existingCancellationReason, setExistingCancellationReason] = useState('');
 
     const [error, setError] = useState('');
     const [editState, setEditState] = useState(false);
     const [progress, setProgress] = useState(0);
     const [showProgress, setShowProgress] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
     const navigate = useNavigate();
 
     const apptId = new URLSearchParams(window.location.search).get('id');
@@ -56,6 +61,11 @@ function AppointmentDetails() {
                 customerName: appointmentData.display.customerName
             });
             setApptStatus(appointmentData.display.appointmentStatus);
+
+            // Set existing cancellation reason if appointment is cancelled
+            if (appointmentData.cancellationReason) {
+                setExistingCancellationReason(appointmentData.cancellationReason);
+            }
 
             fetchSelectedUserAircon(appointmentData.customerId).then((userSelectedAirconList) => {
                 setAirconData(userSelectedAirconList);
@@ -155,30 +165,51 @@ function AppointmentDetails() {
         }
     }
 
-    const handleCancel = async (e) => {
-        e.preventDefault();
+    const handleCancelClick = () => {
+        setShowCancelModal(true);
+        setError('');
+    };
+
+    const handleCancelModalOk = async () => {
+        if (!cancellationReason || cancellationReason.trim() === '') {
+            setError('Please provide a reason for cancellation.');
+            return;
+        }
+
         setError('');
         setShowProgress(true);
+        setShowCancelModal(false);
 
         try {
-            console.log('Deleting appointment:', apptId);
-            const response = await axios.put(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/` + apptId + '/', {
-                appointmentStatus: 1
+            console.log('Cancelling appointment:', apptId);
+            const response = await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/` + apptId + '/', {
+                appointmentStatus: '4',
+                cancellationReason: cancellationReason,
+                cancelledBy: 'technician'
             });
-            //TODO: handle the cancelling of stuff
-            if (response.status === 204) {
+
+            if (response.status === 200) {
                 setProgress(100);
                 setTimeout(() => {
                     navigate('/TechnicianHome');
                 }, 1000);
             }
-            navigate('/TechnicianHome');
         } catch (error) {
-            console.error('Error deleting appointment:', error);
-            setError('Error deleting appointment. Please try again.');
+            console.error('Error cancelling appointment:', error);
+            if (error.response && error.response.data && error.response.data.error) {
+                setError(error.response.data.error);
+            } else {
+                setError('Error cancelling appointment. Please try again.');
+            }
             setShowProgress(false);
         }
-    }
+    };
+
+    const handleCancelModalCancel = () => {
+        setShowCancelModal(false);
+        setCancellationReason('');
+        setError('');
+    };
 
 
     const toggleEditState = () => {
@@ -289,6 +320,19 @@ function AppointmentDetails() {
                                 {...(editState ? {} : {disabled: true})}
                             />
                         </div>
+
+                        {/* Display cancellation reason if appointment is cancelled */}
+                        {existingCancellationReason && (
+                            <div className="mb-4">
+                                <label className="block mb-2 text-sm font-bold text-gray-700">
+                                    Cancellation Reason
+                                </label>
+                                <div className="w-full p-2 leading-tight text-sm text-gray-700 bg-red-50 rounded-lg border border-red-300">
+                                    {existingCancellationReason}
+                                </div>
+                            </div>
+                        )}
+
                         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
                         {/* The buttons section */}
@@ -301,20 +345,14 @@ function AppointmentDetails() {
                                 >
                                     Cancel
                                 </button>
-                                {hasTechniciansPhone && apptStatus !== 'Pending' && apptStatus !== "Completed" ? (
-                                    <Popconfirm
-                                        title={`Cancel appointment?`}
-                                        description="This action cannot be undone."
-                                        okButtonProps={{danger: 'true'}}
-                                        onConfirm={handleCancel}
+                                {hasTechniciansPhone && apptStatus !== 'Pending' && apptStatus !== "Completed" && apptStatus !== "Cancelled" ? (
+                                    <button
+                                        className="px-4 py-2 font-bold text-white bg-red-500 rounded-md hover:bg-red-700 focus:outline-none focus:shadow-outline"
+                                        type="button"
+                                        onClick={handleCancelClick}
                                     >
-                                        <button
-                                            className="px-4 py-2 font-bold text-white bg-red-500 rounded-md hover:bg-red-700 focus:outline-none focus:shadow-outline"
-                                            type="button"
-                                        >
-                                            Cancel Appointment
-                                        </button>
-                                    </Popconfirm>
+                                        Cancel Appointment
+                                    </button>
                                 ) : (
                                     <Popconfirm
                                         title={`Update appointment?`}
@@ -344,20 +382,14 @@ function AppointmentDetails() {
                                     </button>
                                 )}
 
-                                {hasTechniciansPhone && apptStatus !== "Pending" && apptStatus !== "Completed" && (
-                                    <Popconfirm
-                                        title={`Cancel appointment?`}
-                                        description="This action cannot be undone."
-                                        okButtonProps={{danger: 'true'}}
-                                        onConfirm={handleCancel}
+                                {hasTechniciansPhone && apptStatus !== "Pending" && apptStatus !== "Completed" && apptStatus !== "Cancelled" && (
+                                    <button
+                                        className="px-4 py-2 font-bold text-white bg-red-500 rounded-md hover:bg-red-700 focus:outline-none focus:shadow-outline"
+                                        type="button"
+                                        onClick={handleCancelClick}
                                     >
-                                        <button
-                                            className="px-4 py-2 font-bold text-white bg-red-500 rounded-md hover:bg-red-700 focus:outline-none focus:shadow-outline"
-                                            type="button"
-                                        >
-                                            Cancel Appointment
-                                        </button>
-                                    </Popconfirm>
+                                        Cancel Appointment
+                                    </button>
                                 )}
 
                                 {!hasTechniciansPhone && (
@@ -383,6 +415,30 @@ function AppointmentDetails() {
                     {showProgress && <Progress className="mt-3" percent={progress} type="line" />}
                 </div>
             </div>
+
+            {/* Cancellation Modal */}
+            <Modal
+                title="Cancel Appointment"
+                open={showCancelModal}
+                onOk={handleCancelModalOk}
+                onCancel={handleCancelModalCancel}
+                okText="Confirm Cancellation"
+                okButtonProps={{ danger: true }}
+            >
+                <div className="mb-4">
+                    <label className="block mb-2 text-sm font-bold text-gray-700">
+                        Please provide a reason for cancellation:
+                    </label>
+                    <TextArea
+                        rows={4}
+                        placeholder="Enter cancellation reason (required)"
+                        value={cancellationReason}
+                        onChange={(e) => setCancellationReason(e.target.value)}
+                        maxLength={500}
+                    />
+                    {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+                </div>
+            </Modal>
         </div>
     );
 }
