@@ -73,6 +73,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             if check_password(password, customer.customerPassword):
                 response_data = {
                     'customer_id': customer.id,
+                    'customerName': customer.customerName,
                     'role': 'customer',
                 }
                 return Response(response_data, status=status.HTTP_200_OK)

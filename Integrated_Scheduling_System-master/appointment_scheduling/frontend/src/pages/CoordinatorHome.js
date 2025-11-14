@@ -1,13 +1,15 @@
 import React, {useState, useEffect, useMemo} from 'react';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
-import {Link} from 'react-router-dom';
+import {Link, useNavigate} from 'react-router-dom';
 import axios from 'axios';
 import {Button} from 'antd';
 import DeleteAppointmentPopup from "../components/DeleteAppointmentPopup";
 import { ListItemIcon, MenuItem, Box } from '@mui/material';
 import { Delete, PageviewRounded, Send, Update } from '@mui/icons-material';
+import { MailOutlined } from '@ant-design/icons';
 
 function CoordinatorHome() {
+    const navigate = useNavigate();
     const [appointments, setAppointments] = useState([]);
     const [filterStatus, setFilterStatus] = useState('');
     const [searchType, setSearchType] = useState('');
@@ -459,7 +461,17 @@ function CoordinatorHome() {
 
     return (
         <div className="container mx-auto p-4">
-            <h1 className="text-2xl font-semibold mb-4">Coordinator Dashboard</h1>
+            <div className="flex justify-between items-center mb-4">
+                <h1 className="text-2xl font-semibold">Coordinator Dashboard</h1>
+                <Button
+                    type="primary"
+                    icon={<MailOutlined />}
+                    onClick={() => navigate('/mailbox')}
+                    size="large"
+                >
+                    Mailbox
+                </Button>
+            </div>
 
             {/* Appointments Table */}
             <MaterialReactTable table={apptTable} />

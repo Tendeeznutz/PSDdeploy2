@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Tabs, Badge, Modal, Input, Button, Empty } from 'antd';
-import { MailOutlined, SendOutlined, InboxOutlined } from '@ant-design/icons';
+import { Tabs, Badge, Modal, Input, Button, Empty, message, Select } from 'antd';
+import { MailOutlined, SendOutlined, InboxOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 
 const { TextArea } = Input;
 const { TabPane } = Tabs;
@@ -17,6 +17,8 @@ function Mailbox() {
     const [showMessageModal, setShowMessageModal] = useState(false);
     const [showComposeModal, setShowComposeModal] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [customers, setCustomers] = useState([]);
+    const [technicians, setTechnicians] = useState([]);
 
     // Get user info from localStorage
     const customerId = localStorage.getItem("customers_id");
@@ -56,7 +58,18 @@ function Mailbox() {
         }
         fetchMessages();
         fetchUnreadCount();
+
+        // Fetch customers and technicians if user is a coordinator
+        if (userInfo.userType === 'coordinator') {
+            fetchCustomers();
+            fetchTechnicians();
+        }
     }, []);
+
+    // Don't render if userInfo is null (redirect in progress)
+    if (!userInfo) {
+        return null;
+    }
 
     const fetchMessages = async () => {
         setLoading(true);
@@ -108,6 +121,28 @@ function Mailbox() {
         }
     };
 
+    const fetchCustomers = async () => {
+        try {
+            const response = await axios.get(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/`
+            );
+            setCustomers(response.data);
+        } catch (error) {
+            console.error('Error fetching customers:', error);
+        }
+    };
+
+    const fetchTechnicians = async () => {
+        try {
+            const response = await axios.get(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/technicians/`
+            );
+            setTechnicians(response.data);
+        } catch (error) {
+            console.error('Error fetching technicians:', error);
+        }
+    };
+
     const handleMessageClick = async (message) => {
         setSelectedMessage(message);
         setShowMessageModal(true);
@@ -129,36 +164,52 @@ function Mailbox() {
 
     const handleComposeSubmit = async () => {
         if (!composeForm.subject || !composeForm.body) {
-            alert('Please fill in subject and message body');
+            message.warning('Please fill in subject and message body');
             return;
         }
 
-        // For customers, always send to coordinator
-        // For coordinators/technicians, need to select recipient
-        let recipientInfo = composeForm;
-        if (userInfo.userType === 'customer') {
-            // Default to sending to coordinator (would need to fetch a coordinator ID)
-            // For now, leaving as is - you may want to add coordinator selection
-            recipientInfo = {
-                ...composeForm,
-                recipientType: 'coordinator'
-            };
+        // Validate user info
+        if (!userInfo || !userInfo.userId) {
+            message.error('User information is missing. Please log in again.');
+            navigate('/');
+            return;
         }
 
         try {
-            await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/`,
-                {
-                    senderId: userInfo.userId,
-                    senderType: userInfo.userType,
-                    senderName: userInfo.userName,
-                    recipientId: recipientInfo.recipientId,
-                    recipientType: recipientInfo.recipientType,
-                    recipientName: recipientInfo.recipientName,
-                    subject: composeForm.subject,
-                    body: composeForm.body
+            // Show loading message
+            const loadingMessage = message.loading('Sending message...', 0);
+
+            let messageData = {
+                senderId: userInfo.userId,
+                senderType: userInfo.userType,
+                senderName: userInfo.userName || 'Unknown User',
+                subject: composeForm.subject.trim(),
+                body: composeForm.body.trim()
+            };
+
+            // Debug logging
+            console.log('Sending message with data:', messageData);
+
+            // For customers, backend will handle routing to coordinator and technician
+            // For coordinators/technicians, they need to specify recipient
+            if (userInfo.userType !== 'customer') {
+                if (!composeForm.recipientId || !composeForm.recipientType) {
+                    loadingMessage();
+                    message.warning('Please select a recipient');
+                    return;
                 }
+                messageData.recipientId = composeForm.recipientId;
+                messageData.recipientType = composeForm.recipientType;
+                messageData.recipientName = composeForm.recipientName;
+            }
+
+            const response = await axios.post(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/`,
+                messageData
             );
+
+            // Close loading message
+            loadingMessage();
 
             // Reset form and close modal
             setComposeForm({
@@ -172,10 +223,17 @@ function Mailbox() {
 
             // Refresh messages
             fetchMessages();
-            alert('Message sent successfully!');
+
+            // Show success message
+            if (userInfo.userType === 'customer' && response.data.count) {
+                message.success(`Message sent successfully to ${response.data.count} recipient(s)!`);
+            } else {
+                message.success('Message sent successfully!');
+            }
         } catch (error) {
             console.error('Error sending message:', error);
-            alert('Error sending message. Please try again.');
+            const errorMsg = error.response?.data?.error || 'Error sending message. Please try again.';
+            message.error(errorMsg);
         }
     };
 
@@ -188,6 +246,23 @@ function Mailbox() {
             hour: '2-digit',
             minute: '2-digit'
         });
+    };
+
+    const handleBackToHome = () => {
+        // Navigate to the appropriate home page based on user type
+        if (userInfo) {
+            if (userInfo.userType === 'customer') {
+                navigate('/home');
+            } else if (userInfo.userType === 'technician') {
+                navigate('/TechnicianHome');
+            } else if (userInfo.userType === 'coordinator') {
+                navigate('/coordinatorHome');
+            } else {
+                navigate('/');
+            }
+        } else {
+            navigate('/');
+        }
     };
 
     const renderMessageList = (messages, isInbox) => {
@@ -236,7 +311,16 @@ function Mailbox() {
     return (
         <div className="container mx-auto p-4 max-w-6xl">
             <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-center mb-6">
+                <div className="mb-4">
+                    <Button
+                        icon={<ArrowLeftOutlined />}
+                        onClick={handleBackToHome}
+                        size="medium"
+                    >
+                        Back to Home
+                    </Button>
+                </div>
+                <div className="flex justify-between items-center mb-6" style={{ position: 'relative', zIndex: 1 }}>
                     <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
                         <MailOutlined /> Mailbox
                     </h1>
@@ -245,6 +329,12 @@ function Mailbox() {
                         icon={<SendOutlined />}
                         onClick={() => setShowComposeModal(true)}
                         size="large"
+                        style={{
+                            opacity: 1,
+                            visibility: 'visible',
+                            display: 'inline-flex',
+                            alignItems: 'center'
+                        }}
                     >
                         Compose Message
                     </Button>
@@ -347,6 +437,72 @@ function Mailbox() {
                         <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
                             Messages will be sent to the coordinator team
                         </div>
+                    )}
+
+                    {userInfo.userType === 'coordinator' && (
+                        <>
+                            <div>
+                                <label className="block mb-2 text-sm font-bold text-gray-700">
+                                    Recipient Type
+                                </label>
+                                <Select
+                                    style={{ width: '100%' }}
+                                    placeholder="Select recipient type"
+                                    value={composeForm.recipientType || undefined}
+                                    onChange={(value) => {
+                                        setComposeForm({
+                                            ...composeForm,
+                                            recipientType: value,
+                                            recipientId: '',
+                                            recipientName: ''
+                                        });
+                                    }}
+                                >
+                                    <Select.Option value="customer">Customer</Select.Option>
+                                    <Select.Option value="technician">Technician</Select.Option>
+                                </Select>
+                            </div>
+
+                            <div>
+                                <label className="block mb-2 text-sm font-bold text-gray-700">
+                                    Recipient
+                                </label>
+                                <Select
+                                    style={{ width: '100%' }}
+                                    placeholder={`Select ${composeForm.recipientType || 'recipient'}`}
+                                    value={composeForm.recipientId || undefined}
+                                    onChange={(value) => {
+                                        const list = composeForm.recipientType === 'customer' ? customers : technicians;
+                                        const selected = list.find(item => item.id === value);
+                                        setComposeForm({
+                                            ...composeForm,
+                                            recipientId: value,
+                                            recipientName: composeForm.recipientType === 'customer'
+                                                ? selected?.customerName
+                                                : selected?.technicianName
+                                        });
+                                    }}
+                                    disabled={!composeForm.recipientType}
+                                    showSearch
+                                    filterOption={(input, option) =>
+                                        option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                                    }
+                                >
+                                    {composeForm.recipientType === 'customer'
+                                        ? customers.map(customer => (
+                                            <Select.Option key={customer.id} value={customer.id}>
+                                                {customer.customerName}
+                                            </Select.Option>
+                                        ))
+                                        : technicians.map(technician => (
+                                            <Select.Option key={technician.id} value={technician.id}>
+                                                {technician.technicianName}
+                                            </Select.Option>
+                                        ))
+                                    }
+                                </Select>
+                            </div>
+                        </>
                     )}
 
                     <div>

@@ -27,21 +27,29 @@ function Login() {
             });
 
             localStorage.removeItem('customers_id');
+            localStorage.removeItem('customers_name');
             localStorage.removeItem('technicians_id');
+            localStorage.removeItem('technicians_name');
             localStorage.removeItem('technicians_phone');
+            localStorage.removeItem('coordinators_id');
             localStorage.removeItem('coordinators_email');
+            localStorage.removeItem('coordinators_name');
 
             console.log('Login successful:', response.data);
             if (response.status === 200) {
               if (selectedUserType == 'customers') {
                 localStorage.setItem(`${selectedUserType}_id`, response.data.customer_id);
+                localStorage.setItem(`${selectedUserType}_name`, response.data.customerName);
                 navigate('/home');
               } else if (selectedUserType == 'technicians') {
                 localStorage.setItem(`${selectedUserType}_phone`, response.data.technician_phone);
                 localStorage.setItem(`${selectedUserType}_id`, response.data.technician_id);
+                localStorage.setItem(`${selectedUserType}_name`, response.data.technicianName);
                 navigate('/TechnicianHome');
               } else {
+                localStorage.setItem(`${selectedUserType}_id`, response.data.coordinator_id);
                 localStorage.setItem(`${selectedUserType}_email`, response.data.coordinatorEmail);
+                localStorage.setItem(`${selectedUserType}_name`, response.data.coordinatorName);
                 navigate('/coordinatorHome');
               }
             }

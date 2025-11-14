@@ -55,7 +55,7 @@ root.render(
             <Route path='/AirconCatalog' element={<AirconCatalog/>}/>
             <Route path='/rescheduleDetail' element={<RescheduleCoordinator/>}/>
             <Route path='/ReportIssues' element={<ReportIssues/>}/>
-            <Route path='/Mailbox' element={<Mailbox/>}/>
+            <Route path='/mailbox' element={<Mailbox/>}/>
             <Route path='/error' element={<Error404/>}/>
             <Route path='*' element={<Error404/>}/>
         </Routes>

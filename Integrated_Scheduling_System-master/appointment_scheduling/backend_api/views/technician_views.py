@@ -90,6 +90,7 @@ class TechnicianViewSet(viewsets.ModelViewSet):
                 response_data = {
                     'technician_phone': technician.technicianPhone,
                     'technician_id' : technician.id,
+                    'technicianName': technician.technicianName,
                     'role': 'technician',
                 }
                 return Response(response_data, status=status.HTTP_200_OK)

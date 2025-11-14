@@ -5,7 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from ..models import Messages
+from ..models import Messages, Coordinators, Appointments
 from ..serializers import MessageSerializer
 
 
@@ -60,8 +60,91 @@ class MessageViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        Create a new message
+        Create a new message.
+        Special handling for customer messages: they are sent to both coordinator AND technician
         """
+        data = request.data
+        sender_type = data.get('senderType')
+
+        # Special handling for customer messages
+        if sender_type == 'customer':
+            sender_id = data.get('senderId')
+            sender_name = data.get('senderName')
+            subject = data.get('subject')
+            body = data.get('body')
+
+            # Detailed validation
+            missing_fields = []
+            if not sender_id:
+                missing_fields.append('senderId')
+            if not sender_name:
+                missing_fields.append('senderName')
+            if not subject:
+                missing_fields.append('subject')
+            if not body:
+                missing_fields.append('body')
+
+            if missing_fields:
+                return Response({
+                    'error': f'Missing required fields: {", ".join(missing_fields)}'
+                }, status=400)
+
+            messages_created = []
+
+            # Find the first coordinator (you might want to implement better logic here)
+            try:
+                coordinator = Coordinators.objects.first()
+                if coordinator:
+                    # Create message to coordinator
+                    coordinator_message = Messages.objects.create(
+                        senderId=sender_id,
+                        senderType='customer',
+                        senderName=sender_name,
+                        recipientId=coordinator.id,
+                        recipientType='coordinator',
+                        recipientName=coordinator.coordinatorName,
+                        subject=subject,
+                        body=body
+                    )
+                    messages_created.append(coordinator_message)
+            except Exception as e:
+                pass  # Continue even if coordinator message fails
+
+            # Find technician from customer's appointments
+            try:
+                # Get the most recent appointment for this customer
+                appointment = Appointments.objects.filter(
+                    customerId=sender_id
+                ).order_by('-appointmentDate').first()
+
+                if appointment and appointment.technicianId:
+                    # Create message to technician
+                    technician_message = Messages.objects.create(
+                        senderId=sender_id,
+                        senderType='customer',
+                        senderName=sender_name,
+                        recipientId=appointment.technicianId.id,
+                        recipientType='technician',
+                        recipientName=appointment.technicianId.technicianName,
+                        subject=subject,
+                        body=body,
+                        relatedAppointment=appointment
+                    )
+                    messages_created.append(technician_message)
+            except Exception as e:
+                pass  # Continue even if technician message fails
+
+            if messages_created:
+                serializer = MessageSerializer(messages_created, many=True)
+                return Response({
+                    'success': True,
+                    'messages': serializer.data,
+                    'count': len(messages_created)
+                }, status=201)
+            else:
+                return Response({'error': 'Failed to create any messages'}, status=400)
+
+        # For non-customer messages, use standard creation
         serializer = MessageSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()

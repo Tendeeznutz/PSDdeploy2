@@ -78,7 +78,9 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
             print(coordinator.coordinatorPassword)
             if check_password(password, coordinator.coordinatorPassword):
                 response_data = {
+                    'coordinator_id': coordinator.id,
                     'coordinatorEmail': coordinator.coordinatorEmail,
+                    'coordinatorName': coordinator.coordinatorName,
                     'role': 'coordinator',
                 }
                 return Response(response_data, status=status.HTTP_200_OK)

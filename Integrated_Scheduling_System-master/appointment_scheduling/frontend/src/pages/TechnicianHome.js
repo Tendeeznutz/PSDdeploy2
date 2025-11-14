@@ -1,13 +1,16 @@
 import React, {useState, useEffect, useMemo} from 'react';
-import {Link} from 'react-router-dom';
+import {Link, useNavigate} from 'react-router-dom';
 import axios from 'axios';
 import { Box, ListItem, ListItemIcon, MenuItem } from '@mui/material';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
 import { EventAvailable, PageviewRounded, PunchClock } from '@mui/icons-material';
+import { Button } from 'antd';
+import { MailOutlined } from '@ant-design/icons';
 
 // ...
 
 function TechnicianHome() {
+    const navigate = useNavigate();
     const [appointments, setAppointments] = useState([]);
     const [addresses, setAddresses] = useState([]);
     const [appointmentStatuses, setAppointmentStatuses] = useState([]);
@@ -250,8 +253,20 @@ function TechnicianHome() {
 // Move the return statement outside of useEffect
     return (
         <div className="container mx-auto p-4">
-            <h1 className="text-2xl font-semibold mb-4">Welcome Back, {localStorage.getItem('technicians_name')}</h1>
-            <h1 className="text-2xl font-semibold mb-4">Upcoming Appointments</h1>
+            <div className="flex justify-between items-center mb-4">
+                <div>
+                    <h1 className="text-2xl font-semibold">Welcome Back, {localStorage.getItem('technicians_name')}</h1>
+                    <h2 className="text-xl font-semibold mt-2">Upcoming Appointments</h2>
+                </div>
+                <Button
+                    type="primary"
+                    icon={<MailOutlined />}
+                    onClick={() => navigate('/mailbox')}
+                    size="large"
+                >
+                    Mailbox
+                </Button>
+            </div>
             <MaterialReactTable table={apptTable}/>
             {/* <div className="overflow-x-auto">
                 <table className="min-w-full bg-white">
