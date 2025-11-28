@@ -10,6 +10,7 @@ from ..scheduling_algo import *
 from ..models import Appointments, Customers, Technicians
 from ..serializers import AppointmentSerializer
 from ..utils import sendMail
+from ..utils.notifications import send_appointment_confirmation, send_appointment_cancellation
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
@@ -144,7 +145,17 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
         serializer = AppointmentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            appointment = serializer.save()
+
+            # Send confirmation email to customer and technician
+            try:
+                customer = Customers.objects.get(id=appointment.customerId.id)
+                technician = appointment.technicianId if appointment.technicianId else None
+                send_appointment_confirmation(appointment, customer, technician)
+            except Exception as e:
+                # Log error but don't fail the appointment creation
+                print(f"Failed to send confirmation email: {e}")
+
             serializer_data = dict(serializer.data)
             modified_data = include_all_info(serializer_data)
             return Response(modified_data, status=201)
@@ -173,8 +184,41 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, pk=None):
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
 
+        # Debug logging
+        print(f"\n{'='*80}")
+        print(f"PATCH request for appointment {pk}")
+        print(f"Request data: {request.data}")
+        print(f"technicianId in request: {request.data.get('technicianId')}")
+        print(f"Current appointment technicianId: {item.technicianId}")
+        print(f"{'='*80}\n")
+
+        # Handle empty string technicianId (convert to None for proper validation)
+        if request.data.get('technicianId') == '' or request.data.get('technicianId') == 'null':
+            request.data['technicianId'] = None
+
+        # Ensure technicianId is a valid UUID string if present
+        if request.data.get('technicianId') is not None:
+            try:
+                # Validate it's a proper UUID format
+                import uuid
+                tech_id = request.data.get('technicianId')
+                if not isinstance(tech_id, str):
+                    tech_id = str(tech_id)
+                uuid.UUID(tech_id)  # This will raise ValueError if invalid
+                request.data['technicianId'] = tech_id
+            except (ValueError, AttributeError) as e:
+                print(f"Invalid technicianId format: {e}")
+                return Response({"error": f"Invalid technician ID format: {tech_id}"}, status=400)
+
+        # Track if this is a cancellation for sending notification later
+        is_cancellation = False
+        cancellation_reason = None
+        cancelled_by = None
+
         # Check if this is a cancellation request (status changing to '4' which is Cancelled)
         if request.data.get('appointmentStatus') == '4' or request.data.get('appointmentStatus') == 4:
+            is_cancellation = True
+
             # Check if cancellation reason is provided
             cancellation_reason = request.data.get('cancellationReason')
             if not cancellation_reason or cancellation_reason.strip() == '':
@@ -196,38 +240,96 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             request.data['cancelledBy'] = cancelled_by
             request.data['appointmentStatus'] = '4'
 
-        nearby_technicians = get_nearby_technicians(item.customerId.id)
+        # Check if coordinator is manually assigning a technician
+        manual_technician_assignment = request.data.get('technicianId') is not None
 
-        if nearby_technicians is None:
-            if request.data.get('appointmentStartTime') is not None:
-                return Response({"Changing the appointment time require reallocation of the technician."}, status=400)
-            elif request.data.get('airconToService') is not None:
-                if len(request.data['airconToService']) <= len(item.airconToService):
-                    request.data['appointmentEndTime'] = self.get_appointment_end_time(item.appointmentStartTime,
-                                                                                       request.data['airconToService'])
-                else:
-                    return Response({"Increasing the number of aircon to service require reallocation of the "
-                                     "technician."},
-                                    status=400)
-        elif request.data.get('appointmentStartTime') is not None or request.data.get('airconToService') is not None:
-            # nearby_technicians = request.data.get('nearby_technicians')
-            request.data['appointmentEndTime'] = self.get_appointment_end_time(request.data['appointmentStartTime'],
-                                                                               request.data['airconToService'])
-            request.data['technicianId'] = get_technician_to_assign(nearby_technicians,
-                                                                    request.data['appointmentStartTime'],
-                                                                    request.data['appointmentEndTime'],
-                                                                    item.technicianId, item)
+        # Track if technician was newly assigned (for sending confirmation email)
+        technician_newly_assigned = False
+
+        # Only auto-assign technician if not manually assigned and time/aircons are being changed
+        if not manual_technician_assignment:
+            nearby_technicians = get_nearby_technicians(item.customerId.id)
+
+            if nearby_technicians is None:
+                if request.data.get('appointmentStartTime') is not None:
+                    return Response({"Changing the appointment time require reallocation of the technician."}, status=400)
+                elif request.data.get('airconToService') is not None:
+                    if len(request.data['airconToService']) <= len(item.airconToService):
+                        request.data['appointmentEndTime'] = self.get_appointment_end_time(item.appointmentStartTime,
+                                                                                           request.data['airconToService'])
+                    else:
+                        return Response({"Increasing the number of aircon to service require reallocation of the "
+                                         "technician."},
+                                        status=400)
+            elif request.data.get('appointmentStartTime') is not None or request.data.get('airconToService') is not None:
+                # nearby_technicians = request.data.get('nearby_technicians')
+                request.data['appointmentEndTime'] = self.get_appointment_end_time(request.data['appointmentStartTime'],
+                                                                                   request.data['airconToService'])
+                request.data['technicianId'] = get_technician_to_assign(nearby_technicians,
+                                                                        request.data['appointmentStartTime'],
+                                                                        request.data['appointmentEndTime'],
+                                                                        item.technicianId, item)
 
         serializer = AppointmentSerializer(item, data=request.data, partial=True, context={'request': request})
+
+        print(f"Serializer is_valid: {serializer.is_valid()}")
+        if not serializer.is_valid():
+            print(f"Serializer errors: {serializer.errors}")
+            # Return the actual validation errors to the frontend
+            return Response({
+                "error": "Validation failed",
+                "details": serializer.errors
+            }, status=400)
+
         if serializer.is_valid():
-            if serializer.validated_data.get('technicianId') is not None and item.appointmentStatus != '3':
-                serializer.validated_data['appointmentStatus'] = '2'
+            # Check if technician is being assigned for the first time
+            if serializer.validated_data.get('technicianId') is not None:
+                if item.technicianId is None:
+                    # Technician being assigned to previously unassigned appointment
+                    technician_newly_assigned = True
+                elif item.technicianId.id != serializer.validated_data.get('technicianId').id:
+                    # Different technician being assigned
+                    technician_newly_assigned = True
+
+                if item.appointmentStatus != '3':
+                    serializer.validated_data['appointmentStatus'] = '2'
             elif serializer.validated_data.get('technicianId') is None and item.appointmentStatus != '3':
                 serializer.validated_data['appointmentStatus'] = '1'
-            serializer.save()
+
+            updated_appointment = serializer.save()
+
+            # Send confirmation email if technician was newly assigned
+            if technician_newly_assigned and not is_cancellation:
+                try:
+                    customer = Customers.objects.get(id=updated_appointment.customerId.id)
+                    technician = updated_appointment.technicianId
+                    send_appointment_confirmation(updated_appointment, customer, technician)
+                    print(f"Sent confirmation email for technician assignment to appointment {updated_appointment.id}")
+                except Exception as e:
+                    print(f"Failed to send confirmation email: {e}")
+
+            # Send cancellation email if this was a cancellation
+            if is_cancellation:
+                try:
+                    customer = Customers.objects.get(id=updated_appointment.customerId.id)
+                    technician = updated_appointment.technicianId if updated_appointment.technicianId else None
+                    send_appointment_cancellation(
+                        appointment=updated_appointment,
+                        customer=customer,
+                        technician=technician,
+                        cancelled_by=cancelled_by,
+                        cancellation_reason=cancellation_reason
+                    )
+                except Exception as e:
+                    # Log error but don't fail the cancellation
+                    print(f"Failed to send cancellation email: {e}")
+
             serializer_data = dict(serializer.data)
             modified_data = include_all_info(serializer_data)
-            return Response(modified_data)
+            print(f"Update successful, returning data")
+            return Response(modified_data, status=200)
+
+        print(f"Update failed with errors: {serializer.errors}")
         return Response(serializer.errors, status=400)
 
     # DELETE request

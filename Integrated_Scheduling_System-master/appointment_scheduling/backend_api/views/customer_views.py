@@ -70,7 +70,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
             if customer is None:
                 return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            if check_password(password, customer.customerPassword):
+            # Handle both plain text and hashed passwords
+            # Plain text check first, then try hashed password check
+            if password == customer.customerPassword or check_password(password, customer.customerPassword):
                 response_data = {
                     'customer_id': customer.id,
                     'customerName': customer.customerName,

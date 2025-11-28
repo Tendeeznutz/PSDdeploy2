@@ -76,7 +76,9 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
             password = request.data['password']
             coordinator = Coordinators.objects.get(coordinatorEmail=email)
             print(coordinator.coordinatorPassword)
-            if check_password(password, coordinator.coordinatorPassword):
+            # Handle both plain text and hashed passwords
+            # Plain text check first, then try hashed password check
+            if password == coordinator.coordinatorPassword or check_password(password, coordinator.coordinatorPassword):
                 response_data = {
                     'coordinator_id': coordinator.id,
                     'coordinatorEmail': coordinator.coordinatorEmail,

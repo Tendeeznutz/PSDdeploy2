@@ -86,7 +86,9 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             phone = request.data['email']
             password = request.data['password']
             technician = Technicians.objects.get(technicianPhone=phone)
-            if check_password(password, technician.technicianPassword):
+            # Handle both plain text and hashed passwords
+            # Plain text check first, then try hashed password check
+            if password == technician.technicianPassword or check_password(password, technician.technicianPassword):
                 response_data = {
                     'technician_phone': technician.technicianPhone,
                     'technician_id' : technician.id,

@@ -115,7 +115,7 @@ class MessageViewSet(viewsets.ModelViewSet):
                 # Get the most recent appointment for this customer
                 appointment = Appointments.objects.filter(
                     customerId=sender_id
-                ).order_by('-appointmentDate').first()
+                ).order_by('-appointmentStartTime').first()
 
                 if appointment and appointment.technicianId:
                     # Create message to technician

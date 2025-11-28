@@ -65,13 +65,18 @@ function CoordinatorAppointmentUpdate() {
         const selectedTechnician = technicians.find(technicians => technicians.technicianName === updatedAppointment.display.technicianName);
         console.log('Selected technician:', selectedTechnician);
         try {
-            await axios.put(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${apptId}/`, {
+            await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${apptId}/`, {
                 technicianId: selectedTechnician.id,
             });
             console.log('Appointment updated successfully');
             message.success('Appointment updated successfully');
+            // Redirect to coordinator home after successful update
+            setTimeout(() => {
+                window.location.href = '/CoordinatorHome';
+            }, 1000);
         } catch (error) {
             console.error('Error updating appointment:', error);
+            message.error('Failed to update appointment');
         }
     };
 

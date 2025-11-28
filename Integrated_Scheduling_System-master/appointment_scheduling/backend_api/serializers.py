@@ -14,11 +14,22 @@ class AppointmentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def validate_appointmentStartTime(self, value):
+        # Only validate future date for NEW appointments or when appointmentStartTime is being changed
+        # For partial updates where appointmentStartTime is not being modified, skip this validation
         if value is not None and value <= time.time():
+            # Check if this is a partial update and the field is not being changed
+            if hasattr(self, 'instance') and self.instance and self.instance.appointmentStartTime == value:
+                # This is an existing appointment and the time is not being changed - allow it
+                return value
+            # This is a new appointment or time is being changed to past - reject it
             raise serializers.ValidationError("Appointment date must be in the future")
         return value
 
     def validate_airconToService(self, value):
+        # For partial updates where airconToService is not being modified, skip validation
+        if hasattr(self, 'instance') and self.instance and self.instance.airconToService == value:
+            return value
+
         # value is a list of customerAirconDeviceId, check if all exist and belong to the same customer
         for customerAirconDeviceId in value:
             if not CustomerAirconDevices.objects.filter(id=customerAirconDeviceId).exists():
