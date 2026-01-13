@@ -237,3 +237,89 @@ class Messages(TimeStampedModel):
 
     def __str__(self):
         return f'Message from {self.senderName} to {self.recipientName}: {self.subject}'
+
+
+class TechnicianHiringApplication(TimeStampedModel):
+    """
+    Manages the technician hiring process with three stages:
+    1. Personal details and qualifications
+    2. Bank account information
+    3. Coordinator approval and pay rate
+    """
+    APPLICATION_STATUS_CHOICES = (
+        ('personal_details', 'Personal Details Pending'),
+        ('bank_info', 'Bank Information Pending'),
+        ('coordinator_review', 'Awaiting Coordinator Approval'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
+
+    # Stage 1: Personal Details
+    applicantName = models.CharField(max_length=100, null=False, help_text='Full name of applicant')
+    nric = models.CharField(max_length=9, unique=True, null=False, help_text='NRIC number', validators=[
+        RegexValidator(r'^[STFG]\d{7}[A-Z]$', 'NRIC must be in valid Singapore format (e.g., S1234567A)')
+    ])
+    citizenship = models.CharField(max_length=50, null=False, help_text='Citizenship status')
+    applicantAddress = models.CharField(max_length=200, null=False, help_text='Full residential address')
+    applicantPostalCode = models.CharField(max_length=6, null=False, validators=[SG_POSTAL_VALIDATOR])
+    applicantPhone = models.CharField(max_length=8, null=False, validators=[SG_PHONE_VALIDATOR])
+    applicantEmail = models.CharField(max_length=100, null=False, validators=[validate_email])
+    workExperience = models.TextField(max_length=2000, null=False, help_text='Work experience details')
+    resumeFile = models.FileField(upload_to='resumes/', null=True, blank=True, help_text='Resume upload')
+    resumeFileName = models.CharField(max_length=255, null=True, blank=True, help_text='Original resume filename')
+    hasCriminalRecord = models.BooleanField(default=False, help_text='Criminal record declaration')
+    criminalRecordDetails = models.TextField(max_length=1000, null=True, blank=True, help_text='Details if criminal record exists')
+    personalDetailsConfirmed = models.BooleanField(default=False, help_text='Applicant confirmed personal details')
+    personalDetailsConfirmedAt = models.DateTimeField(null=True, blank=True)
+
+    # Stage 2: Bank Account Information
+    bankName = models.CharField(max_length=100, null=True, blank=True, help_text='Bank name')
+    bankAccountNumber = models.CharField(max_length=50, null=True, blank=True, help_text='Bank account number')
+    bankAccountHolderName = models.CharField(max_length=100, null=True, blank=True, help_text='Account holder name')
+    bankInfoConfirmed = models.BooleanField(default=False, help_text='Applicant confirmed bank information')
+    bankInfoConfirmedAt = models.DateTimeField(null=True, blank=True)
+
+    # Stage 3: Coordinator Approval
+    payRate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text='Hourly pay rate in SGD')
+    coordinatorId = models.ForeignKey(
+        Coordinators,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hiring_applications',
+        help_text='Coordinator who reviewed the application'
+    )
+    coordinatorNotes = models.TextField(max_length=1000, null=True, blank=True, help_text='Coordinator notes on application')
+    coordinatorApproved = models.BooleanField(default=False, help_text='Coordinator approval confirmation')
+    coordinatorApprovedAt = models.DateTimeField(null=True, blank=True)
+
+    # Application Status
+    applicationStatus = models.CharField(
+        max_length=30,
+        choices=APPLICATION_STATUS_CHOICES,
+        default='personal_details',
+        help_text='Current stage of application'
+    )
+
+    # Created Technician (once approved)
+    createdTechnician = models.ForeignKey(
+        Technicians,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hiring_application',
+        help_text='The technician account created from this application'
+    )
+
+    class Meta:
+        indexes = [
+            Index(fields=['nric']),
+            Index(fields=['applicationStatus']),
+            Index(fields=['-created_at']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Application: {self.applicantName} ({self.get_applicationStatus_display()})'

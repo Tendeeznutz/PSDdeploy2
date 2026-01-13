@@ -463,14 +463,23 @@ function CoordinatorHome() {
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-2xl font-semibold">Coordinator Dashboard</h1>
-                <Button
-                    type="primary"
-                    icon={<MailOutlined />}
-                    onClick={() => navigate('/mailbox')}
-                    size="large"
-                >
-                    Mailbox
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        type="default"
+                        onClick={() => navigate('/TechnicianHiring')}
+                        size="large"
+                    >
+                        Hire Technician
+                    </Button>
+                    <Button
+                        type="primary"
+                        icon={<MailOutlined />}
+                        onClick={() => navigate('/mailbox')}
+                        size="large"
+                    >
+                        Mailbox
+                    </Button>
+                </div>
             </div>
 
             {/* Appointments Table */}

@@ -5,7 +5,7 @@ import randomname
 from rest_framework import serializers
 
 from .models import Appointments, AppointmentRequest, Customers, AirconCatalogs, Technicians, Coordinators, \
-    CustomerAirconDevices, Messages
+    CustomerAirconDevices, Messages, TechnicianHiringApplication
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -105,3 +105,31 @@ class MessageSerializer(serializers.ModelSerializer):
         model = Messages
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+
+
+class TechnicianHiringApplicationSerializer(serializers.ModelSerializer):
+    coordinatorId = serializers.PrimaryKeyRelatedField(
+        queryset=Coordinators.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    createdTechnician = serializers.PrimaryKeyRelatedField(
+        queryset=Technicians.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
+    class Meta:
+        model = TechnicianHiringApplication
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate_nric(self, value):
+        # Check if NRIC already exists in another application (excluding current instance if updating)
+        instance = getattr(self, 'instance', None)
+        query = TechnicianHiringApplication.objects.filter(nric=value)
+        if instance:
+            query = query.exclude(pk=instance.pk)
+        if query.exists():
+            raise serializers.ValidationError("An application with this NRIC already exists")
+        return value
