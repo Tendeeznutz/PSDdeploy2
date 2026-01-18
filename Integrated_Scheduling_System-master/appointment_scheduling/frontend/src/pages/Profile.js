@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
-// import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import { Button, Popconfirm, Progress } from 'antd';
+import { Button, Popconfirm, Progress, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 
 function Profile() {
     const navigate = useNavigate();
     const customer_id = localStorage.getItem('customers_id');
-    const [dateTime, setDateTime] = useState('');
     const [error, setError] = useState('');
     const [modalError, setModalError] = useState('');
     // to toggle the "add aicon" form modal
@@ -35,12 +32,12 @@ function Profile() {
     });
     const [editErrorMessage, setEditErrorMessage] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
-    const [airconCatalogList, setAirCatalogList] = useState([]);
     // for the add aircon form submission
-    const [airconBrandModels, setAirconBrandModels] = useState([]);
-    const [selectedAirconBrand, setSelectedAirconBrand] = useState("");
     const [airconName, setAirconName] = useState('');
-    const [selectedAirconID, setSelectedAirconID] = useState("");
+    const [numberOfUnits, setNumberOfUnits] = useState(1);
+    const [airconType, setAirconType] = useState('split');
+    const [lastServiceMonth, setLastServiceMonth] = useState(null);
+    const [remarks, setRemarks] = useState('');
 
     const fetchUserData = async () => {
         try {
@@ -64,36 +61,15 @@ function Profile() {
         }
     }
 
-    const fetchAirconCatalogData = async () => {
-        try {
-            const airCatalogResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/airconcatalogs/`);
-            return airCatalogResponse.data;
-        } catch (error) {
-            console.error('Error fetching all aircon data:', error)
-        }
-    }
-
-    /* each time aircon model selected, invoke this function; Once selected 
-    aircon brand and model matches in the list of aircon catalogs retrieved, 
-    set the selected aircon ID from the catalog */
-    const handleAirconModelChange = event => {
-        // get aircon ID
-        for (let i = 0; i < airconCatalogList.length; i++) {
-            if (airconCatalogList[i].airconBrand === selectedAirconBrand && airconCatalogList[i].airconModel === event.target.value) {
-                setSelectedAirconID(airconCatalogList[i].id);
-            }
-        }
-    };
-
     /* if modal is toggled close, form inputs should be cleared */
     const toggleModal = () => {
         setIsModalOpen(!isModalOpen);
         if (isModalOpen) {
-            setSelectedAirconBrand("");
-            setAirconBrandModels([]);
             setAirconName("");
-            setSelectedAirconID("");
-            setDateTime("");
+            setNumberOfUnits(1);
+            setAirconType('split');
+            setLastServiceMonth(null);
+            setRemarks("");
             setModalError("");
         }
     };
@@ -102,13 +78,20 @@ function Profile() {
         setError('');
         try {
             const existingAppointmentResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerId=${customer_id}`);
-            
+
             if (existingAppointmentResponse.status === 200) {
-                existingAppointmentResponse.data.forEach(existingAppointment => {
-                    if (existingAppointment.airconToService.includes(airconId)) {
-                        throw new Error('Cannot remove aircon with existing appointments.');
-                    }
+                // Only block deletion if there are active (non-cancelled) appointments
+                // Status: 1=Pending, 2=Confirmed, 3=Completed, 4=Cancelled
+                const hasActiveAppointments = existingAppointmentResponse.data.some(existingAppointment => {
+                    const isLinkedToAircon = existingAppointment.airconToService.includes(airconId);
+                    const isCancelled = existingAppointment.appointmentStatus === '4';
+                    return isLinkedToAircon && !isCancelled;
                 });
+
+                if (hasActiveAppointments) {
+                    throw new Error('Cannot remove aircon with active appointments. Cancel or complete the appointments first.');
+                }
+
                 const response = await axios.delete(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/${airconId}/`);
                 if (response.status === 204) {
                     setUserAirconList(userAirconList.filter(aircon => aircon.id !== airconId));
@@ -125,23 +108,25 @@ function Profile() {
         setModalError('');
         setShowProgress(true);
         event.preventDefault();
-        
+
         try {
-            if (!selectedAirconID) {
+            if (!airconType) {
                 setShowProgress(false);
-                throw new Error('Please fill in aircon brand and model. Please try again.');
+                throw new Error('Please select aircon type.');
             }
-            
-            let singaporeDateTimeUnix;
-            if (dateTime) {
-                singaporeDateTimeUnix = dateTime.getTime() / 1000;
+
+            if (numberOfUnits < 1 || numberOfUnits > 100) {
+                setShowProgress(false);
+                throw new Error('Number of units must be between 1 and 100.');
             }
-            
+
             let payload = {
                 airconName: airconName ? airconName : null,
-                airconCatalogId: selectedAirconID,
                 customerId: customer_id,
-                lastServiceDate: singaporeDateTimeUnix ? singaporeDateTimeUnix : null
+                numberOfUnits: numberOfUnits,
+                airconType: airconType,
+                lastServiceMonth: lastServiceMonth ? lastServiceMonth.format('YYYY-MM') : null,
+                remarks: remarks || null
             };
 
             const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/`, payload);
@@ -151,23 +136,27 @@ function Profile() {
                     window.location.reload();
                 }, 1000);
             }
-                
+
         }
         catch (error) {
             console.error('Error adding aircon:', error);
-            if (error.message === "Please fill in aircon brand and model.") {
+            if (error.message.includes('Number of units') || error.message.includes('aircon type')) {
                 setModalError(error.message);
-            } else if (error.response.data.lastServiceDate) {
-                setModalError("Last service date must not be a present or future date.");
-            } else if (error.status === 500) {
+            } else if (error.response?.data?.airconName) {
+                // Handle duplicate aircon name error
+                const nameError = Array.isArray(error.response.data.airconName)
+                    ? error.response.data.airconName[0]
+                    : error.response.data.airconName;
+                setModalError(nameError || "This aircon name is already in use.");
+            } else if (error.response?.data?.lastServiceMonth) {
+                setModalError(error.response.data.lastServiceMonth[0] || "Invalid service month format.");
+            } else if (error.response?.data?.numberOfUnits) {
+                setModalError(error.response.data.numberOfUnits[0] || "Invalid number of units.");
+            } else if (error.response?.status === 500) {
                 setModalError("An error have occured at the server. Please try again.");
             } else {
-                setModalError("An error occurred. Please try again.");
+                setModalError(error.response?.data?.detail || "An error occurred. Please try again.");
             }
-            setSelectedAirconBrand("");
-            setAirconBrandModels([]);
-            setAirconName("");
-            setDateTime("");
             setShowProgress(false);
         }
     };
@@ -273,26 +262,8 @@ function Profile() {
             });
 
             fetchUserAirconData().then(userAircondata => setUserAirconList(userAircondata));
-
-            fetchAirconCatalogData().then(data => setAirCatalogList(data));
         }
-
-
     }, []);
-
-    /* change setAirconBrandModels everytime the selected aircon brand
-    changes */
-    useEffect(() => {
-
-        let airconBrandModels = [];
-
-        for (let i = 0; i < airconCatalogList.length; i++) {
-            if (airconCatalogList[i].airconBrand === selectedAirconBrand) {
-                airconBrandModels.push(airconCatalogList[i].airconModel);
-            }
-        }
-        setAirconBrandModels(airconBrandModels);
-    }, [selectedAirconBrand]);
 
     return (
         <div className="container mx-auto p-4">
@@ -467,77 +438,85 @@ function Profile() {
                                         <div className="w-full mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
                                             <form onSubmit={handleSubmit}>
                                                 <h3 className="text-lg leading-6 font-medium text-gray-900">
-                                                    Aircon form
-                                                    <span className="block italic text-sm text-stone-400">Add your aircon details, select Brand first</span>
+                                                    Add Aircon
+                                                    <span className="block italic text-sm text-stone-400">Fill in your aircon details</span>
                                                 </h3>
                                                 <hr className="m-3 w-full" />
                                                 <div className="mt-2">
-                                                    <div>
-                                                        <label className="mb-2 text-sm font-bold text-gray-700 mr-4">
-                                                            Aircon Brand
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Number of Units <span className="text-red-500">*</span>
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            value={numberOfUnits}
+                                                            onChange={(e) => setNumberOfUnits(parseInt(e.target.value) || 1)}
+                                                            min="1"
+                                                            max="100"
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Aircon Type <span className="text-red-500">*</span>
                                                         </label>
                                                         <select
-                                                            onChange={(e) => setSelectedAirconBrand(e.target.value)}
-                                                            value={selectedAirconBrand}
-                                                            className="p-2 mb-6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                            onChange={(e) => setAirconType(e.target.value)}
+                                                            value={airconType}
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                            required
                                                         >
-                                                            <option key="" value="">Select Brand</option>
-                                                            {
-                                                                airconCatalogList.reduce((unique, aircon) => {
-                                                                    if (!unique.some(item => item.airconBrand === aircon.airconBrand)) {
-                                                                        unique.push(aircon);
-                                                                    }
-                                                                    return unique;
-                                                                }, []).map((aircon) => (
-                                                                    <option key={aircon.id} value={aircon.airconBrand}>{aircon.airconBrand}</option>
-                                                                ))
-                                                            }
+                                                            <option value="split">Split</option>
+                                                            <option value="window">Window</option>
+                                                            <option value="centralized">Centralized</option>
+                                                            <option value="floor_mounted">Floor Mounted</option>
+                                                            <option value="portable">Portable</option>
+                                                            <option value="industrial">Industrial</option>
                                                         </select>
                                                     </div>
-                                                    <div>
-                                                        <label className="mb-2 text-sm font-bold text-gray-700 mr-4">
-                                                            Aircon Model
-                                                        </label>
-                                                        <select
-                                                            onChange={handleAirconModelChange}
-                                                            className="p-2 mb-6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                                                            {...(selectedAirconBrand !== "" ? {} : {disabled: true})}
-                                                        >
-                                                            <option key="" value="">Select Model</option>
-                                                            {airconBrandModels.length > 0 && (
-                                                                airconBrandModels.map(airconModel => (
-                                                                    <option key={airconModel} value={airconModel}>{airconModel}</option>
-                                                                )
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label className="mb-2 text-sm font-bold text-gray-700 mr-4">
-                                                            Aircon Name
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Aircon Name (optional)
                                                         </label>
                                                         <input
                                                             type="text"
                                                             value={airconName}
                                                             onChange={(e) => setAirconName(e.target.value)}
-                                                            placeholder="Aircon Name"
-                                                            className="p-2 mb-6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                                                            {...(selectedAirconBrand !== "" ? {} : {disabled: true})}
+                                                            placeholder="e.g., Living Room AC"
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                                         />
+                                                        <span className="text-xs text-gray-500">Leave blank for auto-generated name</span>
                                                     </div>
-                                                    <div>
-                                                        <label className="mb-2 text-sm font-bold text-gray-700 mr-4">
-                                                            Last Service Date
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Last Service Month (optional)
                                                         </label>
                                                         <DatePicker
-                                                            id="date-time"
-                                                            selected={dateTime}
-                                                            onChange={(date) => setDateTime(date)}
-                                                            dateFormat="MMM d, yyyy"
-                                                            className="w-full p-2 mb-6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                                                            portalId="my-portal"
-                                                            placeholderText='Select Date'
-                                                            {...(selectedAirconBrand !== "" ? {} : {disabled: true})}
+                                                            picker="month"
+                                                            value={lastServiceMonth}
+                                                            onChange={(date) => setLastServiceMonth(date)}
+                                                            disabledDate={(current) => current && current > dayjs().endOf('month')}
+                                                            format="MMMM YYYY"
+                                                            placeholder="Select service month (YYYY-MM)"
+                                                            className="w-full p-2 text-sm"
+                                                            style={{ width: '100%' }}
                                                         />
+                                                        <span className="text-xs text-gray-500">Click to select month and year from calendar</span>
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Remarks (optional)
+                                                        </label>
+                                                        <textarea
+                                                            value={remarks}
+                                                            onChange={(e) => setRemarks(e.target.value)}
+                                                            placeholder="Any additional information about this aircon..."
+                                                            rows="3"
+                                                            maxLength="500"
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                        />
+                                                        <span className="text-xs text-gray-500">{remarks.length}/500 characters</span>
                                                     </div>
                                                     {modalError && <p className="mb-4 text-sm text-red-600">{modalError}</p>}
                                                     <div className="flex items-center justify-center">
@@ -545,11 +524,11 @@ function Profile() {
                                                             className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700 focus:outline-none focus:shadow-outline"
                                                             type="submit"
                                                         >
-                                                            Submit Aircon details
+                                                            Add Aircon
                                                         </button>
                                                     </div>
                                                     {showProgress && <Progress className="mt-3" percent={progress} type="line" />}
-                                                    
+
                                                 </div>
                                             </form>
                                         </div>

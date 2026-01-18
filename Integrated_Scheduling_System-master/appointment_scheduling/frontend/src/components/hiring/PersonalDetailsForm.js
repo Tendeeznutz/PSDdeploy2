@@ -42,6 +42,9 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                 applicantPhone: values.applicantPhone,
                 applicantEmail: values.applicantEmail,
                 workExperience: values.workExperience,
+                previousEmployer: values.previousEmployer || null,
+                lastEmployedYear: values.lastEmployedYear ? parseInt(values.lastEmployedYear) : null,
+                lastDrawnSalary: values.lastDrawnSalary ? parseFloat(values.lastDrawnSalary) : null,
                 resumeFileName: applicationData.resumeFileName,
                 hasCriminalRecord: values.hasCriminalRecord,
                 criminalRecordDetails: values.hasCriminalRecord ? values.criminalRecordDetails : '',
@@ -174,6 +177,55 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                         maxLength={2000}
                         showCount
                     />
+                </Form.Item>
+
+                <Form.Item
+                    label="Previous Employer(s)"
+                    name="previousEmployer"
+                    rules={[{ required: false }]}
+                >
+                    <Input placeholder="e.g., ABC Aircon Services Pte Ltd" size="large" />
+                </Form.Item>
+
+                <Form.Item
+                    label="Last Employed Year"
+                    name="lastEmployedYear"
+                    rules={[
+                        { required: false },
+                        {
+                            validator: (_, value) => {
+                                if (!value) return Promise.resolve();
+                                const year = parseInt(value);
+                                const currentYear = new Date().getFullYear();
+                                if (year < 1950 || year > currentYear) {
+                                    return Promise.reject(`Year must be between 1950 and ${currentYear}`);
+                                }
+                                return Promise.resolve();
+                            }
+                        }
+                    ]}
+                >
+                    <Input placeholder="e.g., 2024" size="large" type="number" min={1950} max={new Date().getFullYear()} />
+                </Form.Item>
+
+                <Form.Item
+                    label="Last Drawn Monthly Salary (SGD)"
+                    name="lastDrawnSalary"
+                    rules={[
+                        { required: false },
+                        {
+                            validator: (_, value) => {
+                                if (!value) return Promise.resolve();
+                                const salary = parseFloat(value);
+                                if (salary < 0) {
+                                    return Promise.reject('Salary cannot be negative');
+                                }
+                                return Promise.resolve();
+                            }
+                        }
+                    ]}
+                >
+                    <Input placeholder="e.g., 3000" size="large" type="number" min={0} prefix="$" />
                 </Form.Item>
 
                 <Form.Item

@@ -3,7 +3,7 @@ import {Link, useNavigate} from 'react-router-dom';
 import axios from 'axios';
 import { Box, ListItem, ListItemIcon, MenuItem } from '@mui/material';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
-import { EventAvailable, PageviewRounded, PunchClock } from '@mui/icons-material';
+import { EventAvailable, PageviewRounded, PunchClock, LocationOn } from '@mui/icons-material';
 import { Button } from 'antd';
 import { MailOutlined } from '@ant-design/icons';
 
@@ -14,6 +14,13 @@ function TechnicianHome() {
     const [appointments, setAppointments] = useState([]);
     const [addresses, setAddresses] = useState([]);
     const [appointmentStatuses, setAppointmentStatuses] = useState([]);
+    const [customerData, setCustomerData] = useState({}); // Store customer data by appointment ID
+
+    // Function to open Google Maps with customer's location
+    const openGoogleMaps = (address, postalCode) => {
+        const query = encodeURIComponent(`${address} Singapore ${postalCode}`);
+        window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+    };
 
 
 // Function to format ISO 8601 datetime string to desired format
@@ -111,18 +118,35 @@ function TechnicianHome() {
                 setAppointments(response.data);
                 console.log("Number of appointments: ", response.data);
 
-                if (response.data.length > 0) {
-                    const customerId = response.data[0].customerId;
+                // Fetch customer data for each unique customer
+                const uniqueCustomerIds = [...new Set(response.data.map(appt => appt.customerId))];
+                const customerDataMap = {};
 
-                    axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/${customerId}/`)
-                        .then(customerResponse => {
-                            console.log("Customer response: " + customerResponse.data.customerAddress);
-                            setAddresses(customerResponse.data.customerAddress);
-                        })
-                        .catch(customerError => {
-                            console.error('Error fetching customer details:', customerError);
-                        });
-                }
+                Promise.all(
+                    uniqueCustomerIds.map(customerId =>
+                        axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/${customerId}/`)
+                            .then(customerResponse => {
+                                customerDataMap[customerId] = {
+                                    address: customerResponse.data.customerAddress,
+                                    postalCode: customerResponse.data.customerPostalCode,
+                                    name: customerResponse.data.customerName,
+                                    phone: customerResponse.data.customerPhone
+                                };
+                            })
+                            .catch(customerError => {
+                                console.error('Error fetching customer details:', customerError);
+                            })
+                    )
+                ).then(() => {
+                    setCustomerData(customerDataMap);
+                    // For backward compatibility, set the first customer's address
+                    if (response.data.length > 0) {
+                        const firstCustomerId = response.data[0].customerId;
+                        if (customerDataMap[firstCustomerId]) {
+                            setAddresses(customerDataMap[firstCustomerId].address);
+                        }
+                    }
+                });
             })
             .catch(error => {
                 console.error('Error fetching appointments:', error);
@@ -151,19 +175,22 @@ function TechnicianHome() {
                     )
                 },
                 {
-                    accessorKey: 'id',
+                    accessorKey: 'customerId',
                     header: 'Address',
-                    size: 150,
-                    Cell: ({ row }) => (
-                        <Box
-                        component="span"
-                        sx={(theme) => ({
-                            p: '0.25rem'
-                        })}
-                        >
-                            {addresses}
-                        </Box>
-                    )
+                    size: 200,
+                    Cell: ({ row }) => {
+                        const customer = customerData[row.original.customerId];
+                        return (
+                            <Box
+                            component="span"
+                            sx={(theme) => ({
+                                p: '0.25rem'
+                            })}
+                            >
+                                {customer ? `${customer.address} S${customer.postalCode}` : 'Loading...'}
+                            </Box>
+                        );
+                    }
                 },
                 {
                     accessorKey: 'display.appointmentStatus',
@@ -191,7 +218,7 @@ function TechnicianHome() {
             ]
         }
     ],
-    [addresses, appointments])
+    [customerData, appointments])
 
     const apptTable = useMaterialReactTable({
         columns: appointmentColumn,
@@ -204,49 +231,54 @@ function TechnicianHome() {
             }
         },
         enableRowActions: true,
-        renderRowActionMenuItems: ({ closeMenu, row }) => [
-            <MenuItem
-            key={0}
-            onClick={() => {
-                window.location.href='/appointmentDetail?id=' + row.original.id
-                closeMenu();
-            }}
-            sx={{ m: 0 }}
-            >
-                <ListItemIcon>
-                    <PageviewRounded/>
-                </ListItemIcon>
-                View
-            </MenuItem>,
-            row.original.appointmentStatus == 2 ? 
-            <MenuItem
-            key={1}
-            onClick={() => {
-                CompleteJob(row.original.id);
-                closeMenu();
-            }}
-            sx={{ m: 0 }}
-            >
-                <ListItemIcon>
-                    <EventAvailable/>
-                </ListItemIcon>
-                Complete Job
-            </MenuItem> : null
-            // row.original.appointmentStatus == 1 ? 
-            // <MenuItem
-            // key={1}
-            // onClick={() => {
-            //     CheckIn(row.original.id);
-            //     closeMenu();
-            // }}
-            // sx={{ m: 0 }}
-            // >
-            //     <ListItemIcon>
-            //         <PunchClock/>
-            //     </ListItemIcon>
-            //     Check In
-            // </MenuItem> : null
-        ]
+        renderRowActionMenuItems: ({ closeMenu, row }) => {
+            const customer = customerData[row.original.customerId];
+            return [
+                <MenuItem
+                key={0}
+                onClick={() => {
+                    window.location.href='/appointmentDetail?id=' + row.original.id
+                    closeMenu();
+                }}
+                sx={{ m: 0 }}
+                >
+                    <ListItemIcon>
+                        <PageviewRounded/>
+                    </ListItemIcon>
+                    View
+                </MenuItem>,
+                <MenuItem
+                key={1}
+                onClick={() => {
+                    if (customer) {
+                        openGoogleMaps(customer.address, customer.postalCode);
+                    }
+                    closeMenu();
+                }}
+                sx={{ m: 0 }}
+                disabled={!customer}
+                >
+                    <ListItemIcon>
+                        <LocationOn color={customer ? "primary" : "disabled"}/>
+                    </ListItemIcon>
+                    View Location
+                </MenuItem>,
+                row.original.appointmentStatus == 2 ?
+                <MenuItem
+                key={2}
+                onClick={() => {
+                    CompleteJob(row.original.id);
+                    closeMenu();
+                }}
+                sx={{ m: 0 }}
+                >
+                    <ListItemIcon>
+                        <EventAvailable/>
+                    </ListItemIcon>
+                    Complete Job
+                </MenuItem> : null
+            ];
+        }
     })
 
 

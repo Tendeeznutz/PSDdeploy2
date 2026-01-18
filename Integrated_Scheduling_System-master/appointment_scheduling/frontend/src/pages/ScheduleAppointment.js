@@ -9,11 +9,20 @@ function ScheduleAppointment() {
     const customer_id = localStorage.getItem("customers_id");
     const [dateTime, setDateTime] = useState('');
     const [selectedAircons, setSelectedAircons] = useState([]);
+    const [paymentMethod, setPaymentMethod] = useState('cash');
     const [error, setError] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
     const [progress, setProgress] = useState(0);
     const [showProgress, setShowProgress] = useState(false);
     const navigate = useNavigate();
+
+    const paymentMethods = [
+        { value: 'cash', label: 'Cash' },
+        { value: 'cheque', label: 'Cheque' },
+        { value: 'card', label: 'Credit/Debit Card' },
+        { value: 'bank_transfer', label: 'Bank Transfer' },
+        { value: 'paynow', label: 'PayLah/PayNow' },
+    ];
 
     const fetchUserAirconData = async () => {
         try {
@@ -54,7 +63,8 @@ function ScheduleAppointment() {
             const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/`, {
                 customerId: customer_id,
                 appointmentStartTime : singaporeDateTimeUnix,
-                airconToService : selectedAircons
+                airconToService : selectedAircons,
+                paymentMethod: paymentMethod
             });
 
             if (response.status === 201) {
@@ -102,7 +112,7 @@ function ScheduleAppointment() {
                                 onChange={(date) => setDateTime(date)}
                                 showTimeSelect
                                 timeFormat="HH:mm"
-                                timeIntervals={15}
+                                timeIntervals={30}
                                 timeCaption="time"
                                 dateFormat="MMM d, yyyy h:mm aa"
                                 className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
@@ -128,6 +138,23 @@ function ScheduleAppointment() {
                                 <p className="text-sm text-gray-700">User does not have any aircon</p>
                             )}
                         </fieldset>
+                        <div className="mb-4">
+                            <label className="block mb-2 text-sm font-bold text-gray-700" htmlFor="payment-method">
+                                Payment Method
+                            </label>
+                            <select
+                                id="payment-method"
+                                value={paymentMethod}
+                                onChange={(e) => setPaymentMethod(e.target.value)}
+                                className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                {paymentMethods.map((method) => (
+                                    <option key={method.value} value={method.value}>
+                                        {method.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <div className="flex items-center justify-center">
                             {userAirconList.length > 0 ? (
                                 <button

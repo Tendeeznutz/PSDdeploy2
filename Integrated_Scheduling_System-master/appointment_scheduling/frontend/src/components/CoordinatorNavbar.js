@@ -6,8 +6,8 @@ function CoordinatorNavbar() {
     const hideOnRoutes = [
         '/coordinatorHome',
         '/CoordinatorHome',
-        '/AirconCatalog',
         '/RegisterTechnician',
+        '/TechnicianHiring',
         '/CoordinatorAppointmentView',
         '/CustomerEnquiry',
         '/CoordinatorAppointmentUpdate'
@@ -38,13 +38,8 @@ function CoordinatorNavbar() {
                         </Link>
                     </li>
                     <li>
-                        <Link to="/AirconCatalog" className="hover:text-blue-300">
-                            Aircon Catalog
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/RegisterTechnician" className="hover:text-blue-300">
-                            Register Technician
+                        <Link to="/TechnicianHiring" className="hover:text-blue-300">
+                            Hire Technician
                         </Link>
                     </li>
                     <li>

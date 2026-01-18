@@ -18,6 +18,7 @@ function AppointmentDetails() {
     const [technicianData, setTechnicianData] = useState({});
     const [customerData, setCustomerData] = useState({});
     const [apptStatus, setApptStatus] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('');
     const [cancellationReason, setCancellationReason] = useState('');
     const [existingCancellationReason, setExistingCancellationReason] = useState('');
 
@@ -61,6 +62,7 @@ function AppointmentDetails() {
                 customerName: appointmentData.display.customerName
             });
             setApptStatus(appointmentData.display.appointmentStatus);
+            setPaymentMethod(appointmentData.display.paymentMethod || '');
 
             // Set existing cancellation reason if appointment is cancelled
             if (appointmentData.cancellationReason) {
@@ -277,7 +279,7 @@ function AppointmentDetails() {
                                     onChange={(date) => setDateTime(date)}
                                     showTimeSelect
                                     timeFormat="HH:mm"
-                                    timeIntervals={15}
+                                    timeIntervals={30}
                                     timeCaption="time"
                                     dateFormat="MMM d, yyyy h:mm aa"
                                     className="w-full p-2 leading-tight text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
@@ -285,6 +287,21 @@ function AppointmentDetails() {
                                 />
                             </div>
                         </div>
+
+                        {/* Payment Method - only shown to customers and coordinators */}
+                        {!hasTechniciansPhone && paymentMethod && (
+                            <div className="mb-4">
+                                <label className='block mb-2 text-sm font-bold text-gray-700'>
+                                    Payment Method:
+                                </label>
+                                <input
+                                    type="text"
+                                    value={paymentMethod}
+                                    className="w-full p-2 leading-tight text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                    disabled
+                                />
+                            </div>
+                        )}
 
                         {/* The selected aircon section */}
                         <fieldset className="mb-4">

@@ -13,17 +13,13 @@ load_dotenv()
 def get_search_range(travel_type) -> int:
     """
     get search range in meters based on travel type
-    :param travel_type: 'walk', 'drive' or 'cycle'
-    :return: search range in meters
+    All technicians use vehicles (own_vehicle, company_vehicle, rental_van)
+    so a fixed 30km range is used across Singapore.
+    :param travel_type: vehicle type (own_vehicle, company_vehicle, rental_van)
+    :return: search range in meters (30000 = 30km)
     """
-    if travel_type == 'walk':
-        return int(os.getenv('WALK_SEARCH_RANGE'))
-    elif travel_type == 'drive':
-        return int(os.getenv('DRIVE_SEARCH_RANGE'))
-    elif travel_type == 'cycle':
-        return int(os.getenv('CYCLE_SEARCH_RANGE'))
-    else:
-        raise Exception('Error in get_search_range: invalid travel type')
+    # Fixed 30km range for all vehicle-based travel types
+    return 30000
 
 
 def get_nearby_technicians(customer_id) -> list[Any]:

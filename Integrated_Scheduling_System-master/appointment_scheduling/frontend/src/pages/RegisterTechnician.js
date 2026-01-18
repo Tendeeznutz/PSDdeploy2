@@ -9,7 +9,7 @@ function RegisterTechnician() {
         address: '',
         phone: '',
         password: '',
-        travelType: 'drive',
+        travelType: 'own_vehicle',
     });
 
     const [errorMessage, setErrorMessage] = useState('');
@@ -154,9 +154,9 @@ function RegisterTechnician() {
                                 value={technicianObj.travelType}
                                 onChange={(e) => setTechnicianObj(technicianObj => ({...technicianObj, travelType: e.target.value}))}
                             >
-                                <option value="drive">Drive</option>
-                                <option value="walk">Walk</option>
-                                <option value="cycle">Cycle</option>
+                                <option value="own_vehicle">Own Vehicle</option>
+                                <option value="company_vehicle">Company Vehicle</option>
+                                <option value="rental_van">Rental Van</option>
                             </select>
                         </div>
 

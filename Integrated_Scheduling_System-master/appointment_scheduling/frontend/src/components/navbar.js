@@ -16,7 +16,6 @@ function Navbar() {
     ];
     const hideOnRoutesCoord = [
         '/CoordinatorHome',
-        '/AirconCatalog',
         '/RegisterTechnician',
         '/CoordinatorAppointmentView',
         '/CustomerEnquiry',
@@ -107,11 +106,6 @@ function Navbar() {
                         <li>
                             <Link to="/CoordinatorHome" className="hover:text-blue-300">
                                 Home
-                            </Link>
-                        </li>
-                        <li>
-                            <Link to="/AirconCatalog" className="hover:text-blue-300">
-                                Aircon Catalog
                             </Link>
                         </li>
                         <li>

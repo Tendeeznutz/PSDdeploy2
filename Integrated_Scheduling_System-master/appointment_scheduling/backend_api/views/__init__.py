@@ -1,4 +1,3 @@
-from .aircon_catalog_views import AirconCatalogViewSet
 from .appointment_views import AppointmentViewSet
 from .coordinator_views import CoordinatorViewSet
 from .customer_aircon_devices_views import CustomerAirconDeviceViewSet

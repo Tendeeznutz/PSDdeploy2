@@ -8,6 +8,17 @@ import 'react-datepicker/dist/react-datepicker.css';
 function TechnicianProfile() {
 
     const navigate = useNavigate();
+
+    // Helper function to display travel type in a readable format
+    const displayTravelType = (travelType) => {
+        const travelTypes = {
+            'own_vehicle': 'Own Vehicle',
+            'company_vehicle': 'Company Vehicle',
+            'rental_van': 'Rental Van',
+        };
+        return travelTypes[travelType] || travelType;
+    };
+
     const [techniciandetails, setTechniciandetails] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editedDetails, setEditedDetails] = useState({
@@ -123,7 +134,7 @@ function TechnicianProfile() {
                                     Address: {techniciandetails.technicianAddress}
                                 </label>
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
-                                    Travel Type: {techniciandetails.technicianTravelType}
+                                    Travel Type: {displayTravelType(techniciandetails.technicianTravelType)}
                                 </label>
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Status: {techniciandetails.technicianStatus === "1" ? "Available" : "Unavailable"}
@@ -189,9 +200,9 @@ function TechnicianProfile() {
                                         value={editedDetails.technicianTravelType}
                                         onChange={(e) => setEditedDetails({...editedDetails, technicianTravelType: e.target.value})}
                                     >
-                                        <option value="drive">Drive</option>
-                                        <option value="walk">Walk</option>
-                                        <option value="cycle">Cycle</option>
+                                        <option value="own_vehicle">Own Vehicle</option>
+                                        <option value="company_vehicle">Company Vehicle</option>
+                                        <option value="rental_van">Rental Van</option>
                                     </select>
                                 </div>
                                 <div className="mb-4">

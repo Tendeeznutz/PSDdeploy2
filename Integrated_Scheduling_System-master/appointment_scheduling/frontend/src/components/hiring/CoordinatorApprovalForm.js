@@ -120,6 +120,15 @@ function CoordinatorApprovalForm({ applicationData }) {
                     <Descriptions.Item label="Work Experience">
                         <div className="whitespace-pre-wrap">{applicationData.workExperience}</div>
                     </Descriptions.Item>
+                    <Descriptions.Item label="Previous Employer(s)">
+                        {applicationData.previousEmployer || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Last Employed Year">
+                        {applicationData.lastEmployedYear || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Last Drawn Monthly Salary">
+                        {applicationData.lastDrawnSalary ? `$${parseFloat(applicationData.lastDrawnSalary).toFixed(2)}` : 'Not provided'}
+                    </Descriptions.Item>
                     <Descriptions.Item label="Resume">
                         {applicationData.resumeFileName || 'Not provided'}
                     </Descriptions.Item>

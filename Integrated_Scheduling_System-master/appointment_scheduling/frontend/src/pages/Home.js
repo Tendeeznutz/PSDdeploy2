@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import ReportIssues from '../pages/ReportIssues';
 import { Box, ListItemIcon, MenuItem } from '@mui/material';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
-import { PageviewRounded } from '@mui/icons-material';
+import { PageviewRounded, CancelOutlined } from '@mui/icons-material';
 import { MailOutlined } from '@ant-design/icons';
-import { Badge } from 'antd';
+import { Badge, Modal, message } from 'antd';
 
 function Home() {
     const customer_id = localStorage.getItem("customers_id");
@@ -21,6 +21,44 @@ function Home() {
     const goToMailbox = () => {
         navigate('/Mailbox');
     }
+
+    const handleCancelAppointment = async (appointmentId, appointmentStartTime) => {
+        // Check if appointment is more than 48 hours away
+        const now = Math.floor(Date.now() / 1000); // Current time in Unix seconds
+        const hoursUntilAppointment = (appointmentStartTime - now) / 3600;
+
+        if (hoursUntilAppointment < 48) {
+            message.error('Cannot cancel appointment within 48 hours of scheduled time');
+            return;
+        }
+
+        Modal.confirm({
+            title: 'Cancel Appointment',
+            content: 'Are you sure you want to cancel this appointment?',
+            okText: 'Yes, Cancel',
+            okType: 'danger',
+            cancelText: 'No, Keep It',
+            onOk: async () => {
+                try {
+                    await axios.patch(
+                        `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${appointmentId}/`,
+                        {
+                            appointmentStatus: '4', // 4 = Cancelled
+                            cancellationReason: 'Cancelled by customer',
+                            cancelledBy: 'customer'
+                        }
+                    );
+                    message.success('Appointment cancelled successfully');
+                    // Refresh the appointment list
+                    const response = await getAllAppointments();
+                    setAppointmentList(response.data);
+                } catch (error) {
+                    console.error('Error cancelling appointment:', error);
+                    message.error('Failed to cancel appointment. Please try again.');
+                }
+            }
+        });
+    };
 
     const fetchUnreadCount = async () => {
         try {
@@ -110,6 +148,11 @@ function Home() {
                     )
                 },
                 {
+                    accessorKey: 'display.paymentMethod',
+                    header: 'Payment Method',
+                    size: 150
+                },
+                {
                     accessorKey: 'display.appointmentStatus',
                     header: 'Status',
                     size: 150,
@@ -148,21 +191,49 @@ function Home() {
             },
         },
         enableRowActions: true,
-        renderRowActionMenuItems: ({ closeMenu, row}) => [
-            <MenuItem
-            key={0}
-            onClick={() => {
-                navigate('/appointmentDetail?id=' + row.original.id);
-                closeMenu();
-            }}
-            sx={{ m: 0 }}
-            >
-                <ListItemIcon>
-                    <PageviewRounded/>
-                </ListItemIcon>
-                View
-            </MenuItem>
-        ]
+        renderRowActionMenuItems: ({ closeMenu, row}) => {
+            const now = Math.floor(Date.now() / 1000);
+            const hoursUntilAppointment = (row.original.appointmentStartTime - now) / 3600;
+            const status = row.original.appointmentStatus;
+            // Can only cancel if: more than 48 hours away AND status is Pending (1) or Confirmed (2)
+            const canCancel = hoursUntilAppointment >= 48 && (status === '1' || status === '2');
+
+            const menuItems = [
+                <MenuItem
+                    key={0}
+                    onClick={() => {
+                        navigate('/appointmentDetail?id=' + row.original.id);
+                        closeMenu();
+                    }}
+                    sx={{ m: 0 }}
+                >
+                    <ListItemIcon>
+                        <PageviewRounded/>
+                    </ListItemIcon>
+                    View
+                </MenuItem>
+            ];
+
+            if (canCancel) {
+                menuItems.push(
+                    <MenuItem
+                        key={1}
+                        onClick={() => {
+                            handleCancelAppointment(row.original.id, row.original.appointmentStartTime);
+                            closeMenu();
+                        }}
+                        sx={{ m: 0, color: 'error.main' }}
+                    >
+                        <ListItemIcon>
+                            <CancelOutlined color="error"/>
+                        </ListItemIcon>
+                        Cancel Appointment
+                    </MenuItem>
+                );
+            }
+
+            return menuItems;
+        }
     })
 
     return (

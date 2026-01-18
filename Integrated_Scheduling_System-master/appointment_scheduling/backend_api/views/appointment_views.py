@@ -291,9 +291,10 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                     # Different technician being assigned
                     technician_newly_assigned = True
 
-                if item.appointmentStatus != '3':
+                # Only auto-set status if NOT a cancellation and NOT completed
+                if not is_cancellation and item.appointmentStatus != '3':
                     serializer.validated_data['appointmentStatus'] = '2'
-            elif serializer.validated_data.get('technicianId') is None and item.appointmentStatus != '3':
+            elif serializer.validated_data.get('technicianId') is None and not is_cancellation and item.appointmentStatus != '3':
                 serializer.validated_data['appointmentStatus'] = '1'
 
             updated_appointment = serializer.save()

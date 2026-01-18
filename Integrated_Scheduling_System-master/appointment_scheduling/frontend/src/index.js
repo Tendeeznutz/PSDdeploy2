@@ -16,7 +16,6 @@ import TechnicianList from "./pages/TechnicianList";
 import CoordinatorHome from "./pages/CoordinatorHome";
 import TechnicianLogin from './pages/TechnicianLogin';
 import TechnicianHome from "./pages/TechnicianHome";
-import AirconCatalog from "./pages/AirconCatalog";
 import RescheduleCoordinator from './pages/RescheduleCoordinator';
 import CoordinatorAppointmentView from './pages/CoordinatorAppointmentView';
 import CustomerEnquiry from './pages/CustomerEnquiry';
@@ -53,7 +52,6 @@ root.render(
             <Route path='/CoordinatorAppointmentView' element={<CoordinatorAppointmentView/>}/>
             <Route path='/CoordinatorAppointmentUpdate' element={<CoordinatorAppointmentUpdate/>}/>
             <Route path='/TechnicianHome' element={<TechnicianHome/>}/>
-            <Route path='/AirconCatalog' element={<AirconCatalog/>}/>
             <Route path='/rescheduleDetail' element={<RescheduleCoordinator/>}/>
             <Route path='/ReportIssues' element={<ReportIssues/>}/>
             <Route path='/mailbox' element={<Mailbox/>}/>

@@ -56,20 +56,36 @@ class Customers(TimeStampedModel):
         return f'{self.customerName} ({self.customerEmail})'
 
 class CustomerAirconDevices(TimeStampedModel):
+    AIRCON_TYPE_CHOICES = (
+        ('industrial', 'Industrial'),
+        ('split', 'Split'),
+        ('window', 'Window'),
+        ('centralized', 'Centralized'),
+        ('floor_mounted', 'Floor Mounted'),
+        ('portable', 'Portable'),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, null=False)
     airconName = models.CharField(max_length=50, null=True)
-    airconCatalogId = models.ForeignKey(
-        AirconCatalogs, on_delete=models.CASCADE,
-        db_column='airconCatalogId', related_name='customer_devices',
-        default=None, null=False
-    )
     customerId = models.ForeignKey(
         Customers, on_delete=models.CASCADE,
         db_column='customerId', related_name='aircon_devices',
         default=None, null=False
     )
-    # Use epoch seconds for now (matches your current schema)
-    lastServiceDate = models.BigIntegerField(null=True, default=None)
+    numberOfUnits = models.IntegerField(null=False, default=1)
+    airconType = models.CharField(max_length=20, choices=AIRCON_TYPE_CHOICES, null=False, default='split')
+    # Store as YYYY-MM format string (e.g., "2024-01")
+    lastServiceMonth = models.CharField(max_length=7, null=True, blank=True, default=None)
+    remarks = models.TextField(max_length=500, null=True, blank=True, default=None)
+
+    # Legacy field - keeping for backward compatibility but no longer required
+    airconCatalogId = models.ForeignKey(
+        AirconCatalogs, on_delete=models.CASCADE,
+        db_column='airconCatalogId', related_name='customer_devices',
+        default=None, null=True, blank=True
+    )
+    # Legacy field - keeping for backward compatibility
+    lastServiceDate = models.BigIntegerField(null=True, default=None, blank=True)
 
     class Meta:
         constraints = [
@@ -78,7 +94,7 @@ class CustomerAirconDevices(TimeStampedModel):
         ]
         indexes = [
             models.Index(fields=['customerId']),
-            models.Index(fields=['airconCatalogId']),
+            models.Index(fields=['airconType']),
         ]
         ordering = ['customerId', 'airconName']
 
@@ -86,9 +102,15 @@ class CustomerAirconDevices(TimeStampedModel):
         return self.airconName or f'Device {self.id}'
 
 class Technicians(models.Model):
-    choices = (
+    STATUS_CHOICES = (
         ('1', 'Available'),
         ('2', 'Unavailable')
+    )
+
+    TRAVEL_TYPE_CHOICES = (
+        ('own_vehicle', 'Own Vehicle'),
+        ('company_vehicle', 'Company Vehicle'),
+        ('rental_van', 'Rental Van'),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
@@ -98,10 +120,10 @@ class Technicians(models.Model):
     technicianLocation = models.CharField(max_length=32, null=True)
     technicianPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
     technicianPassword = models.CharField(max_length=50, null=False)
-    technicianStatus = models.CharField(default=1, choices=choices, max_length=1, null=False)
+    technicianStatus = models.CharField(default=1, choices=STATUS_CHOICES, max_length=1, null=False)
     # validation should be done in serializer to check each entry exist in airconCatalogs
     # technicianSupportedAircon = models.CharField(max_length=500)
-    technicianTravelType = models.CharField(max_length=10, null=False, default='walk')
+    technicianTravelType = models.CharField(max_length=20, choices=TRAVEL_TYPE_CHOICES, null=False, default='own_vehicle')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -138,11 +160,19 @@ class Coordinators(TimeStampedModel):
 
 
 class Appointments(TimeStampedModel):
-    choices = (
+    STATUS_CHOICES = (
         ('1', 'Pending'),
         ('2', 'Confirmed'),
         ('3', 'Completed'),
         ('4', 'Cancelled'),
+    )
+
+    PAYMENT_METHOD_CHOICES = (
+        ('cash', 'Cash'),
+        ('cheque', 'Cheque'),
+        ('card', 'Credit/Debit Card'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('paynow', 'PayLah/PayNow'),
     )
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
     customerId = models.ForeignKey(
@@ -171,7 +201,8 @@ class Appointments(TimeStampedModel):
     # validation should be done in serializer to check each entry exist in customerAirconDevices
     airconToService = models.JSONField(default=list, help_text='List of customerAirconDevices IDs')
     customerFeedback = models.TextField(default=None, null=True, max_length=500)
-    appointmentStatus = models.CharField(max_length=1, default=1, choices=choices)
+    appointmentStatus = models.CharField(max_length=1, default=1, choices=STATUS_CHOICES)
+    paymentMethod = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, null=False, default='cash', help_text='Customer selected payment method')
     cancellationReason = models.TextField(default=None, null=True, blank=True, max_length=500, help_text='Reason for cancellation')
     cancelledBy = models.CharField(max_length=50, null=True, blank=True, help_text='Role of person who cancelled (technician/coordinator)')
     cancelledAt = models.DateTimeField(null=True, blank=True, help_text='Timestamp of cancellation')
@@ -271,6 +302,12 @@ class TechnicianHiringApplication(TimeStampedModel):
     resumeFileName = models.CharField(max_length=255, null=True, blank=True, help_text='Original resume filename')
     hasCriminalRecord = models.BooleanField(default=False, help_text='Criminal record declaration')
     criminalRecordDetails = models.TextField(max_length=1000, null=True, blank=True, help_text='Details if criminal record exists')
+
+    # Previous Employment Information
+    previousEmployer = models.CharField(max_length=200, null=True, blank=True, help_text='Name of previous employer(s)')
+    lastEmployedYear = models.IntegerField(null=True, blank=True, help_text='Year when last employed')
+    lastDrawnSalary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text='Last drawn monthly salary in SGD')
+
     personalDetailsConfirmed = models.BooleanField(default=False, help_text='Applicant confirmed personal details')
     personalDetailsConfirmedAt = models.DateTimeField(null=True, blank=True)
 

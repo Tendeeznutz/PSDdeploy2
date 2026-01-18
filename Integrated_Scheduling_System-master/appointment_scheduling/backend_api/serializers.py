@@ -4,7 +4,7 @@ import uuid
 import randomname
 from rest_framework import serializers
 
-from .models import Appointments, AppointmentRequest, Customers, AirconCatalogs, Technicians, Coordinators, \
+from .models import Appointments, AppointmentRequest, Customers, Technicians, Coordinators, \
     CustomerAirconDevices, Messages, TechnicianHiringApplication
 
 
@@ -54,16 +54,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         exclude = ['customerPassword']
 
 
-class AirconSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AirconCatalogs
-        fields = '__all__'
-
-    def validate(self, attrs):
-        if 'airconBrand' in attrs and 'airconModel' in attrs:
-            if AirconCatalogs.objects.filter(airconBrand=attrs['airconBrand'], airconModel=attrs['airconModel']).exists():
-                raise serializers.ValidationError("Aircon brand and model already exists")
-        return attrs
+# Aircon Catalog removed - no longer needed
 
 
 class TechnicianSerializer(serializers.ModelSerializer):
@@ -81,23 +72,89 @@ class CoordinatorSerializer(serializers.ModelSerializer):
 
 
 class CustomerAirconDeviceSerializer(serializers.ModelSerializer):
-    airconCatalogId = serializers.PrimaryKeyRelatedField(queryset=AirconCatalogs.objects.all(), required=True)
     customerId = serializers.PrimaryKeyRelatedField(queryset=Customers.objects.all(), required=True)
 
     class Meta:
         model = CustomerAirconDevices
         fields = '__all__'
 
+    def validate_numberOfUnits(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Number of units must be at least 1")
+        if value is not None and value > 100:
+            raise serializers.ValidationError("Number of units cannot exceed 100")
+        return value
+
+    def validate_lastServiceMonth(self, value):
+        if value is not None and value != '':
+            # Validate YYYY-MM format
+            import re
+            from datetime import datetime
+            if not re.match(r'^\d{4}-(0[1-9]|1[0-2])$', value):
+                raise serializers.ValidationError("Last service month must be in YYYY-MM format")
+            # Check if it's not in the future
+            try:
+                service_date = datetime.strptime(value, '%Y-%m')
+                if service_date > datetime.now():
+                    raise serializers.ValidationError("Last service month cannot be in the future")
+            except ValueError:
+                raise serializers.ValidationError("Invalid date format")
+        return value
+
     def validate_lastServiceDate(self, value):
+        # Legacy field validation - kept for backward compatibility
         if value is not None and value >= time.time():
             raise serializers.ValidationError("Last service date must not be a present or future date")
         return value
 
     def validate_airconName(self, value):
         if value is None or value == '':
-            return randomname.get_name()
+            return None  # Will be auto-generated in create() method
         else:
             return value
+
+    def validate(self, data):
+        """Validate that the aircon name is unique for this customer"""
+        aircon_name = data.get('airconName')
+        customer_id = data.get('customerId')
+
+        # Check for duplicate name only if a name is provided
+        if aircon_name and customer_id:
+            # Exclude current instance if this is an update
+            queryset = CustomerAirconDevices.objects.filter(
+                customerId=customer_id,
+                airconName=aircon_name
+            )
+            if self.instance:
+                queryset = queryset.exclude(pk=self.instance.pk)
+
+            if queryset.exists():
+                raise serializers.ValidationError({
+                    'airconName': f'You already have an aircon device named "{aircon_name}". Please use a different name.'
+                })
+
+        return data
+
+    def create(self, validated_data):
+        """Auto-generate unique aircon name if not provided"""
+        if not validated_data.get('airconName'):
+            customer = validated_data.get('customerId')
+            # Generate a unique name
+            base_name = randomname.get_name()
+            aircon_name = base_name
+            counter = 1
+
+            # Keep generating until we find a unique name
+            while CustomerAirconDevices.objects.filter(
+                customerId=customer,
+                airconName=aircon_name
+            ).exists():
+                aircon_name = f"{base_name} {counter}"
+                counter += 1
+
+            validated_data['airconName'] = aircon_name
+
+        return super().create(validated_data)
 
 
 class MessageSerializer(serializers.ModelSerializer):

@@ -171,7 +171,7 @@ function RescheduleCoordinator() {
                                     onChange={(date) => setDateTime(date)}
                                     showTimeSelect
                                     timeFormat="HH:mm"
-                                    timeIntervals={15}
+                                    timeIntervals={30}
                                     timeCaption="time"
                                     dateFormat="MMM d, yyyy h:mm aa"
                                     className="w-full p-2 leading-tight text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
