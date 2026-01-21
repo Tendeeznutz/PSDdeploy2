@@ -37,46 +37,90 @@ __Tech Stack(s)__<br>
 - npm or yarn
 - Git
 
+---
+
 ### Step 1: Clone the Repository
+
+Open a terminal and run:
 ```bash
 git clone https://github.com/soyabean777/psd_airserve.git
-cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling
 ```
+
+---
 
 ### Step 2: Set Up Backend (Django)
+
+**Windows Users** - Copy and paste these commands one by one:
 ```bash
-# Create and activate virtual environment
+cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling
 python -m venv .venv
-
-# Windows
 .venv\Scripts\activate
-
-# Mac/Linux
-source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Run database migrations
 python manage.py migrate
-
-# Start the backend server
 python manage.py runserver
 ```
-The backend will be running at: **http://127.0.0.1:8000**
+
+**Mac/Linux Users** - Copy and paste these commands one by one:
+```bash
+cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+You should see:
+```
+Starting development server at http://127.0.0.1:8000/
+```
+**Keep this terminal open!** The backend is now running.
+
+---
 
 ### Step 3: Set Up Frontend (React)
-Open a new terminal:
+
+**Open a NEW terminal window** (don't close the backend one!) and run:
+
+**Windows Users:**
 ```bash
-cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling/frontend
-
-# Install dependencies
+cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling\frontend
 npm install
-
-# Start the frontend server
 npm start
 ```
-The frontend will be running at: **http://localhost:3000**
+
+**Mac/Linux Users:**
+```bash
+cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling/frontend
+npm install
+npm start
+```
+
+You should see:
+```
+Compiled successfully!
+You can now view frontend in the browser.
+  Local:            http://localhost:3000
+```
+
+The browser should automatically open to http://localhost:3000
+
+---
+
+### Summary: Commands to Run
+
+**Terminal 1 (Backend):**
+```bash
+cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling
+.venv\Scripts\activate
+python manage.py runserver
+```
+
+**Terminal 2 (Frontend):**
+```bash
+cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling\frontend
+npm start
+```
 
 ---
 
