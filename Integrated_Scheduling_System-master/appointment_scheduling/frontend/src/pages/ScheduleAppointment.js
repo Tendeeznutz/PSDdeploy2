@@ -5,6 +5,10 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Progress } from 'antd';
 
+// Pricing constants
+const SERVICE_COST_PER_AIRCON = 50; // $50 per aircon serviced
+const TRAVEL_FEE = 10; // $10 standard travel fee
+
 function ScheduleAppointment() {
     const customer_id = localStorage.getItem("customers_id");
     const [dateTime, setDateTime] = useState('');
@@ -23,6 +27,13 @@ function ScheduleAppointment() {
         { value: 'bank_transfer', label: 'Bank Transfer' },
         { value: 'paynow', label: 'PayLah/PayNow' },
     ];
+
+    // Calculate total cost based on selected aircons
+    const calculateTotalCost = () => {
+        if (selectedAircons.length === 0) return 0;
+        const serviceCost = selectedAircons.length * SERVICE_COST_PER_AIRCON;
+        return serviceCost + TRAVEL_FEE;
+    };
 
     const fetchUserAirconData = async () => {
         try {
@@ -155,6 +166,28 @@ function ScheduleAppointment() {
                                 ))}
                             </select>
                         </div>
+
+                        {/* Cost Summary */}
+                        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <h3 className="text-sm font-bold text-blue-800 mb-2">Cost Summary</h3>
+                            <div className="text-sm text-blue-700">
+                                <div className="flex justify-between mb-1">
+                                    <span>Service Fee ({selectedAircons.length} aircon{selectedAircons.length !== 1 ? 's' : ''} x ${SERVICE_COST_PER_AIRCON})</span>
+                                    <span>${selectedAircons.length * SERVICE_COST_PER_AIRCON}.00</span>
+                                </div>
+                                <div className="flex justify-between mb-1">
+                                    <span>Travel Fee</span>
+                                    <span>${TRAVEL_FEE}.00</span>
+                                </div>
+                                <hr className="my-2 border-blue-300" />
+                                <div className="flex justify-between font-bold text-blue-900">
+                                    <span>Total</span>
+                                    <span>${calculateTotalCost()}.00</span>
+                                </div>
+                            </div>
+                            <p className="text-xs text-blue-600 mt-2">* A receipt will be sent to your mailbox upon booking confirmation</p>
+                        </div>
+
                         <div className="flex items-center justify-center">
                             {userAirconList.length > 0 ? (
                                 <button

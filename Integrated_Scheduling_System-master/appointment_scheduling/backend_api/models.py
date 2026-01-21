@@ -303,10 +303,27 @@ class TechnicianHiringApplication(TimeStampedModel):
     hasCriminalRecord = models.BooleanField(default=False, help_text='Criminal record declaration')
     criminalRecordDetails = models.TextField(max_length=1000, null=True, blank=True, help_text='Details if criminal record exists')
 
+    # Race and Language
+    race = models.CharField(max_length=50, null=False, default='', help_text='Race of applicant')
+    languagesSpoken = models.CharField(max_length=200, null=False, default='', help_text='Languages spoken (comma-separated)')
+
     # Previous Employment Information
     previousEmployer = models.CharField(max_length=200, null=True, blank=True, help_text='Name of previous employer(s)')
     lastEmployedYear = models.IntegerField(null=True, blank=True, help_text='Year when last employed')
     lastDrawnSalary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text='Last drawn monthly salary in SGD')
+
+    # Next of Kin Information
+    nextOfKinName = models.CharField(max_length=100, null=False, default='', help_text='Name of next of kin')
+    nextOfKinContact = models.CharField(max_length=8, null=False, default='', validators=[SG_PHONE_VALIDATOR], help_text='Contact number of next of kin')
+    nextOfKinRelationship = models.CharField(max_length=50, null=False, default='', help_text='Relationship with next of kin')
+
+    # Medical Fitness Declaration
+    isMedicallyFit = models.BooleanField(default=False, help_text='Declaration of medical fitness to work')
+    medicalFitnessConfirmedAt = models.DateTimeField(null=True, blank=True)
+
+    # Profile Photo
+    profilePhoto = models.ImageField(upload_to='profile_photos/', null=True, blank=True, help_text='Profile photo of applicant')
+    profilePhotoFileName = models.CharField(max_length=255, null=True, blank=True, help_text='Original profile photo filename')
 
     personalDetailsConfirmed = models.BooleanField(default=False, help_text='Applicant confirmed personal details')
     personalDetailsConfirmedAt = models.DateTimeField(null=True, blank=True)

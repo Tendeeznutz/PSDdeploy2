@@ -11,6 +11,10 @@ function Profile() {
     const [modalError, setModalError] = useState('');
     // to toggle the "add aicon" form modal
     const [isModalOpen, setIsModalOpen] = useState(false);
+    // to toggle the "edit aircon" form modal
+    const [isEditAirconModalOpen, setIsEditAirconModalOpen] = useState(false);
+    const [editingAircon, setEditingAircon] = useState(null);
+    const [editAirconError, setEditAirconError] = useState('');
     const [progress, setProgress] = useState(0);
     const [showProgress, setShowProgress] = useState(false);
     const [userObject, setUserObject] = useState({
@@ -100,6 +104,78 @@ function Profile() {
         } catch (error) {
             console.error('Error deleting aircon:', error);
             setError(error.message);
+        }
+    };
+
+    // Open edit aircon modal
+    const handleEditAircon = (aircon) => {
+        setEditingAircon({
+            id: aircon.id,
+            airconName: aircon.airconName || '',
+            numberOfUnits: aircon.numberOfUnits || 1,
+            airconType: aircon.airconType || 'split',
+            lastServiceMonth: aircon.lastServiceMonth ? dayjs(aircon.lastServiceMonth, 'YYYY-MM') : null,
+            remarks: aircon.remarks || ''
+        });
+        setEditAirconError('');
+        setIsEditAirconModalOpen(true);
+    };
+
+    // Close edit aircon modal
+    const closeEditAirconModal = () => {
+        setIsEditAirconModalOpen(false);
+        setEditingAircon(null);
+        setEditAirconError('');
+    };
+
+    // Handle edit aircon form submission
+    const handleEditAirconSubmit = async (event) => {
+        event.preventDefault();
+        setEditAirconError('');
+
+        try {
+            if (!editingAircon.airconType) {
+                throw new Error('Please select aircon type.');
+            }
+
+            if (editingAircon.numberOfUnits < 1 || editingAircon.numberOfUnits > 100) {
+                throw new Error('Number of units must be between 1 and 100.');
+            }
+
+            const payload = {
+                airconName: editingAircon.airconName || null,
+                numberOfUnits: editingAircon.numberOfUnits,
+                airconType: editingAircon.airconType,
+                lastServiceMonth: editingAircon.lastServiceMonth ? editingAircon.lastServiceMonth.format('YYYY-MM') : null,
+                remarks: editingAircon.remarks || null
+            };
+
+            const response = await axios.patch(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/${editingAircon.id}/`,
+                payload
+            );
+
+            if (response.status === 200) {
+                // Update the aircon list with the edited aircon
+                setUserAirconList(userAirconList.map(aircon =>
+                    aircon.id === editingAircon.id ? response.data : aircon
+                ));
+                closeEditAirconModal();
+            }
+        } catch (error) {
+            console.error('Error editing aircon:', error);
+            if (error.message.includes('Number of units') || error.message.includes('aircon type')) {
+                setEditAirconError(error.message);
+            } else if (error.response?.data?.airconName) {
+                const nameError = Array.isArray(error.response.data.airconName)
+                    ? error.response.data.airconName[0]
+                    : error.response.data.airconName;
+                setEditAirconError(nameError || "This aircon name is already in use.");
+            } else if (error.response?.status === 500) {
+                setEditAirconError("An error occurred at the server. Please try again.");
+            } else {
+                setEditAirconError(error.response?.data?.detail || "An error occurred. Please try again.");
+            }
         }
     };
 
@@ -297,15 +373,29 @@ function Profile() {
                                     ?   null
                                     :   userAirconList.map((aircon) => (
                                         <div key={aircon.id} className="mb-2 flex items-center justify-between text-sm">
-                                            <label className="text-gray-700">{aircon.airconName}</label>
-                                            <Popconfirm
-                                                title={`Remove ${aircon.airconName}?`}
-                                                description="This action cannot be undone."
-                                                okButtonProps={{danger: 'true'}}
-                                                onConfirm={handleDeleteAircon(aircon.id)}
-                                            >
-                                                <Button danger >Remove</Button>
-                                            </Popconfirm>
+                                            <div className="flex-1">
+                                                <label className="text-gray-700 font-medium">{aircon.airconName}</label>
+                                                <span className="text-gray-500 text-xs ml-2">
+                                                    ({aircon.numberOfUnits} unit{aircon.numberOfUnits > 1 ? 's' : ''} - {aircon.airconType})
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    type="primary"
+                                                    size="small"
+                                                    onClick={() => handleEditAircon(aircon)}
+                                                >
+                                                    Edit
+                                                </Button>
+                                                <Popconfirm
+                                                    title={`Remove ${aircon.airconName}?`}
+                                                    description="This action cannot be undone."
+                                                    okButtonProps={{danger: 'true'}}
+                                                    onConfirm={handleDeleteAircon(aircon.id)}
+                                                >
+                                                    <Button danger size="small">Remove</Button>
+                                                </Popconfirm>
+                                            </div>
                                         </div>
                                     ))
                             }
@@ -537,6 +627,124 @@ function Profile() {
                                 <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                                     <button type="button" className="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-black text-base font-medium text-white hover:bg-stone-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-stone-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" onClick={toggleModal}>
                                         Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal for Editing Aircon */}
+                {isEditAirconModalOpen && editingAircon && (
+                    <div id="edit-aircon-portal" className="fixed z-10 inset-0 overflow-y-auto">
+                        <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+                                <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+                            </div>
+
+                            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                                    <div className="sm:flex sm:items-start">
+                                        <div className="w-full mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                            <form onSubmit={handleEditAirconSubmit}>
+                                                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                                                    Edit Aircon
+                                                    <span className="block italic text-sm text-stone-400">Update your aircon details</span>
+                                                </h3>
+                                                <hr className="m-3 w-full" />
+                                                <div className="mt-2">
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Number of Units <span className="text-red-500">*</span>
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            value={editingAircon.numberOfUnits}
+                                                            onChange={(e) => setEditingAircon({...editingAircon, numberOfUnits: parseInt(e.target.value) || 1})}
+                                                            min="1"
+                                                            max="100"
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Aircon Type <span className="text-red-500">*</span>
+                                                        </label>
+                                                        <select
+                                                            onChange={(e) => setEditingAircon({...editingAircon, airconType: e.target.value})}
+                                                            value={editingAircon.airconType}
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                            required
+                                                        >
+                                                            <option value="split">Split</option>
+                                                            <option value="window">Window</option>
+                                                            <option value="centralized">Centralized</option>
+                                                            <option value="floor_mounted">Floor Mounted</option>
+                                                            <option value="portable">Portable</option>
+                                                            <option value="industrial">Industrial</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Aircon Name (optional)
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={editingAircon.airconName}
+                                                            onChange={(e) => setEditingAircon({...editingAircon, airconName: e.target.value})}
+                                                            placeholder="e.g., Living Room AC"
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                        />
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Last Service Month (optional)
+                                                        </label>
+                                                        <DatePicker
+                                                            picker="month"
+                                                            value={editingAircon.lastServiceMonth}
+                                                            onChange={(date) => setEditingAircon({...editingAircon, lastServiceMonth: date})}
+                                                            disabledDate={(current) => current && current > dayjs().endOf('month')}
+                                                            format="MMMM YYYY"
+                                                            placeholder="Select service month (YYYY-MM)"
+                                                            className="w-full p-2 text-sm"
+                                                            style={{ width: '100%' }}
+                                                        />
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-bold text-gray-700">
+                                                            Remarks (optional)
+                                                        </label>
+                                                        <textarea
+                                                            value={editingAircon.remarks}
+                                                            onChange={(e) => setEditingAircon({...editingAircon, remarks: e.target.value})}
+                                                            placeholder="Any additional information about this aircon..."
+                                                            rows="3"
+                                                            maxLength="500"
+                                                            className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                                        />
+                                                        <span className="text-xs text-gray-500">{editingAircon.remarks.length}/500 characters</span>
+                                                    </div>
+                                                    {editAirconError && <p className="mb-4 text-sm text-red-600">{editAirconError}</p>}
+                                                    <div className="flex items-center justify-center">
+                                                        <button
+                                                            className="px-4 py-2 font-bold text-white bg-green-500 rounded hover:bg-green-700 focus:outline-none focus:shadow-outline"
+                                                            type="submit"
+                                                        >
+                                                            Save Changes
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                                    <button type="button" className="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-black text-base font-medium text-white hover:bg-stone-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-stone-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" onClick={closeEditAirconModal}>
+                                        Cancel
                                     </button>
                                 </div>
                             </div>

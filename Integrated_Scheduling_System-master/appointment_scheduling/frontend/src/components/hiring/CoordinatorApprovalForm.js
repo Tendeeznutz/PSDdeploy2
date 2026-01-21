@@ -100,6 +100,16 @@ function CoordinatorApprovalForm({ applicationData }) {
             <div className="mb-6">
                 <h3 className="text-lg font-semibold mb-4">Application Summary</h3>
 
+                {/* Profile Photo */}
+                {applicationData.profilePhotoFileName && (
+                    <div className="mb-4 text-center">
+                        <p className="text-sm text-gray-500 mb-2">Profile Photo</p>
+                        <div className="inline-block border rounded-lg p-2 bg-gray-50">
+                            <span className="text-gray-700">{applicationData.profilePhotoFileName}</span>
+                        </div>
+                    </div>
+                )}
+
                 <Descriptions bordered column={1} size="small">
                     <Descriptions.Item label="Applicant Name">
                         <strong>{applicationData.applicantName}</strong>
@@ -109,6 +119,12 @@ function CoordinatorApprovalForm({ applicationData }) {
                     </Descriptions.Item>
                     <Descriptions.Item label="Citizenship">
                         {applicationData.citizenship}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Race">
+                        {applicationData.race || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Languages Spoken">
+                        {applicationData.languagesSpoken || 'Not provided'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Address">
                         {applicationData.applicantAddress}, Singapore {applicationData.applicantPostalCode}
@@ -129,8 +145,37 @@ function CoordinatorApprovalForm({ applicationData }) {
                     <Descriptions.Item label="Last Drawn Monthly Salary">
                         {applicationData.lastDrawnSalary ? `$${parseFloat(applicationData.lastDrawnSalary).toFixed(2)}` : 'Not provided'}
                     </Descriptions.Item>
+                </Descriptions>
+
+                {/* Next of Kin Section */}
+                <h4 className="text-md font-semibold mt-4 mb-2">Next of Kin Information</h4>
+                <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label="Name">
+                        {applicationData.nextOfKinName || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Contact Number">
+                        {applicationData.nextOfKinContact || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Relationship">
+                        {applicationData.nextOfKinRelationship || 'Not provided'}
+                    </Descriptions.Item>
+                </Descriptions>
+
+                {/* Documents and Declarations */}
+                <h4 className="text-md font-semibold mt-4 mb-2">Documents and Declarations</h4>
+                <Descriptions bordered column={1} size="small">
                     <Descriptions.Item label="Resume">
                         {applicationData.resumeFileName || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Profile Photo">
+                        {applicationData.profilePhotoFileName || 'Not provided'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Medical Fitness Declaration">
+                        {applicationData.isMedicallyFit ? (
+                            <Badge status="success" text="Declared medically fit to work" />
+                        ) : (
+                            <Badge status="error" text="Not declared" />
+                        )}
                     </Descriptions.Item>
                     <Descriptions.Item label="Criminal Record">
                         {applicationData.hasCriminalRecord ? (
@@ -139,10 +184,19 @@ function CoordinatorApprovalForm({ applicationData }) {
                             <Badge status="success" text="No criminal record" />
                         )}
                     </Descriptions.Item>
-                    <Descriptions.Item label="Bank Details">
-                        <strong>{applicationData.bankName}</strong><br />
-                        Account: {applicationData.bankAccountNumber}<br />
-                        Holder: {applicationData.bankAccountHolderName}
+                </Descriptions>
+
+                {/* Bank Details */}
+                <h4 className="text-md font-semibold mt-4 mb-2">Bank Account Information</h4>
+                <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label="Bank Name">
+                        <strong>{applicationData.bankName}</strong>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Account Number">
+                        {applicationData.bankAccountNumber}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Account Holder Name">
+                        {applicationData.bankAccountHolderName}
                     </Descriptions.Item>
                 </Descriptions>
             </div>

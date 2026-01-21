@@ -7,15 +7,115 @@ from rest_framework.response import Response
 
 from .format_response import include_all_info
 from ..scheduling_algo import *
-from ..models import Appointments, Customers, Technicians
+from ..models import Appointments, Customers, Technicians, CustomerAirconDevices, Messages
 from ..serializers import AppointmentSerializer
 from ..utils import sendMail
 from ..utils.notifications import send_appointment_confirmation, send_appointment_cancellation
+
+# Pricing constants (matching frontend)
+SERVICE_COST_PER_AIRCON = 50  # $50 per aircon serviced
+TRAVEL_FEE = 10  # $10 standard travel fee
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
     queryset = Appointments.objects.all()
     serializer_class = AppointmentSerializer
+
+    def send_receipt_to_mailbox(self, appointment, customer, aircon_ids):
+        """
+        Generate and send a receipt message to the customer's mailbox
+        """
+        try:
+            # Get aircon details
+            aircon_devices = CustomerAirconDevices.objects.filter(id__in=aircon_ids)
+            aircon_names = [device.airconName for device in aircon_devices]
+            num_aircons = len(aircon_ids)
+
+            # Calculate costs
+            service_cost = num_aircons * SERVICE_COST_PER_AIRCON
+            total_cost = service_cost + TRAVEL_FEE
+
+            # Format appointment time
+            appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime)
+            formatted_time = appointment_time.strftime('%B %d, %Y at %I:%M %p')
+
+            # Get payment method display name
+            payment_methods = {
+                'cash': 'Cash',
+                'cheque': 'Cheque',
+                'card': 'Credit/Debit Card',
+                'bank_transfer': 'Bank Transfer',
+                'paynow': 'PayLah/PayNow'
+            }
+            payment_display = payment_methods.get(appointment.paymentMethod, appointment.paymentMethod)
+
+            # Create receipt body
+            receipt_body = f"""
+Dear {customer.customerName},
+
+Thank you for booking an appointment with AirServe!
+
+============================================
+           APPOINTMENT RECEIPT
+============================================
+
+Booking Reference: {str(appointment.id)[:8].upper()}
+Date & Time: {formatted_time}
+
+--------------------------------------------
+SERVICE DETAILS
+--------------------------------------------
+Aircon Units to be Serviced:
+"""
+            for i, name in enumerate(aircon_names, 1):
+                receipt_body += f"  {i}. {name}\n"
+
+            receipt_body += f"""
+--------------------------------------------
+COST BREAKDOWN
+--------------------------------------------
+Service Fee ({num_aircons} aircon{'s' if num_aircons > 1 else ''} x ${SERVICE_COST_PER_AIRCON}):    ${service_cost}.00
+Travel Fee:                            ${TRAVEL_FEE}.00
+--------------------------------------------
+TOTAL AMOUNT:                          ${total_cost}.00
+--------------------------------------------
+
+Payment Method: {payment_display}
+
+--------------------------------------------
+SERVICE ADDRESS
+--------------------------------------------
+{customer.customerAddress}
+Singapore {customer.customerPostalCode}
+
+============================================
+
+If you have any questions or need to make changes to your appointment, please contact us or visit your dashboard.
+
+Thank you for choosing AirServe!
+
+Best regards,
+AirServe Team
+"""
+
+            # Create message in mailbox
+            Messages.objects.create(
+                senderType='coordinator',
+                senderId='00000000-0000-0000-0000-000000000000',  # System sender
+                senderName='AirServe System',
+                recipientType='customer',
+                recipientId=customer.id,
+                recipientName=customer.customerName,
+                subject=f'Appointment Receipt - Booking #{str(appointment.id)[:8].upper()}',
+                body=receipt_body,
+                isRead=False,
+                relatedAppointment=appointment
+            )
+
+            print(f"Receipt sent to mailbox for customer {customer.customerName}")
+
+        except Exception as e:
+            print(f"Failed to send receipt to mailbox: {e}")
 
     def check_monthly_cancellation_limit(self, technician_id):
         """
@@ -155,6 +255,15 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 # Log error but don't fail the appointment creation
                 print(f"Failed to send confirmation email: {e}")
+
+            # Send receipt to customer's mailbox
+            try:
+                customer = Customers.objects.get(id=appointment.customerId.id)
+                aircon_ids = request.data.get('airconToService', [])
+                self.send_receipt_to_mailbox(appointment, customer, aircon_ids)
+            except Exception as e:
+                # Log error but don't fail the appointment creation
+                print(f"Failed to send receipt to mailbox: {e}")
 
             serializer_data = dict(serializer.data)
             modified_data = include_all_info(serializer_data)

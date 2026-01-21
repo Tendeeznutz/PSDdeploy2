@@ -224,7 +224,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='appointments',
-            constraint=models.CheckConstraint(condition=models.Q(('appointmentEndTime__gt', models.F('appointmentStartTime'))), name='appt_end_after_start'),
+            constraint=models.CheckConstraint(check=models.Q(('appointmentEndTime__gt', models.F('appointmentStartTime'))), name='appt_end_after_start'),
         ),
         migrations.AddConstraint(
             model_name='customeraircondevices',

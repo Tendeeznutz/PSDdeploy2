@@ -11,7 +11,9 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [confirmChecked, setConfirmChecked] = useState(false);
+    const [medicalFitChecked, setMedicalFitChecked] = useState(false);
     const [fileList, setFileList] = useState([]);
+    const [photoList, setPhotoList] = useState([]);
     const navigate = useNavigate();
 
     const handleFileChange = ({ fileList: newFileList }) => {
@@ -25,9 +27,25 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
         }
     };
 
+    const handlePhotoChange = ({ fileList: newFileList }) => {
+        setPhotoList(newFileList);
+        if (newFileList.length > 0) {
+            const file = newFileList[0].originFileObj;
+            updateApplicationData({
+                profilePhoto: file,
+                profilePhotoFileName: file.name
+            });
+        }
+    };
+
     const handleSubmit = async (values) => {
         if (!confirmChecked) {
             message.error('Please confirm that all information is correct');
+            return;
+        }
+
+        if (!medicalFitChecked) {
+            message.error('Please confirm that you are medically fit to work');
             return;
         }
 
@@ -37,6 +55,8 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                 applicantName: values.applicantName,
                 nric: values.nric,
                 citizenship: values.citizenship,
+                race: values.race,
+                languagesSpoken: values.languagesSpoken ? values.languagesSpoken.join(', ') : '',
                 applicantAddress: values.applicantAddress,
                 applicantPostalCode: values.applicantPostalCode,
                 applicantPhone: values.applicantPhone,
@@ -45,7 +65,12 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                 previousEmployer: values.previousEmployer || null,
                 lastEmployedYear: values.lastEmployedYear ? parseInt(values.lastEmployedYear) : null,
                 lastDrawnSalary: values.lastDrawnSalary ? parseFloat(values.lastDrawnSalary) : null,
+                nextOfKinName: values.nextOfKinName,
+                nextOfKinContact: values.nextOfKinContact,
+                nextOfKinRelationship: values.nextOfKinRelationship,
+                isMedicallyFit: medicalFitChecked,
                 resumeFileName: applicationData.resumeFileName,
+                profilePhotoFileName: applicationData.profilePhotoFileName,
                 hasCriminalRecord: values.hasCriminalRecord,
                 criminalRecordDetails: values.hasCriminalRecord ? values.criminalRecordDetails : '',
                 personalDetailsConfirmed: true
@@ -121,6 +146,37 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                         <Option value="Permanent Resident">Permanent Resident</Option>
                         <Option value="Work Permit">Work Permit</Option>
                         <Option value="Employment Pass">Employment Pass</Option>
+                        <Option value="Other">Other</Option>
+                    </Select>
+                </Form.Item>
+
+                <Form.Item
+                    label="Race"
+                    name="race"
+                    rules={[{ required: true, message: 'Please select race' }]}
+                >
+                    <Select placeholder="Select race" size="large">
+                        <Option value="Chinese">Chinese</Option>
+                        <Option value="Malay">Malay</Option>
+                        <Option value="Indian">Indian</Option>
+                        <Option value="Eurasian">Eurasian</Option>
+                        <Option value="Other">Other</Option>
+                    </Select>
+                </Form.Item>
+
+                <Form.Item
+                    label="Languages Spoken"
+                    name="languagesSpoken"
+                    rules={[{ required: true, message: 'Please select at least one language' }]}
+                >
+                    <Select mode="multiple" placeholder="Select languages spoken" size="large">
+                        <Option value="English">English</Option>
+                        <Option value="Mandarin">Mandarin</Option>
+                        <Option value="Malay">Malay</Option>
+                        <Option value="Tamil">Tamil</Option>
+                        <Option value="Hokkien">Hokkien</Option>
+                        <Option value="Teochew">Teochew</Option>
+                        <Option value="Cantonese">Cantonese</Option>
                         <Option value="Other">Other</Option>
                     </Select>
                 </Form.Item>
@@ -228,6 +284,46 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                     <Input placeholder="e.g., 3000" size="large" type="number" min={0} prefix="$" />
                 </Form.Item>
 
+                {/* Next of Kin Section */}
+                <div className="bg-gray-50 p-4 rounded-lg mb-4 mt-6">
+                    <h3 className="text-lg font-semibold mb-4">Next of Kin Information</h3>
+
+                    <Form.Item
+                        label="Next of Kin's Name"
+                        name="nextOfKinName"
+                        rules={[{ required: true, message: 'Please enter next of kin name' }]}
+                    >
+                        <Input placeholder="Enter next of kin's full name" size="large" />
+                    </Form.Item>
+
+                    <Form.Item
+                        label="Next of Kin's Contact Number"
+                        name="nextOfKinContact"
+                        rules={[
+                            { required: true, message: 'Please enter contact number' },
+                            { pattern: /^\d{8}$/, message: 'Phone number must be 8 digits' }
+                        ]}
+                    >
+                        <Input placeholder="e.g., 91234567" size="large" maxLength={8} />
+                    </Form.Item>
+
+                    <Form.Item
+                        label="Relationship with Next of Kin"
+                        name="nextOfKinRelationship"
+                        rules={[{ required: true, message: 'Please select relationship' }]}
+                    >
+                        <Select placeholder="Select relationship" size="large">
+                            <Option value="Spouse">Spouse</Option>
+                            <Option value="Parent">Parent</Option>
+                            <Option value="Child">Child</Option>
+                            <Option value="Sibling">Sibling</Option>
+                            <Option value="Relative">Relative</Option>
+                            <Option value="Friend">Friend</Option>
+                            <Option value="Other">Other</Option>
+                        </Select>
+                    </Form.Item>
+                </div>
+
                 <Form.Item
                     label="Resume Upload"
                     name="resumeFile"
@@ -246,11 +342,51 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                 </Form.Item>
 
                 <Form.Item
-                    name="hasCriminalRecord"
-                    valuePropName="checked"
+                    label="Profile Photo"
+                    name="profilePhoto"
                 >
-                    <Checkbox>I have a criminal record to declare</Checkbox>
+                    <Upload
+                        beforeUpload={() => false}
+                        onChange={handlePhotoChange}
+                        fileList={photoList}
+                        maxCount={1}
+                        accept=".jpg,.jpeg,.png"
+                        listType="picture"
+                    >
+                        <Button icon={<UploadOutlined />} size="large">
+                            Click to Upload Profile Photo (JPG/PNG)
+                        </Button>
+                    </Upload>
                 </Form.Item>
+
+                {/* Medical Fitness Declaration */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 mt-6">
+                    <h3 className="text-lg font-semibold mb-2 text-blue-800">Medical Fitness Declaration</h3>
+                    <p className="text-sm text-blue-700 mb-4">
+                        This position requires physical fitness to perform aircon servicing work, including lifting equipment,
+                        working in various environments, and performing technical tasks safely.
+                    </p>
+                    <Form.Item className="mb-0">
+                        <Checkbox
+                            checked={medicalFitChecked}
+                            onChange={(e) => setMedicalFitChecked(e.target.checked)}
+                        >
+                            <strong>I declare that I am medically fit to work in this line of service</strong>
+                        </Checkbox>
+                    </Form.Item>
+                </div>
+
+                {/* Criminal Record Declaration */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                    <h3 className="text-lg font-semibold mb-2 text-yellow-800">Criminal Record Declaration</h3>
+                    <Form.Item
+                        name="hasCriminalRecord"
+                        valuePropName="checked"
+                        className="mb-0"
+                    >
+                        <Checkbox>I have a criminal record to declare</Checkbox>
+                    </Form.Item>
+                </div>
 
                 <Form.Item
                     noStyle
@@ -298,7 +434,7 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                             htmlType="submit"
                             loading={loading}
                             size="large"
-                            disabled={!confirmChecked}
+                            disabled={!confirmChecked || !medicalFitChecked}
                             style={{ flex: 1 }}
                         >
                             Confirm and Proceed to Bank Information
