@@ -28,9 +28,105 @@ __Tech Stack(s)__<br>
 9) [Version History](#9-version-history)
 
 # 1) Installation Instructions
-## Backend
+
+## Quick Start (Local Development)
+
+### Prerequisites
+- Python 3.9 or higher
+- Node.js 16 or higher
+- npm or yarn
+- Git
+
+### Step 1: Clone the Repository
+```bash
+git clone https://github.com/soyabean777/psd_airserve.git
+cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling
+```
+
+### Step 2: Set Up Backend (Django)
+```bash
+# Create and activate virtual environment
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# Mac/Linux
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run database migrations
+python manage.py migrate
+
+# Start the backend server
+python manage.py runserver
+```
+The backend will be running at: **http://127.0.0.1:8000**
+
+### Step 3: Set Up Frontend (React)
+Open a new terminal:
+```bash
+cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling/frontend
+
+# Install dependencies
+npm install
+
+# Start the frontend server
+npm start
+```
+The frontend will be running at: **http://localhost:3000**
+
+---
+
+## 🔐 Test Accounts
+
+All test accounts use the password: **`password123`**
+
+### Coordinator Login
+| Name | Email | Password |
+|------|-------|----------|
+| Admin Coordinator | admin@airserve.com | password123 |
+
+**Login URL**: http://localhost:3000/coordinatorlogin
+
+### Customer Login
+| Name | Email | Password |
+|------|-------|----------|
+| Alice Tan | alice.tan@email.com | password123 |
+| Bob Lee | bob.lee@email.com | password123 |
+
+**Login URL**: http://localhost:3000/ (or http://localhost:3000/login)
+
+### Technician Login
+**Note**: Technicians login with their **phone number**, not email.
+
+| Name | Phone (Login) | Password |
+|------|---------------|----------|
+| Benjamin Loh | 92222221 | password123 |
+| Wang Richie | 92222222 | password123 |
+
+**Login URL**: http://localhost:3000/technicianlogin
+
+---
+
+## 🌐 Application URLs
+
+| Service | URL |
+|---------|-----|
+| Frontend (Main) | http://localhost:3000/ |
+| Customer Login | http://localhost:3000/login |
+| Technician Login | http://localhost:3000/technicianlogin |
+| Coordinator Login | http://localhost:3000/coordinatorlogin |
+| Backend API | http://127.0.0.1:8000/api/ |
+| Django Admin | http://127.0.0.1:8000/admin/ |
+
+---
+
+## Production Deployment (Ubuntu Server)
 Assuming the Django backend is deployed in a single Ubuntu server as the only server.
-### Prerequisition
+### Prerequisites
 1. Ubuntu Server with domain name
 2. Gunicorn
 3. Nginx
@@ -39,7 +135,7 @@ Assuming the Django backend is deployed in a single Ubuntu server as the only se
 6. Compatible database (SQLite, PostgreSQL etc.)
 ### Clone the project into the server
 ```
-git clone https://github.com/UofG-CS-2023/Integrated_Scheduling_System.git
+git clone https://github.com/soyabean777/psd_airserve.git
 ```
 ### Adjust the project settings under settings.py
 Modify the `ALLOWED_HOSTS`, `CORS_ORIGIN_WHITELIST` and `DATABASES` if needed.
