@@ -20,31 +20,128 @@ AirServe is a social enterprise platform designed to empower low-income earners 
 
 ## Table of Contents
 
-1. [Getting Started](#1-getting-started)
+1. [Services and Technologies](#1-services-and-technologies)
+   - [Backend Technologies](#backend-technologies)
+   - [Frontend Technologies](#frontend-technologies)
+   - [External APIs](#external-apis)
+   - [Communication Services](#communication-services)
+   - [Deployment Services](#deployment-services)
+2. [Getting Started](#2-getting-started)
    - [Prerequisites](#prerequisites)
    - [Installation](#installation)
-2. [Test Accounts](#2-test-accounts)
+3. [Test Accounts](#3-test-accounts)
    - [Coordinator Accounts](#coordinator-accounts)
    - [Customer Accounts](#customer-accounts)
    - [Technician Accounts](#technician-accounts)
-3. [Application URLs](#3-application-urls)
-4. [How to Use the System](#4-how-to-use-the-system)
-5. [Deployment Guide](#5-deployment-guide)
+4. [Application URLs](#4-application-urls)
+5. [How to Use the System](#5-how-to-use-the-system)
+6. [Deployment Guide](#6-deployment-guide)
    - [Server Requirements](#server-requirements)
    - [Services Used](#services-used)
    - [Step-by-Step Deployment](#step-by-step-deployment)
-6. [API Reference](#6-api-reference)
-7. [Project Information](#7-project-information)
+7. [API Reference](#7-api-reference)
+8. [Project Information](#8-project-information)
    - [Pain Points](#pain-points-during-development)
    - [Limitations](#limitations)
    - [Future Works](#future-works)
-8. [Contributors](#8-contributors)
-9. [Troubleshooting](#9-troubleshooting)
-10. [Version History](#10-version-history)
+9. [Contributors](#9-contributors)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Version History](#11-version-history)
 
 ---
 
-# 1. Getting Started
+# 1. Services and Technologies
+
+This section provides a comprehensive overview of all services and technologies currently used in the AirServe project.
+
+## Backend Technologies
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Python** | 3.9+ | Primary programming language |
+| **Django** | 4.2.5 | Web framework for backend development |
+| **Django REST Framework** | 3.14.0 | Building RESTful APIs |
+| **Django CORS Headers** | 4.3.0 | Cross-Origin Resource Sharing support |
+| **SQLite** | Built-in | Development database |
+| **PostgreSQL** | (psycopg2-binary 2.9.9) | Production database (recommended) |
+| **MySQL** | (mysqlclient 2.2.0) | Alternative production database |
+| **PyJWT** | 1.7.1 | JWT token handling |
+| **djangorestframework-simplejwt** | 5.3.0 | JWT authentication for DRF |
+
+## Frontend Technologies
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **React** | 18.2.0 | Frontend JavaScript framework |
+| **React Router DOM** | 6.18.0 | Client-side routing |
+| **Axios** | 1.6.2 | HTTP client for API requests |
+| **Ant Design** | 5.13.3 | UI component library |
+| **Material UI** | 5.15.11 | UI component library |
+| **Material Tailwind** | 2.1.8 | Material Design components with Tailwind |
+| **Tailwind CSS** | 3.3.5 | Utility-first CSS framework |
+| **FontAwesome** | 6.5.1 | Icon library |
+| **React Datepicker** | 4.23.0 | Date/time selection component |
+| **Material React Table** | 2.12.1 | Data table component |
+
+## External APIs
+
+| API | Provider | Purpose |
+|-----|----------|---------|
+| **OneMap API** | Singapore Government | Address lookup from postal codes, geolocation coordinates, route calculation, and travel distance estimation |
+| **Google Maps** | Google | Navigation for technicians to customer locations |
+
+**OneMap API Features Used:**
+- `searchVal` - Search for addresses by Singapore postal code
+- `routingsvc/route` - Calculate travel routes between locations
+- Travel distance and time estimation for technician assignment
+
+**Google Maps Features Used:**
+- Navigation link generation for technicians to navigate to customer addresses
+
+## Communication Services
+
+| Service | Provider | Purpose | Status |
+|---------|----------|---------|--------|
+| **Gmail SMTP** | Google | Email notifications and appointment receipts | Active |
+| **AWS SNS** | Amazon | SMS notifications for appointments | Code exists (disabled) |
+
+**Email Features:**
+- Appointment confirmation emails to customers
+- Appointment cancellation notifications
+- Booking receipts sent to customer mailbox
+- Technician assignment notifications
+
+## Deployment Services
+
+| Service | Purpose |
+|---------|---------|
+| **Azure** | Cloud hosting platform (current production) |
+| **Vercel** | Alternative frontend hosting |
+| **Gunicorn** | WSGI HTTP server for Django |
+| **Nginx** | Reverse proxy and static file serving |
+| **Certbot/Let's Encrypt** | Free SSL/TLS certificates |
+
+## Supporting Libraries
+
+### Backend (Python)
+| Library | Purpose |
+|---------|---------|
+| **requests** | HTTP library for API calls |
+| **geopy** | Geographic distance calculations |
+| **python-dotenv** | Environment variable management |
+| **Pillow** | Image processing |
+| **pandas** | Data manipulation (reports) |
+
+### Development Tools
+| Tool | Purpose |
+|------|---------|
+| **Git** | Version control |
+| **npm** | Node.js package management |
+| **pip** | Python package management |
+
+---
+
+# 2. Getting Started
 
 ## Prerequisites
 
@@ -145,7 +242,7 @@ Once installed, use these commands to start the application:
 
 ---
 
-# 2. Test Accounts
+# 3. Test Accounts
 
 All test accounts use the password: **`password123`**
 
@@ -214,7 +311,7 @@ python create_test_users.py
 
 ---
 
-# 3. Application URLs
+# 4. Application URLs
 
 ## Local Development URLs
 
@@ -229,7 +326,7 @@ python create_test_users.py
 
 ---
 
-# 4. How to Use the System
+# 5. How to Use the System
 
 ## As a Customer
 
@@ -256,7 +353,7 @@ python create_test_users.py
 
 ---
 
-# 5. Deployment Guide
+# 6. Deployment Guide
 
 This section covers deploying the application to a production server.
 
@@ -420,7 +517,7 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 ---
 
-# 6. API Reference
+# 7. API Reference
 
 ## API Endpoints
 
@@ -437,7 +534,7 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 ---
 
-# 7. Project Information
+# 8. Project Information
 
 ## Pain Points During Development
 
@@ -451,7 +548,8 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Notifications** | Not Implemented | Email/SMS reminders for appointments |
+| **Email Notifications** | Implemented | Appointment confirmations, cancellations, and receipts via Gmail SMTP |
+| **SMS Notifications** | Code Ready | AWS SNS code exists but currently disabled |
 | **Security** | Basic | Passwords stored in plain text; no JWT/CSRF tokens |
 | **Payment** | Not Implemented | Invoice and payment processing |
 | **DateTime Filtering** | Partial | Issues with UNIX timestamp filtering in tables |
@@ -459,15 +557,17 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 ## Future Works
 
-- **Notifications:** Implement email/SMS notifications using Amazon SNS and cronjobs
-- **Security:** Add JWT authentication and CSRF protection
-- **Payment:** Integrate Stripe APIs for secure payment processing
+- **SMS Notifications:** Reactivate AWS SNS integration for SMS appointment reminders
+- **Security:** Add JWT authentication and CSRF protection; implement password hashing
+- **Payment:** Integrate Stripe or PayNow APIs for secure payment processing
 - **DateTime Filtering:** Explore alternative storage formats for better filtering
 - **Service Selection:** Allow customers to specify service type and aircon brand
+- **Background Tasks:** Implement Celery + Redis for async email/SMS processing
+- **Error Monitoring:** Add Sentry for production error tracking
 
 ---
 
-# 8. Contributors
+# 9. Contributors
 
 | Name | Email |
 |------|-------|
@@ -487,7 +587,7 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 ---
 
-# 9. Troubleshooting
+# 10. Troubleshooting
 
 ## Common Issues
 
@@ -511,7 +611,7 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 ---
 
-# 10. Version History
+# 11. Version History
 
 ## Version 1.0.0
 
