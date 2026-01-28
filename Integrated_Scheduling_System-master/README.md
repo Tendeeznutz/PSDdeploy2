@@ -1,56 +1,82 @@
-# Project Title: Integrated Appointment Scheduling and Communication System - Air Conditioning Servicing Industry
+# AirServe - Integrated Appointment Scheduling System
+### Air Conditioning Servicing Industry
 
-## Description
-The proposed project is a social enterprise effort aimed at empowering and supporting low-
-income earners to become skilled technicians in the air conditioning servicing industry. The
-project focuses on providing a platform for these individuals to access job servicing
-opportunities within their locale, develop their skills, and improve their economic prospects.
+## About This Project
 
-__Tech Stack(s)__<br>
+AirServe is a social enterprise platform designed to empower low-income earners by providing them opportunities to become skilled technicians in the air conditioning servicing industry. The system connects customers who need aircon services with nearby technicians, while coordinators manage the overall operations.
+
+**Tech Stack**
+
 ![React](https://img.shields.io/badge/React-%233399ff?logo=react&labelColor=%23000000)
 ![Django](https://img.shields.io/badge/Django-%233399ff?logo=django&labelColor=%23000000)
 ![tailwindcss](https://img.shields.io/badge/Tailwindcss-%2300cc44?logo=tailwindcss&labelColor=%23000000)
 ![antdesign](https://img.shields.io/badge/AntDesign-%23ff6666?logo=antdesign&labelColor=%23000000)
-![materialdesign](https://img.shields.io/badge/MaterialDesign-%23009999?logo=materialdesign&labelColor=%23000000)<br>
+![materialdesign](https://img.shields.io/badge/MaterialDesign-%23009999?logo=materialdesign&labelColor=%23000000)
 ![Sqlite](https://img.shields.io/badge/Sqlite-%23009933?logo=sqlite&labelColor=%23000000)
 ![Vercel](https://img.shields.io/badge/Vercel-%23000000?logo=vercel&labelColor=%23000000)
 ![Azure](https://img.shields.io/badge/Azure-%23b3ffff?logo=azuredevops&labelColor=%23000000)
 
-# Table of Contents
-1) [Installation Instructions](#1-installation-instructions)
-2) [Pain Points](#2-pain-points-during-development)
-3) [Limitations](#3-limitations)
-4) [Future Works](#4-future-works)
-5) [License](#5-license)
-6) [Acknowledgement](#6-acknowledgement)
-8) [Troubleshooting](#7-troubleshooting)
-8) [Contact Information](#8-contact-information)
-9) [Version History](#9-version-history)
+---
 
-# 1) Installation Instructions
+## Table of Contents
 
-## Quick Start (Local Development)
-
-### Prerequisites
-- Python 3.9 or higher
-- Node.js 16 or higher
-- npm or yarn
-- Git
+1. [Getting Started](#1-getting-started)
+   - [Prerequisites](#prerequisites)
+   - [Installation](#installation)
+2. [Test Accounts](#2-test-accounts)
+   - [Coordinator Accounts](#coordinator-accounts)
+   - [Customer Accounts](#customer-accounts)
+   - [Technician Accounts](#technician-accounts)
+3. [Application URLs](#3-application-urls)
+4. [How to Use the System](#4-how-to-use-the-system)
+5. [Deployment Guide](#5-deployment-guide)
+   - [Server Requirements](#server-requirements)
+   - [Services Used](#services-used)
+   - [Step-by-Step Deployment](#step-by-step-deployment)
+6. [API Reference](#6-api-reference)
+7. [Project Information](#7-project-information)
+   - [Pain Points](#pain-points-during-development)
+   - [Limitations](#limitations)
+   - [Future Works](#future-works)
+8. [Contributors](#8-contributors)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Version History](#10-version-history)
 
 ---
 
+# 1. Getting Started
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your computer:
+
+| Software | Version | Download Link |
+|----------|---------|---------------|
+| Python | 3.9 or higher | https://www.python.org/downloads/ |
+| Node.js | 16 or higher | https://nodejs.org/ |
+| Git | Latest | https://git-scm.com/downloads |
+
+---
+
+## Installation
+
+Follow these steps to run the application on your local machine.
+
 ### Step 1: Clone the Repository
 
-Open a terminal and run:
+Open a terminal (Command Prompt, PowerShell, or Terminal) and run:
+
 ```bash
 git clone https://github.com/soyabean777/psd_airserve.git
 ```
 
 ---
 
-### Step 2: Set Up Backend (Django)
+### Step 2: Set Up the Backend (Django)
 
-**Windows Users** - Copy and paste these commands one by one:
+The backend handles all data processing, API requests, and database operations.
+
+**For Windows Users:**
 ```bash
 cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling
 python -m venv .venv
@@ -60,7 +86,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-**Mac/Linux Users** - Copy and paste these commands one by one:
+**For Mac/Linux Users:**
 ```bash
 cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling
 python3 -m venv .venv
@@ -74,22 +100,23 @@ You should see:
 ```
 Starting development server at http://127.0.0.1:8000/
 ```
-**Keep this terminal open!** The backend is now running.
+
+**Keep this terminal open!** The backend server must stay running.
 
 ---
 
-### Step 3: Set Up Frontend (React)
+### Step 3: Set Up the Frontend (React)
 
-**Open a NEW terminal window** (don't close the backend one!) and run:
+Open a **NEW terminal window** (do not close the backend terminal) and run:
 
-**Windows Users:**
+**For Windows Users:**
 ```bash
 cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling\frontend
 npm install
 npm start
 ```
 
-**Mac/Linux Users:**
+**For Mac/Linux Users:**
 ```bash
 cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling/frontend
 npm install
@@ -100,110 +127,244 @@ You should see:
 ```
 Compiled successfully!
 You can now view frontend in the browser.
-  Local:            http://localhost:3000
+  Local: http://localhost:3000
 ```
 
-The browser should automatically open to http://localhost:3000
+Your browser should automatically open to http://localhost:3000
 
 ---
 
-### Summary: Commands to Run
+### Quick Reference: Starting the Application
 
-**Terminal 1 (Backend):**
-```bash
-cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling
-.venv\Scripts\activate
-python manage.py runserver
-```
+Once installed, use these commands to start the application:
 
-**Terminal 2 (Frontend):**
-```bash
-cd psd_airserve\Integrated_Scheduling_System-master\appointment_scheduling\frontend
-npm start
-```
+| Terminal | Purpose | Commands |
+|----------|---------|----------|
+| Terminal 1 | Backend | `cd appointment_scheduling` → `.venv\Scripts\activate` → `python manage.py runserver` |
+| Terminal 2 | Frontend | `cd appointment_scheduling\frontend` → `npm start` |
 
 ---
 
-## 🔐 Test Accounts
+# 2. Test Accounts
 
 All test accounts use the password: **`password123`**
 
-### Coordinator Login
-| Name | Email | Password |
-|------|-------|----------|
-| Admin Coordinator | admin@airserve.com | password123 |
+## Coordinator Accounts
 
-**Login URL**: http://localhost:3000/coordinatorlogin
+Coordinators manage the system, approve appointments, and oversee technicians.
 
-### Customer Login
-| Name | Email | Password |
-|------|-------|----------|
-| Alice Tan | alice.tan@email.com | password123 |
-| Bob Lee | bob.lee@email.com | password123 |
+| Name | Email | Phone | Password |
+|------|-------|-------|----------|
+| Admin Coordinator | admin@airserve.com | 91111111 | password123 |
+| John Admin | john.admin@airserve.com | 91111112 | password123 |
 
-**Login URL**: http://localhost:3000/ (or http://localhost:3000/login)
-
-### Technician Login
-**Note**: Technicians login with their **phone number**, not email.
-
-| Name | Phone (Login) | Password |
-|------|---------------|----------|
-| Benjamin Loh | 92222221 | password123 |
-| Wang Richie | 92222222 | password123 |
-
-**Login URL**: http://localhost:3000/technicianlogin
+**Login URL:** http://localhost:3000/coordinatorlogin
 
 ---
 
-## 🌐 Application URLs
+## Customer Accounts
 
-| Service | URL |
-|---------|-----|
-| Frontend (Main) | http://localhost:3000/ |
-| Customer Login | http://localhost:3000/login |
-| Technician Login | http://localhost:3000/technicianlogin |
-| Coordinator Login | http://localhost:3000/coordinatorlogin |
-| Backend API | http://127.0.0.1:8000/api/ |
-| Django Admin | http://127.0.0.1:8000/admin/ |
+Customers book aircon servicing appointments.
+
+| Name | Email | Phone | Address | Postal Code |
+|------|-------|-------|---------|-------------|
+| Alice Tan | alice.tan@email.com | 93333331 | Block 123 Ang Mo Kio Avenue 3 | 560123 |
+| Bob Lee | bob.lee@email.com | 93333332 | Block 456 Bedok North Street 1 | 460456 |
+| Charlie Wong | charlie.wong@email.com | 93333333 | Block 789 Jurong West Street 65 | 640789 |
+| Diana Lim | diana.lim@email.com | 93333334 | Block 101 Tampines Street 11 | 521101 |
+
+**Login URL:** http://localhost:3000/ or http://localhost:3000/login
+
+**Note:** Customers login with their **EMAIL address**.
 
 ---
 
-## Production Deployment (Ubuntu Server)
-Assuming the Django backend is deployed in a single Ubuntu server as the only server.
-### Prerequisites
-1. Ubuntu Server with domain name
-2. Gunicorn
-3. Nginx
-4. Git
-5. Certbot (for HTTPS)
-6. Compatible database (SQLite, PostgreSQL etc.)
-### Clone the project into the server
+## Technician Accounts
+
+Technicians perform the aircon servicing. **IMPORTANT: Technicians login with their PHONE NUMBER, not email.**
+
+| Name | Phone (Login) | Postal Code | Travel Type | Address |
+|------|---------------|-------------|-------------|---------|
+| Benjamin Loh | 92222221 | 520123 | Car (drive) | Block 500 Bishan Street 11 |
+| Wang Richie | 92222222 | 560123 | Bicycle (cycle) | Block 560 Ang Mo Kio Avenue 10 |
+| Timothy Neam | 92222223 | 640123 | Walk | Block 640 Jurong West Street 61 |
+
+**Login URL:** http://localhost:3000/technicianlogin
+
+---
+
+## Aircon Catalog
+
+Available air conditioner models in the system:
+
+| Brand | Model |
+|-------|-------|
+| Daikin | System 1 |
+| Mitsubishi | MSY-GE10VA |
+| Panasonic | CS-PU9WKH |
+
+---
+
+## Creating Test Accounts
+
+To create all test accounts automatically, run:
+```bash
+python create_test_users.py
 ```
+
+---
+
+# 3. Application URLs
+
+## Local Development URLs
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Customer Portal | http://localhost:3000/ | Main landing page and customer login |
+| Customer Login | http://localhost:3000/login | Customer login page |
+| Technician Login | http://localhost:3000/technicianlogin | Technician login page |
+| Coordinator Login | http://localhost:3000/coordinatorlogin | Coordinator/Admin login page |
+| Backend API | http://127.0.0.1:8000/api/ | REST API root |
+| Django Admin | http://127.0.0.1:8000/admin/ | Django administration panel |
+
+---
+
+# 4. How to Use the System
+
+## As a Customer
+
+1. **Login** at http://localhost:3000/ using your email and password
+2. **Add your aircon** devices in your profile (if not already added)
+3. **Schedule an appointment** by selecting date, time, and aircon unit
+4. **View your appointments** and track their status
+5. The system automatically assigns a nearby technician
+
+## As a Technician
+
+1. **Login** at http://localhost:3000/technicianlogin using your **phone number** and password
+2. **View assigned appointments** on your dashboard
+3. **Update appointment status** (in progress, completed, etc.)
+4. **Complete servicing** and mark as done
+
+## As a Coordinator
+
+1. **Login** at http://localhost:3000/coordinatorlogin using your email and password
+2. **View all appointments** across the system
+3. **Reassign technicians** if needed
+4. **Monitor system activity** and manage users
+5. **Approve new technician applications**
+
+---
+
+# 5. Deployment Guide
+
+This section covers deploying the application to a production server.
+
+## Server Requirements
+
+| Requirement | Specification |
+|-------------|---------------|
+| Operating System | Ubuntu 20.04 LTS or higher |
+| RAM | Minimum 2GB |
+| Storage | Minimum 20GB |
+| Domain Name | Required for HTTPS |
+
+## Services Used
+
+| Service | Purpose | Notes |
+|---------|---------|-------|
+| **Gunicorn** | WSGI HTTP Server | Serves the Django application |
+| **Nginx** | Reverse Proxy | Handles incoming requests, SSL termination |
+| **Certbot** | SSL Certificates | Free HTTPS via Let's Encrypt |
+| **SQLite** | Database (Dev) | Default for development |
+| **PostgreSQL** | Database (Prod) | Recommended for production |
+| **OneMap API** | Geolocation | Singapore address/postal code lookup |
+
+## Step-by-Step Deployment
+
+### 1. Server Setup
+
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install required packages
+sudo apt install python3 python3-pip python3-venv nginx certbot python3-certbot-nginx git -y
+```
+
+### 2. Clone and Configure Project
+
+```bash
+# Clone repository
 git clone https://github.com/soyabean777/psd_airserve.git
+cd psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+pip install gunicorn
 ```
-### Adjust the project settings under settings.py
-Modify the `ALLOWED_HOSTS`, `CORS_ORIGIN_WHITELIST` and `DATABASES` if needed.
 
-### Install necessary dependencies (create venv if needed)
-`pip install -r requirements.txt`
+### 3. Configure Django Settings
 
-### Database migration
-`python manage.py migrate`
+Edit `appointment_scheduling/settings.py`:
 
-### Configure Nginx to proxy pass to gunicorn
-`sudo nano /etc/nginx/sites-available/Integrated-scheduling`
-Before running Certbot
+```python
+# Add your domain to allowed hosts
+ALLOWED_HOSTS = ['your-domain.com', 'www.your-domain.com', 'localhost']
+
+# Update CORS settings
+CORS_ORIGIN_WHITELIST = [
+    'https://your-domain.com',
+    'https://www.your-domain.com',
+]
+
+# For production, use PostgreSQL
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'airserve_db',
+        'USER': 'your_db_user',
+        'PASSWORD': 'your_db_password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
 ```
+
+### 4. Run Database Migrations
+
+```bash
+python manage.py migrate
+python manage.py collectstatic --noinput
+```
+
+### 5. Configure Nginx
+
+Create Nginx configuration:
+```bash
+sudo nano /etc/nginx/sites-available/airserve
+```
+
+Add the following:
+```nginx
 server {
     listen 80;
-    server_name [your_domain_name];
+    server_name your-domain.com www.your-domain.com;
 
-    location = /.well-known/acme-challenge/ {
+    location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
 
+    location /static/ {
+        alias /path/to/your/project/staticfiles/;
+    }
+
     location / {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -212,131 +373,154 @@ server {
 }
 ```
 
-### Run Certbot to enable HTTPS connection
-`sudo certbot --nginx`
-Follow the instruction
+Enable the site:
+```bash
+sudo ln -s /etc/nginx/sites-available/airserve /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
-### Run the server
-`sudo systemctl reload nginx`: reload nginx, or use restart
+### 6. Enable HTTPS with Certbot
 
-`pkill gunicorn`: terminate existing gunicorn
+```bash
+sudo certbot --nginx -d your-domain.com -d www.your-domain.com
+```
 
-`cd [project_folder]/appointment_scheduling`: navigate to project directory
+Follow the prompts to complete SSL setup.
 
-`screen`: start a screen session
+### 7. Run Gunicorn
 
-`gunicorn --bind 127.0.0.1:8000 appointment_scheduling.wsgi:application`: run the server
+```bash
+# Start a screen session (keeps running after SSH disconnect)
+screen -S airserve
 
-resume the page with `screen -r` for next ssh session
+# Navigate to project
+cd /path/to/psd_airserve/Integrated_Scheduling_System-master/appointment_scheduling
 
-# 2) Pain Points during development
-- Benjamin Loh Choon How: Debugging issues on the frontend might be tricky as i need to look at both frontend and
-  backend logs and sometimes the error code is not very helpful. The nature of the project also requires me to learn new
-  technologies such as Django and ReactJS which is a steep learning curve. Designing the UI/UX is also a challenge as i
-  have no prior experience in designing.
-- Loo Siong Yu: Learning a new web framework while doing the project is not an easy task especially Django, while implementing
-  new feature and debugging with the backend, I had to spent quite a number of hours to find out how does the backend code worked
-  before finding the root cause of the bug. Between frontend and backend, I had challenges in both but UI/UX definitely make my top
-  list because finding the right design, making the application responsive according to screen sizes is a huge challenge. But overall,
-  it is a good learning experience while developing this product.  
-- Neam Heng Chong Timothy: It was my first time using Django REST Framework and ReactJS and it was quite a huge challenge for me especially for the backend.
-  There were some areas which I find it hard to understand and how these functions and files communicate with each other. Although I have some experience in UI/UX, 
-  the frontend, ReactJS has a significant difference compared to other frontend. There was also another challenge for me where I do not understand how the 
-  backend and frontend communicate with each other. This took me a long time to figure out. This has especially made debugging even harder for me to grasp. 
-  However, it was a great learning experience learning Django and ReactJS.
+# Activate virtual environment
+source .venv/bin/activate
 
-# 3) Limitations
-Due to the lack of time and experience, many features are not implemented or partially implemented. This section will address some of the important features missing in this project. 
+# Run Gunicorn
+gunicorn --bind 127.0.0.1:8000 appointment_scheduling.wsgi:application
 
-#### Notification 
+# Detach from screen: Press Ctrl+A, then D
+# Reattach later: screen -r airserve
+```
 
-Notification features are not implemented at all despite of its importance. It provides timely updates, confirmations and reminders that improves user experience when using our website. Coordinators, technician and customers will all have a better time using our website if notifications were to be implemented. However, due to lack of time, we couldn’t implement it.  
+### 8. Environment Variables
 
-#### Security 
+Create a `.env` file for sensitive configuration:
+```bash
+# .env file
+SECRET_KEY=your-secret-key-here
+DEBUG=False
+ONEMAP_API_KEY=your-onemap-api-key
+EMAIL_HOST_PASSWORD=your-email-password
+```
 
-Due to time constraints and the prioritization of getting the project deployed onto the cloud, only simple encryption of passwords was implemented as a security measure. While this approach provides a basic level of security by encrypting passwords before storing them in the database, other security measures could be implemented like JWT token authentication and CSRF token authentication for forms. 
+---
 
-#### Payment 
+# 6. API Reference
 
-The implementation of payment features, including invoice, payslips has not been implemented at all in our project currently. Even though payment is a big aspect of our project, it has not been implemented due to time constraints. 
+## API Endpoints
 
-#### Appointment date time filtering 
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/customers/` | GET, POST | List/Create customers |
+| `/api/customers/{id}/` | GET, PUT, DELETE | Retrieve/Update/Delete customer |
+| `/api/technicians/` | GET, POST | List/Create technicians |
+| `/api/technicians/{id}/` | GET, PUT, DELETE | Retrieve/Update/Delete technician |
+| `/api/coordinators/` | GET, POST | List/Create coordinators |
+| `/api/appointments/` | GET, POST | List/Create appointments |
+| `/api/appointments/{id}/` | GET, PUT, DELETE | Retrieve/Update/Delete appointment |
+| `/api/airconcatalogs/` | GET, POST | List/Create aircon models |
 
-Appointment date time filtering does not work as of now, perhaps due to the data being saved in UNIX timestamp format. As the filtering feature is implemented with the material-react-table library, there are some constraints on the features of the table that might have some relation to the difference in the actual data being iterated and how the data is being displayed on the table.  
+---
 
-#### Appointment service choices 
+# 7. Project Information
 
-We have yet to allow customers to choose what type of services they require. All appointments right now are just general appointments, which allow us to test the matching algorithm for our technicians and customer. This appointments services feature will allow us for better pricing and payment system and more customization of our appointments, 
+## Pain Points During Development
 
-# 4) Future Works
+- **Benjamin Loh Choon How:** Debugging issues on the frontend was tricky as I needed to look at both frontend and backend logs. Learning Django and ReactJS was a steep learning curve, and designing UI/UX was challenging with no prior experience.
 
-#### Notification 
+- **Loo Siong Yu:** Learning Django while doing the project was challenging. Finding how the backend code worked before debugging took many hours. UI/UX was the biggest challenge - making the application responsive according to screen sizes. Overall, it was a good learning experience.
 
-- Implement email and SMS notifications for appointments using Amazon SNS and cronjobs. Enhance automation by adding new jobs upon appointment creation and sending reminders.
-- Automate appointment reminders to improve attendance and service efficiency, utilizing email and SMS notifications sent through Amazon SNS and cronjobs.
+- **Neam Heng Chong Timothy:** First time using Django REST Framework and ReactJS was a huge challenge. Understanding how backend functions communicate with each other and how frontend connects to backend took a long time to figure out. Great learning experience despite the challenges.
 
-#### Security 
+## Limitations
 
-- Strengthen security with JWT for authentication and CSRF protection to prevent unauthorized requests. JWT securely transmits data, while CSRF protection mitigates unauthorized access risks.
-- Enhance project security with JWT authentication and CSRF protection, safeguarding user data and preventing unauthorized access attempts.
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Notifications** | Not Implemented | Email/SMS reminders for appointments |
+| **Security** | Basic | Passwords stored in plain text; no JWT/CSRF tokens |
+| **Payment** | Not Implemented | Invoice and payment processing |
+| **DateTime Filtering** | Partial | Issues with UNIX timestamp filtering in tables |
+| **Service Selection** | Not Implemented | Customers cannot select specific service types |
 
-#### Payment 
+## Future Works
 
-- Use Stripe APIs for secure payment processing and automated invoicing. Despite fees, Stripe offers robust fraud prevention and integration benefits.
-- Optimize payment processing with Stripe APIs, ensuring secure transactions, fraud prevention, and streamlined invoicing for businesses and customers.
+- **Notifications:** Implement email/SMS notifications using Amazon SNS and cronjobs
+- **Security:** Add JWT authentication and CSRF protection
+- **Payment:** Integrate Stripe APIs for secure payment processing
+- **DateTime Filtering:** Explore alternative storage formats for better filtering
+- **Service Selection:** Allow customers to specify service type and aircon brand
 
-#### Appointment date time filtering 
+---
 
-- Explore alternative storage methods for DateTime data to improve compatibility with material-react-table filtering. Enhance filtering accuracy and functionality.
-- Improve DateTime filtering by exploring alternative storage formats, ensuring seamless integration with material-react-table and enhancing user experience.
+# 8. Contributors
 
-#### Appointment service choices 
+| Name | Email |
+|------|-------|
+| Benjamin Loh Choon How | 2201590@sit.singaporetech.edu.sg |
+| Wang Rongqi Richie | 2201942@sit.singaporetech.edu.sg |
+| Neam Heng Chong Timothy | 2201291@sit.singaporetech.edu.sg |
+| Loo Siong Yu | 2201255@sit.singaporetech.edu.sg |
+| Lee Zheng Han | 2201085@sit.singaporetech.edu.sg |
+| Efilio Yodia Garcia | 2200516@sit.singaporetech.edu.sg |
 
-- Allow users to specify service criteria like air conditioner brand and service type during appointment scheduling. Dynamically display appointments based on these criteria to prepare technicians effectively.
-- Enhance appointment scheduling by enabling users to specify service criteria, ensuring technicians are adequately prepared and optimizing service delivery for customer satisfaction.
- 
-# 5) License
+## Libraries Used
 
+- Tailwind CSS
+- Ant Design
+- Material-Tailwind
+- Django REST Framework
 
-# 6) Acknowledgement
-## Contributors:
-Benjamin Loh Choon How - 2201590@sit.singaporetech.edu.sg
+---
 
-Wang Rongqi Richie - 2201942@sit.singaporetech.edu.sg
+# 9. Troubleshooting
 
-Neam Heng Chong Timothy - 2201291@sit.singaporetech.edu.sg 
-
-Loo Siong Yu - 2201255@sit.singaporetech.edu.sg 
-
-Lee Zheng Han - 2201085@sit.singaporetech.edu.sg 
-
-Efilio Yodia Garcia - 2200516@sit.singaporetech.edu.sg 
-
-## Libraries used:
-Tailwind.css<br>
-Ant Design<br>
-Material-Tailwind<br>
-Django RESTful API
-
-# 7) Troubleshooting
 ## Common Issues
 
-## Seeking help
+| Issue | Solution |
+|-------|----------|
+| `pip install` fails | Ensure Python 3.9+ is installed. Try `pip install --upgrade pip` first |
+| `npm install` fails | Ensure Node.js 16+ is installed. Delete `node_modules` folder and try again |
+| Backend won't start | Check if port 8000 is in use. Run `python manage.py migrate` first |
+| Frontend won't start | Check if port 3000 is in use. Ensure backend is running |
+| Login fails | Verify you're using correct credentials. Technicians use phone number, customers use email |
+| API errors | Check both backend and frontend console logs for detailed error messages |
 
+## Important Notes
 
-# 8) Contact Information
+1. **Passwords are stored in PLAIN TEXT** in the database (known security issue)
+2. **Phone numbers** must be 8 digits (Singapore format)
+3. **Postal codes** must be 6 digits (Singapore format)
+4. **Technicians login with PHONE NUMBER**, not email
+5. **Customers login with EMAIL**, not phone
+6. **Geolocation features** require OneMap API credentials in `.env` file
 
-Benjamin Loh Choon How - 2201590@sit.singaporetech.edu.sg
+---
 
-Wang Rongqi Richie - 2201942@sit.singaporetech.edu.sg
+# 10. Version History
 
-Neam Heng Chong Timothy - 2201291@sit.singaporetech.edu.sg 
-
-Loo Siong Yu - 2201255@sit.singaporetech.edu.sg 
-
-Lee Zheng Han - 2201085@sit.singaporetech.edu.sg 
-
-Efilio Yodia Garcia - 2200516@sit.singaporetech.edu.sg 
-
-# 9) Version History 
 ## Version 1.0.0
+
+- Initial release
+- Customer, Technician, and Coordinator portals
+- Appointment scheduling system
+- Automatic technician assignment based on location
+- Basic aircon catalog management
+
+---
+
+**Last Updated:** January 2025
