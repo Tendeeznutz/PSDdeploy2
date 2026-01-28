@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import AppointmentViewSet, CustomerViewSet, TechnicianViewSet, \
     CoordinatorViewSet, CustomerAirconDeviceViewSet, MessageViewSet, \
-    TechnicianHiringApplicationViewSet
+    TechnicianHiringApplicationViewSet, TechnicianAvailabilityViewSet
 
 router = DefaultRouter()
 router.register(r'appointments', AppointmentViewSet, basename='appointments')
@@ -13,6 +13,7 @@ router.register(r'coordinators', CoordinatorViewSet, basename='coordinators')
 router.register(r'customeraircondevices', CustomerAirconDeviceViewSet, basename='customeraircondevices')
 router.register(r'messages', MessageViewSet, basename='messages')
 router.register(r'hiring-applications', TechnicianHiringApplicationViewSet, basename='hiring-applications')
+router.register(r'technician-availability', TechnicianAvailabilityViewSet, basename='technician-availability')
 
 urlpatterns = [
     path('', include(router.urls)),

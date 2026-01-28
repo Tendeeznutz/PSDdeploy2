@@ -157,12 +157,24 @@ function Login() {
               </Typography>
             </div> */}
             {selectedUserType === 'customers' && (
-              <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
-                Not registered?
-                <Link to="/register" className="text-gray-900 ml-1">Create account</Link>
-              </Typography>
+              <>
+                <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
+                  Not registered?
+                  <Link to="/register" className="text-gray-900 ml-1">Create account</Link>
+                </Typography>
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <Typography variant="small" className="text-center text-blue-gray-700 font-medium">
+                    Need a one-time service without an account?
+                  </Typography>
+                  <Link to="/guest-booking">
+                    <Button variant="outlined" className="mt-2" fullWidth>
+                      Quick Booking (No Account Required)
+                    </Button>
+                  </Link>
+                </div>
+              </>
             )}
-            
+
           </form>
 
         </div>

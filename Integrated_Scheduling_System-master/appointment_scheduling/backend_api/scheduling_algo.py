@@ -2,13 +2,17 @@ import os
 import random
 from collections import defaultdict
 from typing import Any
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
-from .models import Appointments, Customers, Technicians
+from .models import Appointments, Customers, Technicians, TechnicianAvailability
 from .sg_geo.src import geo_onemap
 
 load_dotenv()
+
+# Service and travel time buffer in seconds (2.5 hours)
+TIME_BUFFER_SECONDS = 2.5 * 60 * 60  # 9000 seconds
 
 def get_search_range(travel_type) -> int:
     """
@@ -86,14 +90,78 @@ def get_common_unavailable_time(nearby_technicians) -> list[Any]:
     return find_common_timerange(appointments)
 
 
-def is_slot_available(appointment_start_time, appointment_end_time, technician_appointments) -> bool:
+def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool:
+    """
+    Check if technician is available on the day of the appointment based on their schedule.
+    :param technician_id: UUID of the technician
+    :param appointment_timestamp: Unix timestamp of the appointment
+    :return: True if technician is available, False otherwise
+    """
+    appointment_datetime = datetime.fromtimestamp(appointment_timestamp)
+    appointment_date = appointment_datetime.date()
+    day_name = appointment_datetime.strftime('%A').lower()
+
+    # Check for specific date override first
+    specific_override = TechnicianAvailability.objects.filter(
+        technicianId=technician_id,
+        specificDate=appointment_date
+    ).first()
+
+    if specific_override:
+        # If there's a specific date entry, use that availability
+        if not specific_override.isAvailable:
+            return False
+        # Check if appointment time falls within the specific date's time range
+        appointment_time = appointment_datetime.strftime('%H:%M')
+        if appointment_time < specific_override.startTime or appointment_time >= specific_override.endTime:
+            return False
+        return True
+
+    # Check regular weekly schedule
+    weekly_schedule = TechnicianAvailability.objects.filter(
+        technicianId=technician_id,
+        dayOfWeek=day_name,
+        specificDate__isnull=True,
+        isAvailable=True
+    ).first()
+
+    if not weekly_schedule:
+        # Technician doesn't work on this day
+        return False
+
+    # Check if appointment time falls within working hours
+    appointment_time = appointment_datetime.strftime('%H:%M')
+    if appointment_time < weekly_schedule.startTime or appointment_time >= weekly_schedule.endTime:
+        return False
+
+    return True
+
+
+def is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=None) -> bool:
+    """
+    Check if a time slot is available for a technician, considering 2.5 hour buffer for each appointment.
+    :param appointment_start_time: Unix timestamp of appointment start
+    :param appointment_end_time: Unix timestamp of appointment end
+    :param technician_appointments: Queryset of existing appointments for the technician
+    :param technician_id: UUID of the technician (optional, for availability check)
+    :return: True if slot is available, False otherwise
+    """
+    # Check technician availability schedule if technician_id provided
+    if technician_id:
+        if not is_technician_available_on_day(technician_id, appointment_start_time):
+            return False
+
     for technician_appointment in technician_appointments:
-        # Check if the new appointment starts before an existing appointment ends
-        # and ends after an existing appointment starts.
-        # This allows for an appointment to end exactly when the next one starts.
+        # Apply 2.5 hour buffer to existing appointments
+        buffered_start = technician_appointment.appointmentStartTime
+        buffered_end = technician_appointment.appointmentEndTime + TIME_BUFFER_SECONDS
+
+        # Check if the new appointment (with its own buffer) conflicts with existing appointment
+        new_appointment_end_with_buffer = appointment_end_time + TIME_BUFFER_SECONDS
+
         if (
-                appointment_start_time < technician_appointment.appointmentEndTime and
-                appointment_end_time > technician_appointment.appointmentStartTime):
+                appointment_start_time < buffered_end and
+                new_appointment_end_with_buffer > buffered_start):
             return False
     return True
 
@@ -104,7 +172,7 @@ def get_technician_to_assign(nearby_technicians, appointment_start_time, appoint
         appointment = Appointments.objects.filter(technicianId=nearby_technicians[0])
         if current_appointment is not None and current_appointment in appointment:
             appointment = [appointment for appointment in appointment if appointment != current_appointment]
-        if is_slot_available(appointment_start_time, appointment_end_time, appointment):
+        if is_slot_available(appointment_start_time, appointment_end_time, appointment, technician_id=nearby_technicians[0]):
             return nearby_technicians[0]
         else:
             # TODO: send email to coordinator to inform that no technicians are available
@@ -119,7 +187,7 @@ def get_technician_to_assign(nearby_technicians, appointment_start_time, appoint
                 technician_appointments = [appointment for appointment in technician_appointments if
                                            appointment != current_appointment]
 
-            if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments):
+            if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=technician):
                 available_technicians.append(tuple((technician, len(technician_appointments))))
         if len(available_technicians) == 0:
             # TODO: send email to coordinator to inform that no technicians are available
@@ -135,3 +203,89 @@ def get_technician_to_assign(nearby_technicians, appointment_start_time, appoint
                                      technician[1] == min_appointments]
             index = random.randint(0, len(available_technicians) - 1)
             return available_technicians[index][0]
+
+
+def get_available_time_slots(technician_id, date_str, duration_hours=1):
+    """
+    Get available time slots for a technician on a specific date.
+    :param technician_id: UUID of the technician
+    :param date_str: Date string in YYYY-MM-DD format
+    :param duration_hours: Duration of appointment in hours (default 1)
+    :return: List of available time slots as tuples (start_timestamp, end_timestamp)
+    """
+    from datetime import datetime, timedelta
+
+    target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    day_name = target_date.strftime('%A').lower()
+
+    # Check for specific date override
+    specific_override = TechnicianAvailability.objects.filter(
+        technicianId=technician_id,
+        specificDate=target_date
+    ).first()
+
+    if specific_override:
+        if not specific_override.isAvailable:
+            return []  # Technician is not available on this date
+        start_time_str = specific_override.startTime
+        end_time_str = specific_override.endTime
+    else:
+        # Check regular weekly schedule
+        weekly_schedule = TechnicianAvailability.objects.filter(
+            technicianId=technician_id,
+            dayOfWeek=day_name,
+            specificDate__isnull=True,
+            isAvailable=True
+        ).first()
+
+        if not weekly_schedule:
+            return []  # Technician doesn't work on this day
+
+        start_time_str = weekly_schedule.startTime
+        end_time_str = weekly_schedule.endTime
+
+    # Parse working hours
+    start_hour, start_minute = map(int, start_time_str.split(':'))
+    end_hour, end_minute = map(int, end_time_str.split(':'))
+
+    work_start = datetime.combine(target_date, datetime.min.time().replace(hour=start_hour, minute=start_minute))
+    work_end = datetime.combine(target_date, datetime.min.time().replace(hour=end_hour, minute=end_minute))
+
+    # Get existing appointments for this day
+    day_start_timestamp = int(work_start.timestamp())
+    day_end_timestamp = int(work_end.timestamp())
+
+    existing_appointments = Appointments.objects.filter(
+        technicianId=technician_id,
+        appointmentStartTime__gte=day_start_timestamp,
+        appointmentStartTime__lt=day_end_timestamp
+    ).order_by('appointmentStartTime')
+
+    # Generate available slots
+    available_slots = []
+    current_time = work_start
+    duration_delta = timedelta(hours=duration_hours)
+    buffer_delta = timedelta(seconds=TIME_BUFFER_SECONDS)
+
+    for appointment in existing_appointments:
+        appointment_start = datetime.fromtimestamp(appointment.appointmentStartTime)
+        appointment_end = datetime.fromtimestamp(appointment.appointmentEndTime) + buffer_delta
+
+        # Check if there's a slot before this appointment
+        while current_time + duration_delta + buffer_delta <= appointment_start:
+            slot_start = int(current_time.timestamp())
+            slot_end = int((current_time + duration_delta).timestamp())
+            available_slots.append((slot_start, slot_end))
+            current_time += timedelta(minutes=30)  # 30-minute intervals
+
+        # Move past this appointment
+        current_time = max(current_time, appointment_end)
+
+    # Check remaining time after last appointment
+    while current_time + duration_delta + buffer_delta <= work_end:
+        slot_start = int(current_time.timestamp())
+        slot_end = int((current_time + duration_delta).timestamp())
+        available_slots.append((slot_start, slot_end))
+        current_time += timedelta(minutes=30)
+
+    return available_slots

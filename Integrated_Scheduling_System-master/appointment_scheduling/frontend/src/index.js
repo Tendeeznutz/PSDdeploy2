@@ -24,6 +24,7 @@ import CoordinatorAppointmentUpdate from "./pages/CoordinatorAppointmentUpdate";
 import ReportIssues from './pages/ReportIssues';
 import Mailbox from './pages/Mailbox';
 import TechnicianHiring from './pages/TechnicianHiring';
+import GuestBooking from './pages/GuestBooking';
 // this will always be the last page
 import Error404 from './pages/Error404';
 
@@ -56,6 +57,7 @@ root.render(
             <Route path='/ReportIssues' element={<ReportIssues/>}/>
             <Route path='/mailbox' element={<Mailbox/>}/>
             <Route path='/TechnicianHiring' element={<TechnicianHiring/>}/>
+            <Route path='/guest-booking' element={<GuestBooking/>}/>
             <Route path='/error' element={<Error404/>}/>
             <Route path='*' element={<Error404/>}/>
         </Routes>

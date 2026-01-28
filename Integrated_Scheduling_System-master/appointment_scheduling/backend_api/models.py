@@ -45,6 +45,7 @@ class Customers(TimeStampedModel):
     customerPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
     customerPassword = models.CharField(max_length=50, null=False)  # TODO: hash later
     customerEmail = models.CharField(max_length=50, unique=True, null=False, validators=[validate_email])
+    pendingPenaltyFee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text='Accumulated penalty fees for excessive cancellations')
 
     class Meta:
         indexes = [
@@ -377,3 +378,66 @@ class TechnicianHiringApplication(TimeStampedModel):
 
     def __str__(self):
         return f'Application: {self.applicantName} ({self.get_applicationStatus_display()})'
+
+
+class TechnicianAvailability(TimeStampedModel):
+    """
+    Tracks technician working days and time availability.
+    Ensures minimum 10 working days per technician.
+    """
+    DAY_CHOICES = (
+        ('monday', 'Monday'),
+        ('tuesday', 'Tuesday'),
+        ('wednesday', 'Wednesday'),
+        ('thursday', 'Thursday'),
+        ('friday', 'Friday'),
+        ('saturday', 'Saturday'),
+        ('sunday', 'Sunday'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
+    technicianId = models.ForeignKey(
+        Technicians,
+        on_delete=models.CASCADE,
+        db_column='technicianId',
+        related_name='availability_schedule',
+        null=False
+    )
+
+    # Day of the week
+    dayOfWeek = models.CharField(max_length=10, choices=DAY_CHOICES, null=False, help_text='Day of the week')
+
+    # Time range in 24-hour format (stored as strings like "09:00", "17:00")
+    startTime = models.CharField(max_length=5, null=False, help_text='Start time in HH:MM format (e.g., 09:00)')
+    endTime = models.CharField(max_length=5, null=False, help_text='End time in HH:MM format (e.g., 17:00)')
+
+    # Allow technicians to mark specific dates as unavailable
+    specificDate = models.DateField(null=True, blank=True, help_text='Specific date override (e.g., leave day)')
+    isAvailable = models.BooleanField(default=True, help_text='False for leave/unavailable days')
+
+    class Meta:
+        indexes = [
+            Index(fields=['technicianId', 'dayOfWeek']),
+            Index(fields=['technicianId', 'specificDate']),
+            Index(fields=['isAvailable']),
+        ]
+        constraints = [
+            # Ensure a technician doesn't have duplicate day entries without specific date
+            UniqueConstraint(
+                fields=['technicianId', 'dayOfWeek'],
+                condition=Q(specificDate__isnull=True),
+                name='unique_tech_day_schedule'
+            ),
+            # Ensure a technician doesn't have duplicate specific date entries
+            UniqueConstraint(
+                fields=['technicianId', 'specificDate'],
+                condition=Q(specificDate__isnull=False),
+                name='unique_tech_specific_date'
+            ),
+        ]
+        ordering = ['technicianId', 'dayOfWeek', 'specificDate']
+
+    def __str__(self):
+        if self.specificDate:
+            return f'{self.technicianId.technicianName} - {self.specificDate} ({"Available" if self.isAvailable else "Unavailable"})'
+        return f'{self.technicianId.technicianName} - {self.get_dayOfWeek_display()}: {self.startTime}-{self.endTime}'

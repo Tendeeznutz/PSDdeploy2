@@ -5,7 +5,7 @@ import randomname
 from rest_framework import serializers
 
 from .models import Appointments, AppointmentRequest, Customers, Technicians, Coordinators, \
-    CustomerAirconDevices, Messages, TechnicianHiringApplication
+    CustomerAirconDevices, Messages, TechnicianHiringApplication, TechnicianAvailability
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -190,3 +190,75 @@ class TechnicianHiringApplicationSerializer(serializers.ModelSerializer):
         if query.exists():
             raise serializers.ValidationError("An application with this NRIC already exists")
         return value
+
+
+class TechnicianAvailabilitySerializer(serializers.ModelSerializer):
+    technicianId = serializers.PrimaryKeyRelatedField(queryset=Technicians.objects.all(), required=True)
+
+    class Meta:
+        model = TechnicianAvailability
+        fields = '__all__'
+
+    def validate_startTime(self, value):
+        """Validate time format HH:MM"""
+        import re
+        if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', value):
+            raise serializers.ValidationError("Start time must be in HH:MM format (e.g., 09:00)")
+        return value
+
+    def validate_endTime(self, value):
+        """Validate time format HH:MM"""
+        import re
+        if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', value):
+            raise serializers.ValidationError("End time must be in HH:MM format (e.g., 17:00)")
+        return value
+
+    def validate(self, data):
+        """Validate that end time is after start time and check minimum working days"""
+        start_time = data.get('startTime')
+        end_time = data.get('endTime')
+
+        if start_time and end_time:
+            # Convert to minutes for comparison
+            start_minutes = int(start_time.split(':')[0]) * 60 + int(start_time.split(':')[1])
+            end_minutes = int(end_time.split(':')[0]) * 60 + int(end_time.split(':')[1])
+
+            if end_minutes <= start_minutes:
+                raise serializers.ValidationError({
+                    'endTime': 'End time must be after start time'
+                })
+
+        # Check minimum working days requirement (only for regular schedule, not specific dates)
+        technician_id = data.get('technicianId')
+        specific_date = data.get('specificDate')
+        is_available = data.get('isAvailable', True)
+
+        if technician_id and not specific_date and is_available:
+            # Count existing working days for this technician
+            existing_days = TechnicianAvailability.objects.filter(
+                technicianId=technician_id,
+                specificDate__isnull=True,
+                isAvailable=True
+            )
+
+            # Exclude current instance if updating
+            if self.instance:
+                existing_days = existing_days.exclude(pk=self.instance.pk)
+
+            # Count unique days
+            unique_days = existing_days.values_list('dayOfWeek', flat=True).distinct().count()
+
+            # If this is a new day being added, increment the count
+            day_of_week = data.get('dayOfWeek')
+            if day_of_week and not existing_days.filter(dayOfWeek=day_of_week).exists():
+                unique_days += 1
+
+            # Validate minimum 10 working days
+            # Since there are only 7 days in a week, we interpret this as: technician must work at least 5 days per week
+            # and have at least 2 weeks worth of schedule (10 working day slots)
+            if unique_days < 5:
+                raise serializers.ValidationError({
+                    'dayOfWeek': f'Technician must have at least 5 working days per week. Currently has {unique_days} days.'
+                })
+
+        return data

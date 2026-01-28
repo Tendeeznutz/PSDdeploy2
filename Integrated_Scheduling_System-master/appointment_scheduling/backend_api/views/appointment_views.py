@@ -1,9 +1,11 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db import models
 from datetime import datetime, timedelta
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+import uuid
 
 from .format_response import include_all_info
 from ..scheduling_algo import *
@@ -11,6 +13,7 @@ from ..models import Appointments, Customers, Technicians, CustomerAirconDevices
 from ..serializers import AppointmentSerializer
 from ..utils import sendMail
 from ..utils.notifications import send_appointment_confirmation, send_appointment_cancellation
+from ..penalty_utils import check_and_apply_penalty, get_penalty_summary
 
 # Pricing constants (matching frontend)
 SERVICE_COST_PER_AIRCON = 50  # $50 per aircon serviced
@@ -34,6 +37,10 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             # Calculate costs
             service_cost = num_aircons * SERVICE_COST_PER_AIRCON
             total_cost = service_cost + TRAVEL_FEE
+
+            # Add penalty fee if any
+            penalty_fee = customer.pendingPenaltyFee
+            total_cost_with_penalty = total_cost + float(penalty_fee)
 
             # Format appointment time
             appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime)
@@ -75,9 +82,15 @@ Aircon Units to be Serviced:
 COST BREAKDOWN
 --------------------------------------------
 Service Fee ({num_aircons} aircon{'s' if num_aircons > 1 else ''} x ${SERVICE_COST_PER_AIRCON}):    ${service_cost}.00
-Travel Fee:                            ${TRAVEL_FEE}.00
+Travel Fee:                            ${TRAVEL_FEE}.00"""
+
+            if penalty_fee > 0:
+                receipt_body += f"""
+Penalty Fee (Cancellations):          ${penalty_fee}"""
+
+            receipt_body += f"""
 --------------------------------------------
-TOTAL AMOUNT:                          ${total_cost}.00
+TOTAL AMOUNT:                          ${total_cost_with_penalty:.2f}
 --------------------------------------------
 
 Payment Method: {payment_display}
@@ -423,6 +436,13 @@ AirServe Team
                 try:
                     customer = Customers.objects.get(id=updated_appointment.customerId.id)
                     technician = updated_appointment.technicianId if updated_appointment.technicianId else None
+
+                    # Check and apply penalty if customer is cancelling
+                    penalty_result = None
+                    if cancelled_by == 'customer':
+                        penalty_result = check_and_apply_penalty(customer.id)
+                        print(f"Penalty check result: {penalty_result}")
+
                     send_appointment_cancellation(
                         appointment=updated_appointment,
                         customer=customer,
@@ -430,6 +450,41 @@ AirServe Team
                         cancelled_by=cancelled_by,
                         cancellation_reason=cancellation_reason
                     )
+
+                    # Send penalty notification to customer if penalty was applied
+                    if penalty_result and penalty_result['penalty_applied']:
+                        penalty_message = f"""
+Dear {customer.customerName},
+
+Your appointment has been cancelled. However, you have exceeded the monthly cancellation limit of 5 free cancellations.
+
+PENALTY NOTICE:
+================
+Cancellations this month: {penalty_result['cancellation_count']}
+Penalty fee: ${penalty_result['penalty_amount']}
+Total pending penalty: ${penalty_result['total_pending_penalty']}
+
+This penalty fee will be added to your next payment.
+
+To avoid future penalties, please ensure you only cancel appointments when absolutely necessary.
+
+If you have any questions, please contact us.
+
+Best regards,
+AirServe Team
+"""
+                        Messages.objects.create(
+                            senderType='coordinator',
+                            senderId='00000000-0000-0000-0000-000000000000',
+                            senderName='AirServe System',
+                            recipientType='customer',
+                            recipientId=customer.id,
+                            recipientName=customer.customerName,
+                            subject='Cancellation Penalty Notice',
+                            body=penalty_message,
+                            isRead=False,
+                            relatedAppointment=updated_appointment
+                        )
                 except Exception as e:
                     # Log error but don't fail the cancellation
                     print(f"Failed to send cancellation email: {e}")
@@ -447,3 +502,191 @@ AirServe Team
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
+
+    @action(detail=False, methods=['get'], url_path='penalty-status')
+    def penalty_status(self, request):
+        """
+        Get penalty status for a customer
+        Query params: customerId
+        """
+        customer_id = request.query_params.get('customerId')
+        if not customer_id:
+            return Response({"error": "customerId is required"}, status=400)
+
+        try:
+            penalty_summary = get_penalty_summary(customer_id)
+            return Response(penalty_summary, status=200)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='guest-booking')
+    def guest_booking(self, request):
+        """
+        Create a guest booking without requiring customer registration
+        Expected fields:
+        - customerName
+        - customerPhone
+        - customerEmail
+        - customerAddress
+        - customerPostalCode
+        - airconBrand
+        - airconModel (optional)
+        - appointmentStartTime
+        - paymentMethod
+        """
+        try:
+            # Extract data from request
+            name = request.data.get('customerName')
+            phone = request.data.get('customerPhone')
+            email = request.data.get('customerEmail')
+            address = request.data.get('customerAddress')
+            postal_code = request.data.get('customerPostalCode')
+            aircon_brand = request.data.get('airconBrand')
+            aircon_model = request.data.get('airconModel', 'Standard')
+            appointment_time = request.data.get('appointmentStartTime')
+            payment_method = request.data.get('paymentMethod', 'cash')
+
+            # Validate required fields
+            if not all([name, phone, email, address, postal_code, aircon_brand, appointment_time]):
+                return Response({
+                    'error': 'Missing required fields. Please provide: name, phone, email, address, postal code, aircon brand, and appointment time.'
+                }, status=400)
+
+            # Check if customer already exists by phone or email
+            existing_customer = Customers.objects.filter(
+                models.Q(customerPhone=phone) | models.Q(customerEmail=email)
+            ).first()
+
+            if existing_customer:
+                # Use existing customer
+                customer = existing_customer
+            else:
+                # Create temporary guest customer with a default password
+                customer = Customers.objects.create(
+                    customerName=name,
+                    customerPhone=phone,
+                    customerEmail=email,
+                    customerAddress=address,
+                    customerPostalCode=postal_code,
+                    customerLocation='',  # Will be populated by get_lat_long if needed
+                    customerPassword='GUEST_ACCOUNT_' + str(uuid.uuid4())[:8]  # Random password for guest
+                )
+
+            # Create a temporary aircon device for this booking
+            aircon_device = CustomerAirconDevices.objects.create(
+                customerId=customer,
+                airconName=f"{aircon_brand} - {aircon_model}",
+                airconBrand=aircon_brand,
+                airconModel=aircon_model,
+                isActive=True
+            )
+
+            # Get nearby technicians and find available slot
+            nearby_technicians = get_nearby_technicians(customer.id)
+            appointment_end_time = appointment_time + 3600  # 1 hour per aircon
+
+            # Try to assign a technician
+            assigned_technician = None
+            for tech_id in nearby_technicians:
+                technician = Technicians.objects.get(id=tech_id)
+                # Check if technician is available (simplified check)
+                conflicting_appointments = Appointments.objects.filter(
+                    technicianId=technician,
+                    appointmentStartTime__lt=appointment_end_time,
+                    appointmentEndTime__gt=appointment_time,
+                    appointmentStatus__in=['1', '2']  # Pending or Upcoming
+                ).exists()
+
+                if not conflicting_appointments:
+                    assigned_technician = technician
+                    break
+
+            if not assigned_technician and nearby_technicians:
+                # Assign to first technician if no one is perfectly available
+                assigned_technician = Technicians.objects.get(id=nearby_technicians[0])
+
+            # Calculate travel distance
+            travel_distance = 0
+            if assigned_technician:
+                try:
+                    travel_distance = get_distance(customer.id, assigned_technician.id)
+                except Exception as e:
+                    print(f"Error calculating distance: {e}")
+                    travel_distance = 5  # Default 5km
+
+            # Create the appointment
+            appointment = Appointments.objects.create(
+                customerId=customer,
+                technicianId=assigned_technician,
+                appointmentStartTime=appointment_time,
+                appointmentEndTime=appointment_end_time,
+                appointmentStatus='1',  # Pending coordinator approval
+                paymentMethod=payment_method,
+                travelDistance=travel_distance
+            )
+
+            # Link the aircon device to the appointment
+            appointment.airconToService.add(aircon_device)
+
+            # Send email confirmation directly to guest's email
+            appointment_datetime = datetime.fromtimestamp(appointment_time)
+            formatted_time = appointment_datetime.strftime('%B %d, %Y at %I:%M %p')
+
+            email_subject = f"Booking Confirmation - AirServe Appointment"
+            email_body = f"""
+Dear {name},
+
+Thank you for booking with AirServe!
+
+Your appointment has been confirmed and is pending coordinator approval.
+
+APPOINTMENT DETAILS
+===================
+Booking Reference: {str(appointment.id)[:8].upper()}
+Date & Time: {formatted_time}
+Aircon: {aircon_brand} - {aircon_model}
+Address: {address}, Singapore {postal_code}
+
+COST BREAKDOWN
+==============
+Service Fee (1 aircon x $50):    $50.00
+Travel Fee:                       $10.00
+-------------------------------------------
+TOTAL AMOUNT:                     $60.00
+
+Payment Method: {payment_method.replace('_', ' ').title()}
+
+A coordinator will review and approve your appointment shortly. You will receive further updates via email.
+
+If you have any questions, please contact us at support@airserve.com
+
+Thank you for choosing AirServe!
+
+Best regards,
+AirServe Team
+"""
+
+            try:
+                sendMail.send_email(email_subject, email_body, email, 'AirServe System')
+                print(f"Confirmation email sent to {email}")
+            except Exception as e:
+                print(f"Failed to send email: {e}")
+
+            # Return appointment details
+            serializer = AppointmentSerializer(appointment)
+            response_data = include_all_info(dict(serializer.data))
+
+            return Response({
+                'message': 'Booking created successfully! A confirmation email has been sent.',
+                'appointment': response_data,
+                'customerId': str(customer.id),
+                'isGuestBooking': not existing_customer
+            }, status=201)
+
+        except Exception as e:
+            print(f"Error in guest booking: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'error': f'Failed to create booking: {str(e)}'
+            }, status=500)

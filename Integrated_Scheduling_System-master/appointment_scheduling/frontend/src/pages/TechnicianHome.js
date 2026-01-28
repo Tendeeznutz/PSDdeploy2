@@ -5,7 +5,8 @@ import { Box, ListItem, ListItemIcon, MenuItem } from '@mui/material';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
 import { EventAvailable, PageviewRounded, PunchClock, LocationOn } from '@mui/icons-material';
 import { Button } from 'antd';
-import { MailOutlined } from '@ant-design/icons';
+import { MailOutlined, CalendarOutlined } from '@ant-design/icons';
+import TechnicianAvailabilityModal from '../components/TechnicianAvailabilityModal';
 
 // ...
 
@@ -15,6 +16,7 @@ function TechnicianHome() {
     const [addresses, setAddresses] = useState([]);
     const [appointmentStatuses, setAppointmentStatuses] = useState([]);
     const [customerData, setCustomerData] = useState({}); // Store customer data by appointment ID
+    const [availabilityModalVisible, setAvailabilityModalVisible] = useState(false);
 
     // Function to open Google Maps with customer's location
     const openGoogleMaps = (address, postalCode) => {
@@ -290,16 +292,32 @@ function TechnicianHome() {
                     <h1 className="text-2xl font-semibold">Welcome Back, {localStorage.getItem('technicians_name')}</h1>
                     <h2 className="text-xl font-semibold mt-2">Upcoming Appointments</h2>
                 </div>
-                <Button
-                    type="primary"
-                    icon={<MailOutlined />}
-                    onClick={() => navigate('/mailbox')}
-                    size="large"
-                >
-                    Mailbox
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        type="default"
+                        icon={<CalendarOutlined />}
+                        onClick={() => setAvailabilityModalVisible(true)}
+                        size="large"
+                    >
+                        Set Working Days
+                    </Button>
+                    <Button
+                        type="primary"
+                        icon={<MailOutlined />}
+                        onClick={() => navigate('/mailbox')}
+                        size="large"
+                    >
+                        Mailbox
+                    </Button>
+                </div>
             </div>
             <MaterialReactTable table={apptTable}/>
+
+            <TechnicianAvailabilityModal
+                visible={availabilityModalVisible}
+                onClose={() => setAvailabilityModalVisible(false)}
+                technicianId={localStorage.getItem('technicians_id')}
+            />
             {/* <div className="overflow-x-auto">
                 <table className="min-w-full bg-white">
                     <thead className="bg-gray-800 text-white">

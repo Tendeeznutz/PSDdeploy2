@@ -5,3 +5,4 @@ from .customer_views import CustomerViewSet
 from .technician_views import TechnicianViewSet
 from .message_views import MessageViewSet
 from .hiring_views import TechnicianHiringApplicationViewSet
+from .availability_views import TechnicianAvailabilityViewSet
