@@ -239,7 +239,7 @@ function TechnicianHome() {
                 <MenuItem
                 key={0}
                 onClick={() => {
-                    window.location.href='/appointmentDetail?id=' + row.original.id
+                    window.location.href='/technician/appointmentDetail?id=' + row.original.id
                     closeMenu();
                 }}
                 sx={{ m: 0 }}

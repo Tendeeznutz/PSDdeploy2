@@ -5,7 +5,7 @@ import randomname
 from rest_framework import serializers
 
 from .models import Appointments, AppointmentRequest, Customers, Technicians, Coordinators, \
-    CustomerAirconDevices, Messages, TechnicianHiringApplication, TechnicianAvailability
+    CustomerAirconDevices, Messages, TechnicianHiringApplication, TechnicianAvailability, AirconCatalogs
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -54,7 +54,10 @@ class CustomerSerializer(serializers.ModelSerializer):
         exclude = ['customerPassword']
 
 
-# Aircon Catalog removed - no longer needed
+class AirconSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AirconCatalogs
+        fields = '__all__'
 
 
 class TechnicianSerializer(serializers.ModelSerializer):
@@ -190,6 +193,17 @@ class TechnicianHiringApplicationSerializer(serializers.ModelSerializer):
         if query.exists():
             raise serializers.ValidationError("An application with this NRIC already exists")
         return value
+
+    def validate(self, attrs):
+        # NRIC photos and driving license are compulsory for new applications (create)
+        if not self.instance:
+            if not attrs.get('nricPhotoFront'):
+                raise serializers.ValidationError({'nricPhotoFront': 'NRIC front photo is required.'})
+            if not attrs.get('nricPhotoBack'):
+                raise serializers.ValidationError({'nricPhotoBack': 'NRIC back photo is required.'})
+            if not attrs.get('drivingLicense'):
+                raise serializers.ValidationError({'drivingLicense': 'Driving license is required.'})
+        return attrs
 
 
 class TechnicianAvailabilitySerializer(serializers.ModelSerializer):

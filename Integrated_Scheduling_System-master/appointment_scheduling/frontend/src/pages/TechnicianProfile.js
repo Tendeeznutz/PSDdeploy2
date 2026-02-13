@@ -11,6 +11,7 @@ function TechnicianProfile() {
 
     // Helper function to display travel type in a readable format
     const displayTravelType = (travelType) => {
+        if (!travelType) return 'Not Set';
         const travelTypes = {
             'own_vehicle': 'Own Vehicle',
             'company_vehicle': 'Company Vehicle',
@@ -21,12 +22,15 @@ function TechnicianProfile() {
 
     const [techniciandetails, setTechniciandetails] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
+    const AC_BRANDS = ['Daikin', 'Mitsubishi', 'Panasonic', 'LG', 'Samsung', 'Fujitsu', 'Sharp', 'Toshiba', 'Hitachi', 'York', 'Other'];
     const [editedDetails, setEditedDetails] = useState({
         technicianName: '',
         technicianPhone: '',
+        technicianEmail: '',
         technicianAddress: '',
         technicianPostalCode: '',
         technicianTravelType: '',
+        specializations: [],
         technicianPassword: '',
         technicianPasswordConfirm: ''
     });
@@ -42,9 +46,11 @@ function TechnicianProfile() {
                 setEditedDetails({
                     technicianName: response.data[0].technicianName,
                     technicianPhone: response.data[0].technicianPhone,
+                    technicianEmail: response.data[0].technicianEmail || '',
                     technicianAddress: response.data[0].technicianAddress,
                     technicianPostalCode: response.data[0].technicianPostalCode,
                     technicianTravelType: response.data[0].technicianTravelType,
+                    specializations: response.data[0].specializations || [],
                     technicianPassword: '',
                     technicianPasswordConfirm: ''
                 });
@@ -71,6 +77,14 @@ function TechnicianProfile() {
                 throw new Error("Please enter a valid Singapore phone number.");
             }
 
+            // Email validation (if provided)
+            if (editedDetails.technicianEmail) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(editedDetails.technicianEmail)) {
+                    throw new Error("Please enter a valid email address.");
+                }
+            }
+
             // Check if password fields match if password is being changed
             if (editedDetails.technicianPassword || editedDetails.technicianPasswordConfirm) {
                 if (editedDetails.technicianPassword !== editedDetails.technicianPasswordConfirm) {
@@ -84,9 +98,11 @@ function TechnicianProfile() {
             const payload = {
                 technicianName: editedDetails.technicianName,
                 technicianPhone: editedDetails.technicianPhone,
+                technicianEmail: editedDetails.technicianEmail || null,
                 technicianAddress: editedDetails.technicianAddress,
                 technicianPostalCode: editedDetails.technicianPostalCode,
                 technicianTravelType: editedDetails.technicianTravelType,
+                specializations: editedDetails.specializations || [],
             };
 
             // Only include password if it's been entered
@@ -131,10 +147,19 @@ function TechnicianProfile() {
                                     Phone: {techniciandetails.technicianPhone}
                                 </label>
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Email: {techniciandetails.technicianEmail || <span className="text-gray-400 font-normal">(Not set)</span>}
+                                </label>
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Address: {techniciandetails.technicianAddress}
                                 </label>
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Travel Type: {displayTravelType(techniciandetails.technicianTravelType)}
+                                </label>
+                                <label className="block mb-2 text-lg font-bold text-gray-700">
+                                    Specializations:{' '}
+                                    {techniciandetails.specializations && techniciandetails.specializations.length > 0
+                                        ? techniciandetails.specializations.join(', ')
+                                        : <span className="text-gray-400 font-normal">None set</span>}
                                 </label>
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Status: {techniciandetails.technicianStatus === "1" ? "Available" : "Unavailable"}
@@ -174,6 +199,16 @@ function TechnicianProfile() {
                                     />
                                 </div>
                                 <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">Email (for notifications)</label>
+                                    <input
+                                        className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                        type="email"
+                                        value={editedDetails.technicianEmail}
+                                        onChange={(e) => setEditedDetails({...editedDetails, technicianEmail: e.target.value})}
+                                        placeholder="Enter your email for appointment notifications"
+                                    />
+                                </div>
+                                <div className="mb-4">
                                     <label className="block mb-2 text-sm font-bold text-gray-700">Address</label>
                                     <input
                                         className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
@@ -197,13 +232,35 @@ function TechnicianProfile() {
                                     <label className="block mb-2 text-sm font-bold text-gray-700">Travel Type</label>
                                     <select
                                         className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                                        value={editedDetails.technicianTravelType}
-                                        onChange={(e) => setEditedDetails({...editedDetails, technicianTravelType: e.target.value})}
+                                        value={editedDetails.technicianTravelType || ''}
+                                        onChange={(e) => setEditedDetails({...editedDetails, technicianTravelType: e.target.value || null})}
                                     >
+                                        <option value="">-- Select Travel Type --</option>
                                         <option value="own_vehicle">Own Vehicle</option>
                                         <option value="company_vehicle">Company Vehicle</option>
                                         <option value="rental_van">Rental Van</option>
                                     </select>
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-bold text-gray-700">AC Brand Specializations</label>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-2 bg-gray-50 rounded-lg border border-gray-300">
+                                        {AC_BRANDS.map(brand => (
+                                            <label key={brand} className="flex items-center gap-1 text-sm text-gray-700 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={(editedDetails.specializations || []).includes(brand)}
+                                                    onChange={(e) => {
+                                                        const current = editedDetails.specializations || [];
+                                                        const updated = e.target.checked
+                                                            ? [...current, brand]
+                                                            : current.filter(b => b !== brand);
+                                                        setEditedDetails({...editedDetails, specializations: updated});
+                                                    }}
+                                                />
+                                                {brand}
+                                            </label>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="mb-4">
                                     <label className="block mb-2 text-sm font-bold text-gray-700">New Password (leave blank to keep current)</label>
