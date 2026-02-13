@@ -1,19 +1,38 @@
-from ..models import Appointments, Customers, Technicians, CustomerAirconDevices, AirconCatalogs
+from ..models import Appointments, Customers, Technicians, CustomerAirconDevices, AirconCatalogs, AppointmentRating
 
 
-def include_all_info(data):
+def include_all_info(data, request=None):
     """
     Include all the information of the response
     :param data: single unit from serializer.data
     :return: formatted data
     """
     updates = {'display': {}}
+    is_customer_context = request and '/api/customer/' in getattr(request, 'path', '')
 
-    if 'appointmentStatus' in data and data['appointmentStatus'] is not None:
-        appointment = Appointments.objects.get(id=data['id'])
+    # Only look up appointment if this is appointment data (not customer data)
+    appointment = None
+    if 'id' in data and 'customerName' not in data:
+        try:
+            appointment = Appointments.objects.get(id=data['id'])
+        except Appointments.DoesNotExist:
+            pass
+
+    if appointment and 'appointmentStatus' in data and data['appointmentStatus'] is not None:
         updates['display']['appointmentStatus'] = appointment.get_appointmentStatus_display()
         # Include payment method display
         updates['display']['paymentMethod'] = appointment.get_paymentMethod_display()
+
+    # Include hasRated flags for rating UI (customer: hasRatedTechnician, technician: hasRatedCustomer)
+    if appointment:
+        if is_customer_context:
+            updates['display']['hasRatedTechnician'] = AppointmentRating.objects.filter(
+                appointment=appointment, ratedBy='customer'
+            ).exists()
+        else:
+            updates['display']['hasRatedCustomer'] = AppointmentRating.objects.filter(
+                appointment=appointment, ratedBy='technician'
+            ).exists()
 
     if 'customerId' in data and data['customerId'] is not None and 'customerName' not in data:
         customer = Customers.objects.get(id=data['customerId'])
@@ -21,6 +40,9 @@ def include_all_info(data):
         updates['display']['customerPhone'] = customer.customerPhone
         updates['display']['customerEmail'] = customer.customerEmail
         updates['display']['customerPostalCode'] = customer.customerPostalCode
+        if not is_customer_context:
+            updates['display']['customerRating'] = float(customer.customerRating)
+            updates['display']['customerRatingCount'] = customer.ratingCount
 
     if 'technicianId' in data and data['technicianId'] is not None and 'technicianName' not in data:
         technician = Technicians.objects.get(id=data['technicianId'])
@@ -28,6 +50,8 @@ def include_all_info(data):
         updates['display']['technicianPhone'] = technician.technicianPhone
         updates['display']['technicianPostalCode'] = technician.technicianPostalCode
         updates['display']['technicianAddress'] = technician.technicianAddress
+        updates['display']['technicianRating'] = float(technician.technicianRating)
+        updates['display']['technicianRatingCount'] = technician.technicianRatingCount
 
     if 'airconToService' in data and data['airconToService'] is not None:
         updates['display']['airconToService'] = []

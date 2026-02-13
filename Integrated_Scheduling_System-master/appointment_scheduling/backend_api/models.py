@@ -46,6 +46,8 @@ class Customers(TimeStampedModel):
     customerPassword = models.CharField(max_length=50, null=False)  # TODO: hash later
     customerEmail = models.CharField(max_length=50, unique=True, null=False, validators=[validate_email])
     pendingPenaltyFee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text='Accumulated penalty fees for excessive cancellations')
+    customerRating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00, help_text='Average rating from technicians (1-5), default 5')
+    ratingCount = models.IntegerField(default=0, help_text='Number of ratings received from technicians')
 
     class Meta:
         indexes = [
@@ -120,25 +122,33 @@ class Technicians(models.Model):
     technicianAddress = models.CharField(max_length=50, null=False)
     technicianLocation = models.CharField(max_length=32, null=True)
     technicianPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
+    technicianEmail = models.CharField(max_length=50, unique=True, null=True, blank=True, validators=[validate_email], help_text='Email address for notifications')
     technicianPassword = models.CharField(max_length=50, null=False)
     technicianStatus = models.CharField(default=1, choices=STATUS_CHOICES, max_length=1, null=False)
-    # validation should be done in serializer to check each entry exist in airconCatalogs
-    # technicianSupportedAircon = models.CharField(max_length=500)
-    technicianTravelType = models.CharField(max_length=20, choices=TRAVEL_TYPE_CHOICES, null=False, default='own_vehicle')
-    
+    specializations = models.JSONField(default=list, blank=True, help_text='List of AC brands the technician specializes in')
+    technicianTravelType = models.CharField(max_length=20, choices=TRAVEL_TYPE_CHOICES, null=True, blank=True, default=None)
+    technicianRating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00, help_text='Average rating from customers (1-5), default 5')
+    technicianRatingCount = models.IntegerField(default=0, help_text='Number of ratings received from customers')
+    isActive = models.BooleanField(default=True, help_text='Whether technician is currently employed/active')
+    deactivatedAt = models.DateTimeField(null=True, blank=True, help_text='When the technician was deactivated')
+    deactivationReason = models.TextField(null=True, blank=True, help_text='Reason for deactivation')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         indexes = [
             Index(fields=['technicianStatus']),
             Index(fields=['technicianPhone']),
+            Index(fields=['technicianEmail']),
             Index(fields=['technicianPostalCode']),
+            Index(fields=['isActive']),
         ]
         ordering = ['technicianName']
-    
+
     def __str__(self):
-        return f'{self.technicianName} ({self.get_technicianStatus_display()})'
+        status = 'Active' if self.isActive else 'Inactive'
+        return f'{self.technicianName} ({status} - {self.get_technicianStatus_display()})'
     
 
 class Coordinators(TimeStampedModel):
@@ -218,7 +228,40 @@ class Appointments(TimeStampedModel):
         ]
     def __str__(self):
         return f'Appt {self.id} ({self.appointmentStatus})'
-    
+
+
+class AppointmentRating(TimeStampedModel):
+    """
+    Rating given after a completed appointment.
+    - ratedBy='technician': technician rates the customer (updates customer.customerRating)
+    - ratedBy='customer': customer rates the technician (updates technician.technicianRating)
+    One rating per appointment per direction.
+    """
+    RATED_BY_CHOICES = (
+        ('technician', 'Technician'),
+        ('customer', 'Customer'),
+    )
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
+    appointment = models.ForeignKey(
+        Appointments,
+        on_delete=models.CASCADE,
+        db_column='appointmentId',
+        related_name='ratings',
+        null=False
+    )
+    ratedBy = models.CharField(max_length=20, choices=RATED_BY_CHOICES, null=False)
+    rating = models.IntegerField(null=False, help_text='1-5 stars')
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=['appointment', 'ratedBy'], name='unique_rating_per_appointment_direction')
+        ]
+        indexes = [Index(fields=['appointment']), Index(fields=['ratedBy'])]
+
+    def __str__(self):
+        return f'Rating {self.rating} by {self.ratedBy} for Appt {self.appointment.id}'
+
+
 class AppointmentRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     class Meta:
@@ -286,7 +329,20 @@ class TechnicianHiringApplication(TimeStampedModel):
         ('rejected', 'Rejected'),
     )
 
+    APPLICATION_SOURCE_CHOICES = (
+        ('coordinator_invited', 'Coordinator Invited'),
+        ('self_applied', 'Self Applied'),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
+
+    # How the application was initiated
+    applicationSource = models.CharField(
+        max_length=30,
+        choices=APPLICATION_SOURCE_CHOICES,
+        default='coordinator_invited',
+        help_text='Whether coordinator invited or technician self-applied'
+    )
 
     # Stage 1: Personal Details
     applicantName = models.CharField(max_length=100, null=False, help_text='Full name of applicant')
@@ -325,6 +381,17 @@ class TechnicianHiringApplication(TimeStampedModel):
     # Profile Photo
     profilePhoto = models.ImageField(upload_to='profile_photos/', null=True, blank=True, help_text='Profile photo of applicant')
     profilePhotoFileName = models.CharField(max_length=255, null=True, blank=True, help_text='Original profile photo filename')
+
+    # NRIC Photos (compulsory for identity verification - enforced in serializer)
+    nricPhotoFront = models.ImageField(upload_to='nric_photos/', null=True, blank=True, help_text='NRIC front photo')
+    nricPhotoBack = models.ImageField(upload_to='nric_photos/', null=True, blank=True, help_text='NRIC back photo')
+
+    # Driving License (required for new applications - validated at serializer level)
+    drivingLicense = models.ImageField(upload_to='driving_licenses/', null=True, blank=True, help_text='Driving license photo')
+    drivingLicenseFileName = models.CharField(max_length=255, null=True, blank=True, help_text='Original driving license filename')
+
+    # AC Brand Specializations
+    specializations = models.JSONField(default=list, blank=True, help_text='AC brands the applicant specializes in')
 
     personalDetailsConfirmed = models.BooleanField(default=False, help_text='Applicant confirmed personal details')
     personalDetailsConfirmedAt = models.DateTimeField(null=True, blank=True)
@@ -441,3 +508,31 @@ class TechnicianAvailability(TimeStampedModel):
         if self.specificDate:
             return f'{self.technicianId.technicianName} - {self.specificDate} ({"Available" if self.isAvailable else "Unavailable"})'
         return f'{self.technicianId.technicianName} - {self.get_dayOfWeek_display()}: {self.startTime}-{self.endTime}'
+
+
+class TechnicianPasswordResetToken(TimeStampedModel):
+    """
+    Token for technician password reset.
+    Tokens expire after 24 hours.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
+    technician = models.ForeignKey(
+        Technicians,
+        on_delete=models.CASCADE,
+        related_name='password_reset_tokens',
+        null=False
+    )
+    token = models.CharField(max_length=100, unique=True, null=False)
+    expiresAt = models.DateTimeField(null=False, help_text='Token expiration time')
+    isUsed = models.BooleanField(default=False, help_text='Whether token has been used')
+
+    class Meta:
+        indexes = [
+            Index(fields=['token']),
+            Index(fields=['technician']),
+            Index(fields=['expiresAt']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Password reset token for {self.technician.technicianName}'

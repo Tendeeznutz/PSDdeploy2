@@ -151,8 +151,8 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
         # Create the technician account
         try:
-            # Generate a temporary password (should be sent to technician's email)
-            temp_password = f"temp{application.nric[-4:]}"
+            # Default password for all new technicians
+            temp_password = "password123"
 
             technician = Technicians.objects.create(
                 technicianName=application.applicantName,
@@ -160,9 +160,11 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
                 technicianAddress=application.applicantAddress,
                 technicianLocation=geo.get_location_from_postal(application.applicantPostalCode),
                 technicianPhone=application.applicantPhone,
+                technicianEmail=application.applicantEmail,  # Copy email for notifications
                 technicianPassword=make_password(temp_password),
                 technicianStatus='1',  # Available
-                technicianTravelType='walk'  # Default
+                technicianTravelType=None,  # To be set by coordinator later
+                specializations=application.specializations or []
             )
 
             # Link the created technician to the application

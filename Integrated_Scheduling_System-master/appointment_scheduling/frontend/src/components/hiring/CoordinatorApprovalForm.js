@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Checkbox, message, Card, InputNumber, Descriptions, Badge, Space } from 'antd';
+import { Form, Input, Button, Checkbox, message, Card, InputNumber, Descriptions, Badge, Space, Tag } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const { TextArea } = Input;
 
-function CoordinatorApprovalForm({ applicationData }) {
+function CoordinatorApprovalForm({ applicationData, onComplete }) {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [approvalConfirmed, setApprovalConfirmed] = useState(false);
     const navigate = useNavigate();
 
-    // Get coordinator ID from localStorage (assuming it's stored during login)
-    const coordinatorData = JSON.parse(localStorage.getItem('coordinator_data') || '{}');
-    const coordinatorId = coordinatorData.coordinator_id;
+    // Get coordinator ID from localStorage (stored during login)
+    const coordinatorId = localStorage.getItem('coordinators_id');
 
     const handleApprove = async (values) => {
         if (!approvalConfirmed) {
@@ -37,16 +36,16 @@ function CoordinatorApprovalForm({ applicationData }) {
             };
 
             const response = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications/${applicationData.id}/coordinator-approve/`,
+                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/hiring-applications/${applicationData.id}/coordinator-approve/`,
                 approvalData
             );
 
             message.success('Application approved! Technician account created successfully.');
             message.info(`Temporary password: ${response.data.temporaryPassword}`);
 
-            // Redirect to coordinator home after a delay
             setTimeout(() => {
-                navigate('/coordinatorHome');
+                if (onComplete) onComplete();
+                else navigate('/coordinator/home');
             }, 3000);
 
         } catch (error) {
@@ -76,15 +75,15 @@ function CoordinatorApprovalForm({ applicationData }) {
             };
 
             await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications/${applicationData.id}/coordinator-reject/`,
+                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/hiring-applications/${applicationData.id}/coordinator-reject/`,
                 rejectionData
             );
 
             message.success('Application rejected.');
 
-            // Redirect to coordinator home after a delay
             setTimeout(() => {
-                navigate('/coordinatorHome');
+                if (onComplete) onComplete();
+                else navigate('/coordinator/home');
             }, 2000);
 
         } catch (error) {
@@ -106,6 +105,37 @@ function CoordinatorApprovalForm({ applicationData }) {
                         <p className="text-sm text-gray-500 mb-2">Profile Photo</p>
                         <div className="inline-block border rounded-lg p-2 bg-gray-50">
                             <span className="text-gray-700">{applicationData.profilePhotoFileName}</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* NRIC Photos */}
+                {(typeof applicationData.nricPhotoFront === 'string' || typeof applicationData.nricPhotoBack === 'string') && (
+                    <div className="mb-4">
+                        <h4 className="text-md font-semibold mb-2">NRIC Photos</h4>
+                        <div className="flex gap-4 flex-wrap">
+                            {typeof applicationData.nricPhotoFront === 'string' && applicationData.nricPhotoFront && (
+                                <div>
+                                    <p className="text-sm text-gray-500 mb-1">Front</p>
+                                    <img
+                                        src={applicationData.nricPhotoFront.startsWith('http') ? applicationData.nricPhotoFront : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}${applicationData.nricPhotoFront}`}
+                                        alt="NRIC Front"
+                                        className="max-w-xs border rounded"
+                                        style={{ maxHeight: 200 }}
+                                    />
+                                </div>
+                            )}
+                            {typeof applicationData.nricPhotoBack === 'string' && applicationData.nricPhotoBack && (
+                                <div>
+                                    <p className="text-sm text-gray-500 mb-1">Back</p>
+                                    <img
+                                        src={applicationData.nricPhotoBack.startsWith('http') ? applicationData.nricPhotoBack : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}${applicationData.nricPhotoBack}`}
+                                        alt="NRIC Back"
+                                        className="max-w-xs border rounded"
+                                        style={{ maxHeight: 200 }}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -135,6 +165,20 @@ function CoordinatorApprovalForm({ applicationData }) {
                     </Descriptions.Item>
                     <Descriptions.Item label="Work Experience">
                         <div className="whitespace-pre-wrap">{applicationData.workExperience}</div>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="AC Brand Specializations">
+                        {applicationData.specializations && applicationData.specializations.length > 0 ? (
+                            <Space wrap>
+                                {(typeof applicationData.specializations === 'string'
+                                    ? JSON.parse(applicationData.specializations)
+                                    : applicationData.specializations
+                                ).map(brand => (
+                                    <Tag color="blue" key={brand}>{brand}</Tag>
+                                ))}
+                            </Space>
+                        ) : (
+                            <span className="text-gray-400">None specified</span>
+                        )}
                     </Descriptions.Item>
                     <Descriptions.Item label="Previous Employer(s)">
                         {applicationData.previousEmployer || 'Not provided'}

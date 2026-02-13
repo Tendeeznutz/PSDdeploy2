@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Input, Button, Typography, Select, Option, Textarea } from '@material-tailwind/react';
-import { DatePicker, TimePicker, message, Radio } from 'antd';
+import { DatePicker, TimePicker, message, Radio, InputNumber } from 'antd';
 import dayjs from 'dayjs';
 import backgroundImage from '../asset/img/air_servicing.png';
 
@@ -15,8 +15,14 @@ const GuestBooking = () => {
     customerPostalCode: '',
     airconBrand: '',
     airconModel: '',
+    numberOfUnits: 1,
     paymentMethod: 'cash',
   });
+
+  // Calculate costs based on number of units
+  const serviceFee = bookingData.numberOfUnits * 50;
+  const travelFee = 10;
+  const totalCost = serviceFee + travelFee;
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -93,6 +99,7 @@ const GuestBooking = () => {
         customerPostalCode: bookingData.customerPostalCode,
         airconBrand: bookingData.airconBrand,
         airconModel: bookingData.airconModel || 'Standard',
+        numberOfUnits: bookingData.numberOfUnits,
         appointmentStartTime: appointmentTimestamp,
         paymentMethod: bookingData.paymentMethod,
       };
@@ -118,6 +125,7 @@ const GuestBooking = () => {
           customerPostalCode: '',
           airconBrand: '',
           airconModel: '',
+          numberOfUnits: 1,
           paymentMethod: 'cash',
         });
         setSelectedDate(null);
@@ -268,6 +276,19 @@ const GuestBooking = () => {
             />
 
             <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
+              Number of AC Units to Service *
+            </Typography>
+            <InputNumber
+              size="large"
+              min={1}
+              max={10}
+              value={bookingData.numberOfUnits}
+              onChange={(value) => handleInputChange('numberOfUnits', value || 1)}
+              className="w-full"
+              style={{ width: '100%' }}
+            />
+
+            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
               Preferred Date *
             </Typography>
             <DatePicker
@@ -312,13 +333,13 @@ const GuestBooking = () => {
                 Cost Breakdown:
               </Typography>
               <Typography variant="small" color="blue-gray">
-                Service Fee (1 aircon): $50.00
+                Service Fee ({bookingData.numberOfUnits} unit{bookingData.numberOfUnits > 1 ? 's' : ''} x $50): ${serviceFee.toFixed(2)}
               </Typography>
               <Typography variant="small" color="blue-gray">
-                Travel Fee: $10.00
+                Travel Fee: ${travelFee.toFixed(2)}
               </Typography>
               <Typography variant="small" color="blue-gray" className="font-bold mt-2">
-                Total: $60.00
+                Total: ${totalCost.toFixed(2)}
               </Typography>
             </div>
           </div>

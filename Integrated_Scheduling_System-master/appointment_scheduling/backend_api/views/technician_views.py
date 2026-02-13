@@ -1,13 +1,19 @@
+import secrets
+import re
+from datetime import datetime, timedelta
 from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from ..scheduling_algo import *
+from ..models import TechnicianPasswordResetToken, TechnicianHiringApplication
 from ..serializers import TechnicianSerializer
 from ..sg_geo.src import geo_onemap as geo
+from ..utils import sendMail
 
 
 class TechnicianViewSet(viewsets.ModelViewSet):
@@ -86,6 +92,11 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             phone = request.data['email']
             password = request.data['password']
             technician = Technicians.objects.get(technicianPhone=phone)
+
+            # Check if technician account is active
+            if not technician.isActive:
+                return Response({'detail': 'Your account has been deactivated. Please contact the coordinator.'}, status=status.HTTP_403_FORBIDDEN)
+
             # Handle both plain text and hashed passwords
             # Plain text check first, then try hashed password check
             if password == technician.technicianPassword or check_password(password, technician.technicianPassword):
@@ -109,3 +120,241 @@ class TechnicianViewSet(viewsets.ModelViewSet):
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
+
+    @action(detail=False, methods=['post'], url_path='forgot-password')
+    def forgot_password(self, request):
+        """
+        Request password reset - sends email with reset link.
+        Expects: { phone: "12345678" }
+        """
+        phone = request.data.get('phone')
+        if not phone:
+            return Response({'error': 'Phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            technician = Technicians.objects.get(technicianPhone=phone)
+        except Technicians.DoesNotExist:
+            return Response({'error': 'No technician found with this phone number'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Find the associated hiring application to get email
+        try:
+            application = TechnicianHiringApplication.objects.get(createdTechnician=technician)
+            email = application.applicantEmail
+        except TechnicianHiringApplication.DoesNotExist:
+            return Response({'error': 'No email associated with this technician account'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Invalidate any existing tokens
+        TechnicianPasswordResetToken.objects.filter(technician=technician, isUsed=False).update(isUsed=True)
+
+        # Generate a secure token
+        token = secrets.token_urlsafe(32)
+        expires_at = timezone.now() + timedelta(hours=24)
+
+        # Create the token
+        TechnicianPasswordResetToken.objects.create(
+            technician=technician,
+            token=token,
+            expiresAt=expires_at
+        )
+
+        # Send email with reset link
+        try:
+            from django.conf import settings
+            frontend_base = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:3000')
+            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}"
+
+            subject = "Password Reset Request - AirServe"
+            body = f"""Dear {technician.technicianName},
+
+You have requested to reset your password.
+
+Click the link below to reset your password:
+{reset_url}
+
+This link will expire in 24 hours.
+
+If you did not request this password reset, please ignore this email.
+
+Best regards,
+AirServe Team"""
+
+            sendMail.send_email(subject, body, email, 'AirServe')
+            return Response({'message': 'Password reset email sent successfully'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(f"Failed to send password reset email: {e}")
+            return Response({'error': 'Failed to send password reset email'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'], url_path='validate-reset-token')
+    def validate_reset_token(self, request):
+        """
+        Validate if a password reset token is valid and not expired.
+        Query param: token
+        """
+        token = request.query_params.get('token')
+        if not token:
+            return Response({'valid': False, 'error': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            reset_token = TechnicianPasswordResetToken.objects.get(token=token)
+
+            if reset_token.isUsed:
+                return Response({'valid': False, 'error': 'Token has already been used'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if timezone.now() > reset_token.expiresAt:
+                return Response({'valid': False, 'error': 'Token has expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                'valid': True,
+                'technicianName': reset_token.technician.technicianName
+            }, status=status.HTTP_200_OK)
+
+        except TechnicianPasswordResetToken.DoesNotExist:
+            return Response({'valid': False, 'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='reset-password')
+    def reset_password(self, request):
+        """
+        Reset password using token.
+        Expects: { token: "xxx", newPassword: "xxx" }
+        Password requirements: minimum 8 alphanumeric characters, at least 3 numbers.
+        """
+        token = request.data.get('token')
+        new_password = request.data.get('newPassword')
+
+        if not token or not new_password:
+            return Response({'error': 'Token and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate password requirements
+        if len(new_password) < 8:
+            return Response({'error': 'Password must be at least 8 characters long'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not re.match(r'^[a-zA-Z0-9]+$', new_password):
+            return Response({'error': 'Password must contain only alphanumeric characters'}, status=status.HTTP_400_BAD_REQUEST)
+
+        digit_count = sum(1 for c in new_password if c.isdigit())
+        if digit_count < 3:
+            return Response({'error': 'Password must contain at least 3 numbers'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            reset_token = TechnicianPasswordResetToken.objects.get(token=token)
+
+            if reset_token.isUsed:
+                return Response({'error': 'Token has already been used'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if timezone.now() > reset_token.expiresAt:
+                return Response({'error': 'Token has expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update password
+            technician = reset_token.technician
+            technician.technicianPassword = make_password(new_password)
+            technician.save()
+
+            # Mark token as used
+            reset_token.isUsed = True
+            reset_token.save()
+
+            return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
+
+        except TechnicianPasswordResetToken.DoesNotExist:
+            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='coordinator-reset-password')
+    def coordinator_reset_password(self, request, pk=None):
+        """
+        Coordinator resets technician password to default "password123".
+        """
+        technician = get_object_or_404(Technicians.objects.all(), pk=pk)
+
+        default_password = "password123"
+        technician.technicianPassword = make_password(default_password)
+        technician.save()
+
+        # Optionally send email notification
+        try:
+            application = TechnicianHiringApplication.objects.filter(createdTechnician=technician).first()
+            if application and application.applicantEmail:
+                subject = "Password Reset - AirServe"
+                body = f"""Dear {technician.technicianName},
+
+Your password has been reset by the coordinator.
+
+Your new temporary password is: {default_password}
+
+Please log in and change your password.
+
+Best regards,
+AirServe Team"""
+                sendMail.send_email(subject, body, application.applicantEmail, 'AirServe')
+        except Exception as e:
+            print(f"Failed to send password reset notification: {e}")
+
+        return Response({
+            'message': f'Password for {technician.technicianName} has been reset to default',
+            'technicianName': technician.technicianName
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='toggle-active-status')
+    def toggle_active_status(self, request, pk=None):
+        """
+        Toggle technician's active/inactive status (for firing/rehiring).
+        Expects: { reason: "optional reason for deactivation" }
+        """
+        technician = get_object_or_404(Technicians.objects.all(), pk=pk)
+        reason = request.data.get('reason', '')
+
+        if technician.isActive:
+            # Deactivating technician
+            technician.isActive = False
+            technician.deactivatedAt = timezone.now()
+            technician.deactivationReason = reason
+            technician.save()
+
+            # Send notification email
+            try:
+                application = TechnicianHiringApplication.objects.filter(createdTechnician=technician).first()
+                if application and application.applicantEmail:
+                    subject = "Account Status Update - AirServe"
+                    body = f"""Dear {technician.technicianName},
+
+Your technician account has been deactivated.
+
+If you have any questions, please contact your coordinator.
+
+Best regards,
+AirServe Team"""
+                    sendMail.send_email(subject, body, application.applicantEmail, 'AirServe')
+            except Exception as e:
+                print(f"Failed to send deactivation notification: {e}")
+
+            return Response({
+                'message': f'{technician.technicianName} has been deactivated',
+                'technicianName': technician.technicianName,
+                'isActive': False
+            }, status=status.HTTP_200_OK)
+        else:
+            # Reactivating technician
+            technician.isActive = True
+            technician.deactivatedAt = None
+            technician.deactivationReason = None
+            technician.save()
+
+            # Send notification email
+            try:
+                application = TechnicianHiringApplication.objects.filter(createdTechnician=technician).first()
+                if application and application.applicantEmail:
+                    subject = "Account Reactivated - AirServe"
+                    body = f"""Dear {technician.technicianName},
+
+Your technician account has been reactivated. You can now log in and resume work.
+
+Best regards,
+AirServe Team"""
+                    sendMail.send_email(subject, body, application.applicantEmail, 'AirServe')
+            except Exception as e:
+                print(f"Failed to send reactivation notification: {e}")
+
+            return Response({
+                'message': f'{technician.technicianName} has been reactivated',
+                'technicianName': technician.technicianName,
+                'isActive': True
+            }, status=status.HTTP_200_OK)

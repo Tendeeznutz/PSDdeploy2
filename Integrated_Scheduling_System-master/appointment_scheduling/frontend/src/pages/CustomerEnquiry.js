@@ -105,7 +105,7 @@ const CustomerEnquiry = () => {
                         </button>
                         {/*back button*/}
                         <Button
-                            href="/CoordinatorHome"
+                            href="/coordinator/home"
                             type="primary"
                             className="w-full mt-4"
                         >

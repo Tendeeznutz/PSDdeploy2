@@ -128,7 +128,7 @@ function CoordinatorAppointmentUpdate() {
 
             message.success('Appointment updated successfully');
             setTimeout(() => {
-                window.location.href = '/CoordinatorHome';
+                window.location.href = '/coordinator/home';
             }, 1000);
         } catch (error) {
             console.error('Error updating appointment:', error);
@@ -301,7 +301,7 @@ function CoordinatorAppointmentUpdate() {
                         <Button type="primary" onClick={handleUpdate}>
                             Save Changes
                         </Button>
-                        <Button href={'/CoordinatorHome'}>
+                        <Button href={'/coordinator/home'}>
                             Back
                         </Button>
                     </div>

@@ -1,10 +1,9 @@
-import os
-import random
 from collections import defaultdict
 from typing import Any
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
+from geopy.distance import distance as geo_distance
 
 from .models import Appointments, Customers, Technicians, TechnicianAvailability
 from .sg_geo.src import geo_onemap
@@ -26,26 +25,54 @@ def get_search_range(travel_type) -> int:
     return 30000
 
 
-def get_nearby_technicians(customer_id) -> list[Any]:
+def get_nearby_technicians(customer_id, aircon_brand=None) -> list[Any]:
     """
-    get list of available technicians that can service the customer
-    :return: list of available technicianIDs, number of times the search range is increased
+    Get list of available technicians that can service the customer.
+    Sorted by: specialists first (by distance), then non-specialists (by distance).
+    Only considers active and available technicians.
+    :param customer_id: ID of the customer
+    :param aircon_brand: AC brand requested (e.g., 'Daikin'). If provided, specialists are prioritized.
+    :return: list of available technicianIDs sorted by specialization priority then distance
     """
     nearby_technicians = []
     customer = Customers.objects.get(id=customer_id)
     customer_location = customer.customerLocation
 
-    for technician in Technicians.objects.all():
+    if not customer_location or customer_location == '0,0':
+        return []
+
+    customer_coords = tuple(customer_location.split(','))
+
+    for technician in Technicians.objects.filter(isActive=True, technicianStatus='1'):
         technician_location = technician.technicianLocation
+        if not technician_location or technician_location == '0,0':
+            continue
+
         travel_type = technician.technicianTravelType
         if geo_onemap.is_in_range(technician_location, customer_location, get_search_range(travel_type), travel_type):
-            nearby_technicians.append(str(technician.id))
+            # Calculate straight-line distance for sorting (fast, no API call)
+            try:
+                tech_coords = tuple(technician_location.split(','))
+                dist_meters = geo_distance(tech_coords, customer_coords).meters
+            except Exception:
+                dist_meters = float('inf')
+
+            # Check if technician specializes in the requested brand
+            is_specialist = False
+            if aircon_brand and technician.specializations:
+                is_specialist = aircon_brand in technician.specializations
+
+            nearby_technicians.append((str(technician.id), dist_meters, is_specialist))
+
+    # Sort: specialists first (is_specialist=True sorts before False when negated), then by distance
+    nearby_technicians.sort(key=lambda x: (not x[2], x[1]))
 
     if len(nearby_technicians) == 0:
         # TODO: send email to coordinator to inform that no technicians are available
         pass
 
-    return nearby_technicians
+    # Return just the IDs, sorted by specialization priority then distance
+    return [tech_id for tech_id, _, _ in nearby_technicians]
 
 
 def find_common_timerange(appointments) -> list[Any]:
@@ -167,42 +194,33 @@ def is_slot_available(appointment_start_time, appointment_end_time, technician_a
 
 
 def get_technician_to_assign(nearby_technicians, appointment_start_time, appointment_end_time, current_technician_id=None, current_appointment=None) -> Technicians.id:
-    # if only one technician, check if the technician is available and return the technician
-    if len(nearby_technicians) == 1:
-        appointment = Appointments.objects.filter(technicianId=nearby_technicians[0])
-        if current_appointment is not None and current_appointment in appointment:
-            appointment = [appointment for appointment in appointment if appointment != current_appointment]
-        if is_slot_available(appointment_start_time, appointment_end_time, appointment, technician_id=nearby_technicians[0]):
-            return nearby_technicians[0]
-        else:
-            # TODO: send email to coordinator to inform that no technicians are available
-            return None
-    else:
-        # else, filter the available technicians from the nearby_technicians list, and return the technician with the least number of appointments;
-        # if there are more than one technician with the least number of appointments, select by random
-        available_technicians = list()
-        for technician in nearby_technicians:
-            technician_appointments = Appointments.objects.filter(technicianId=technician)
-            if current_appointment is not None and current_appointment in technician_appointments:
-                technician_appointments = [appointment for appointment in technician_appointments if
-                                           appointment != current_appointment]
+    """
+    Assign a technician from the nearby_technicians list (already sorted by distance, closest first).
+    Picks the closest available technician for the given time slot.
+    If current_technician_id is provided and still available, keeps the current assignment.
+    """
+    if len(nearby_technicians) == 0:
+        return None
 
-            if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=technician):
-                available_technicians.append(tuple((technician, len(technician_appointments))))
-        if len(available_technicians) == 0:
-            # TODO: send email to coordinator to inform that no technicians are available
-            return None
-        elif len(available_technicians) == 1:
-            return available_technicians[0][0]
-        elif current_technician_id is not None:
-            if current_technician_id in [technician[0] for technician in available_technicians]:
-                return current_technician_id
-        else:
-            min_appointments = min(available_technicians, key=lambda x: x[1])[1]
-            available_technicians = [technician for technician in available_technicians if
-                                     technician[1] == min_appointments]
-            index = random.randint(0, len(available_technicians) - 1)
-            return available_technicians[index][0]
+    # If updating an existing appointment and current technician is still available, keep them
+    if current_technician_id is not None and current_technician_id in nearby_technicians:
+        technician_appointments = Appointments.objects.filter(technicianId=current_technician_id)
+        if current_appointment is not None and current_appointment in technician_appointments:
+            technician_appointments = [appt for appt in technician_appointments if appt != current_appointment]
+        if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=current_technician_id):
+            return current_technician_id
+
+    # Iterate through technicians in distance order (closest first) and return the first available
+    for technician in nearby_technicians:
+        technician_appointments = Appointments.objects.filter(technicianId=technician)
+        if current_appointment is not None and current_appointment in technician_appointments:
+            technician_appointments = [appt for appt in technician_appointments if appt != current_appointment]
+
+        if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=technician):
+            return technician
+
+    # No technicians available for this time slot
+    return None
 
 
 def get_available_time_slots(technician_id, date_str, duration_hours=1):

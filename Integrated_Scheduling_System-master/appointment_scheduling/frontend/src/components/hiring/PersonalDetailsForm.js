@@ -7,13 +7,19 @@ import axios from 'axios';
 const { TextArea } = Input;
 const { Option } = Select;
 
-function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNextTab }) {
+const COORDINATOR_API = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/hiring-applications`;
+const PUBLIC_API = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications`;
+
+function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNextTab, isSelfApply = false }) {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [confirmChecked, setConfirmChecked] = useState(false);
     const [medicalFitChecked, setMedicalFitChecked] = useState(false);
     const [fileList, setFileList] = useState([]);
     const [photoList, setPhotoList] = useState([]);
+    const [nricFrontList, setNricFrontList] = useState([]);
+    const [nricBackList, setNricBackList] = useState([]);
+    const [drivingLicenseList, setDrivingLicenseList] = useState([]);
     const navigate = useNavigate();
 
     const handleFileChange = ({ fileList: newFileList }) => {
@@ -38,6 +44,38 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
         }
     };
 
+    const handleNricFrontChange = ({ fileList: newFileList }) => {
+        setNricFrontList(newFileList);
+        if (newFileList.length > 0) {
+            const file = newFileList[0].originFileObj;
+            updateApplicationData({ nricPhotoFront: file });
+        }
+    };
+
+    const handleNricBackChange = ({ fileList: newFileList }) => {
+        setNricBackList(newFileList);
+        if (newFileList.length > 0) {
+            const file = newFileList[0].originFileObj;
+            updateApplicationData({ nricPhotoBack: file });
+        }
+    };
+
+    const handleDrivingLicenseChange = ({ fileList: newFileList }) => {
+        setDrivingLicenseList(newFileList);
+        if (newFileList.length > 0) {
+            const file = newFileList[0].originFileObj;
+            updateApplicationData({
+                drivingLicense: file,
+                drivingLicenseFileName: file.name
+            });
+        } else {
+            updateApplicationData({
+                drivingLicense: null,
+                drivingLicenseFileName: null
+            });
+        }
+    };
+
     const handleSubmit = async (values) => {
         if (!confirmChecked) {
             message.error('Please confirm that all information is correct');
@@ -49,59 +87,98 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
             return;
         }
 
+        if (!applicationData.nricPhotoFront) {
+            message.error('Please upload NRIC front photo');
+            return;
+        }
+
+        if (!applicationData.nricPhotoBack) {
+            message.error('Please upload NRIC back photo');
+            return;
+        }
+
+        if (!applicationData.drivingLicense) {
+            message.error('Please upload driving license');
+            return;
+        }
+
         setLoading(true);
         try {
-            const formData = {
-                applicantName: values.applicantName,
-                nric: values.nric,
-                citizenship: values.citizenship,
-                race: values.race,
-                languagesSpoken: values.languagesSpoken ? values.languagesSpoken.join(', ') : '',
-                applicantAddress: values.applicantAddress,
-                applicantPostalCode: values.applicantPostalCode,
-                applicantPhone: values.applicantPhone,
-                applicantEmail: values.applicantEmail,
-                workExperience: values.workExperience,
-                previousEmployer: values.previousEmployer || null,
-                lastEmployedYear: values.lastEmployedYear ? parseInt(values.lastEmployedYear) : null,
-                lastDrawnSalary: values.lastDrawnSalary ? parseFloat(values.lastDrawnSalary) : null,
-                nextOfKinName: values.nextOfKinName,
-                nextOfKinContact: values.nextOfKinContact,
-                nextOfKinRelationship: values.nextOfKinRelationship,
-                isMedicallyFit: medicalFitChecked,
-                resumeFileName: applicationData.resumeFileName,
-                profilePhotoFileName: applicationData.profilePhotoFileName,
-                hasCriminalRecord: values.hasCriminalRecord,
-                criminalRecordDetails: values.hasCriminalRecord ? values.criminalRecordDetails : '',
-                personalDetailsConfirmed: true
-            };
+            const data = new FormData();
+            data.append('applicantName', values.applicantName);
+            data.append('nric', values.nric);
+            data.append('citizenship', values.citizenship);
+            data.append('race', values.race);
+            data.append('languagesSpoken', values.languagesSpoken ? values.languagesSpoken.join(', ') : '');
+            data.append('applicantAddress', values.applicantAddress);
+            data.append('applicantPostalCode', values.applicantPostalCode);
+            data.append('applicantPhone', values.applicantPhone);
+            data.append('applicantEmail', values.applicantEmail);
+            data.append('workExperience', values.workExperience);
+            data.append('specializations', JSON.stringify(values.specializations || []));
+            data.append('previousEmployer', values.previousEmployer || '');
+            data.append('lastEmployedYear', values.lastEmployedYear ? values.lastEmployedYear.toString() : '');
+            data.append('lastDrawnSalary', values.lastDrawnSalary ? values.lastDrawnSalary.toString() : '');
+            data.append('nextOfKinName', values.nextOfKinName);
+            data.append('nextOfKinContact', values.nextOfKinContact);
+            data.append('nextOfKinRelationship', values.nextOfKinRelationship);
+            data.append('isMedicallyFit', medicalFitChecked);
+            data.append('hasCriminalRecord', values.hasCriminalRecord);
+            data.append('criminalRecordDetails', values.hasCriminalRecord ? values.criminalRecordDetails : '');
+            data.append('personalDetailsConfirmed', true);
+
+            if (applicationData.resumeFile) {
+                data.append('resumeFile', applicationData.resumeFile);
+            }
+            if (applicationData.resumeFileName) {
+                data.append('resumeFileName', applicationData.resumeFileName);
+            }
+            if (applicationData.profilePhoto) {
+                data.append('profilePhoto', applicationData.profilePhoto);
+            }
+            if (applicationData.profilePhotoFileName) {
+                data.append('profilePhotoFileName', applicationData.profilePhotoFileName);
+            }
+            data.append('nricPhotoFront', applicationData.nricPhotoFront);
+            data.append('nricPhotoBack', applicationData.nricPhotoBack);
+
+            if (applicationData.drivingLicense) {
+                data.append('drivingLicense', applicationData.drivingLicense);
+            }
+            if (applicationData.drivingLicenseFileName) {
+                data.append('drivingLicenseFileName', applicationData.drivingLicenseFileName);
+            }
+
+            if (isSelfApply) {
+                data.append('applicationSource', 'self_applied');
+            }
+
+            const apiBase = isSelfApply ? PUBLIC_API : COORDINATOR_API;
 
             // Create the application
-            const response = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications/`,
-                formData
-            );
+            const response = await axios.post(`${apiBase}/`, data);
 
             message.success('Personal details submitted successfully!');
 
             // Update application data with the response
             updateApplicationData({
-                ...formData,
+                ...values,
                 id: response.data.id,
-                applicationStatus: 'personal_details'
+                applicationStatus: 'personal_details',
+                personalDetailsConfirmed: true
             });
 
             // Confirm personal details to move to next stage
-            await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications/${response.data.id}/confirm-personal-details/`
-            );
+            await axios.post(`${apiBase}/${response.data.id}/confirm-personal-details/`);
 
             updateApplicationData({ personalDetailsConfirmed: true, applicationStatus: 'bank_info' });
             moveToNextTab();
 
         } catch (error) {
             console.error('Error submitting personal details:', error);
-            message.error(error.response?.data?.nric?.[0] || 'Failed to submit personal details. Please check all fields.');
+            const errData = error.response?.data;
+            const errMsg = errData?.nricPhotoFront?.[0] || errData?.nricPhotoBack?.[0] || errData?.nric?.[0] || 'Failed to submit personal details. Please check all fields.';
+            message.error(errMsg);
         } finally {
             setLoading(false);
         }
@@ -134,6 +211,61 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                     ]}
                 >
                     <Input placeholder="e.g., S1234567A" size="large" />
+                </Form.Item>
+
+                <Form.Item
+                    label="NRIC Front Photo"
+                    required
+                >
+                    <Upload
+                        beforeUpload={() => false}
+                        onChange={handleNricFrontChange}
+                        fileList={nricFrontList}
+                        maxCount={1}
+                        accept=".jpg,.jpeg,.png"
+                        listType="picture"
+                    >
+                        <Button icon={<UploadOutlined />} size="large">
+                            Upload NRIC Front (JPG/PNG) *
+                        </Button>
+                    </Upload>
+                </Form.Item>
+
+                <Form.Item
+                    label="NRIC Back Photo"
+                    required
+                >
+                    <Upload
+                        beforeUpload={() => false}
+                        onChange={handleNricBackChange}
+                        fileList={nricBackList}
+                        maxCount={1}
+                        accept=".jpg,.jpeg,.png"
+                        listType="picture"
+                    >
+                        <Button icon={<UploadOutlined />} size="large">
+                            Upload NRIC Back (JPG/PNG) *
+                        </Button>
+                    </Upload>
+                </Form.Item>
+
+                <Form.Item
+                    label="Driving License"
+                    required
+                    extra="Please upload a valid driving license"
+                >
+                    <Upload
+                        beforeUpload={() => false}
+                        onChange={handleDrivingLicenseChange}
+                        fileList={drivingLicenseList}
+                        maxCount={1}
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        listType="picture"
+                    >
+                        <Button icon={<UploadOutlined />} size="large">
+                            Upload Driving License (JPG/PNG/PDF) *
+                        </Button>
+                    </Upload>
                 </Form.Item>
 
                 <Form.Item
@@ -233,6 +365,21 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                         maxLength={2000}
                         showCount
                     />
+                </Form.Item>
+
+                <Form.Item
+                    label="AC Brand Specializations"
+                    name="specializations"
+                    rules={[{ required: true, message: 'Please select at least one AC brand you specialize in' }]}
+                    extra="Select all AC brands you have experience servicing"
+                >
+                    <Checkbox.Group>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {['Daikin', 'Mitsubishi', 'Panasonic', 'LG', 'Samsung', 'Fujitsu', 'Sharp', 'Toshiba', 'Hitachi', 'York', 'Other'].map(brand => (
+                                <Checkbox key={brand} value={brand}>{brand}</Checkbox>
+                            ))}
+                        </div>
+                    </Checkbox.Group>
                 </Form.Item>
 
                 <Form.Item
@@ -424,17 +571,17 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
                     <Space className="w-full" direction="horizontal" size="middle">
                         <Button
                             icon={<ArrowLeftOutlined />}
-                            onClick={() => navigate('/coordinatorHome')}
+                            onClick={() => navigate(isSelfApply ? '/login' : '/coordinator/home')}
                             size="large"
                         >
-                            Back to Dashboard
+                            {isSelfApply ? 'Back to Login' : 'Back to Dashboard'}
                         </Button>
                         <Button
                             type="primary"
                             htmlType="submit"
                             loading={loading}
                             size="large"
-                            disabled={!confirmChecked || !medicalFitChecked}
+                            disabled={!confirmChecked || !medicalFitChecked || !applicationData.nricPhotoFront || !applicationData.nricPhotoBack || !applicationData.drivingLicense}
                             style={{ flex: 1 }}
                         >
                             Confirm and Proceed to Bank Information

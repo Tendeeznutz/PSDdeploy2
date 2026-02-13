@@ -9,7 +9,8 @@ import uuid
 
 from .format_response import include_all_info
 from ..scheduling_algo import *
-from ..models import Appointments, Customers, Technicians, CustomerAirconDevices, Messages
+from ..sg_geo.src import geo_onemap
+from ..models import Appointments, Customers, Technicians, CustomerAirconDevices, Messages, AppointmentRating
 from ..serializers import AppointmentSerializer
 from ..utils import sendMail
 from ..utils.notifications import send_appointment_confirmation, send_appointment_cancellation
@@ -17,6 +18,26 @@ from ..penalty_utils import check_and_apply_penalty, get_penalty_summary
 
 # Pricing constants (matching frontend)
 SERVICE_COST_PER_AIRCON = 50  # $50 per aircon serviced
+
+
+def extract_aircon_brand(aircon_to_service):
+    """
+    Extract the aircon brand from a list of CustomerAirconDevice IDs.
+    Returns the brand of the first device, or None if not determinable.
+    """
+    if not aircon_to_service:
+        return None
+    try:
+        device = CustomerAirconDevices.objects.get(id=aircon_to_service[0])
+        # Try catalog first
+        if device.airconCatalogId:
+            return device.airconCatalogId.airconBrand
+        # Parse from airconName (format: "Brand - Model (Booking ...)")
+        if device.airconName and ' - ' in device.airconName:
+            return device.airconName.split(' - ')[0].strip()
+    except CustomerAirconDevices.DoesNotExist:
+        pass
+    return None
 TRAVEL_FEE = 10  # $10 standard travel fee
 
 
@@ -214,7 +235,7 @@ AirServe Team
 
         serialized_data = serializer.data
         serialized_data_list = [dict(item) for item in serialized_data]
-        modified_data_list = [include_all_info(data) for data in serialized_data_list]
+        modified_data_list = [include_all_info(data, request) for data in serialized_data_list]
 
         return Response(modified_data_list, status=200)
 
@@ -247,7 +268,8 @@ AirServe Team
 
     # POST request
     def create(self, request, *args, **kwargs):
-        nearby_technicians = get_nearby_technicians(request.data['customerId'])
+        aircon_brand = extract_aircon_brand(request.data.get('airconToService', []))
+        nearby_technicians = get_nearby_technicians(request.data['customerId'], aircon_brand=aircon_brand)
         request.data['appointmentEndTime'] = self.get_appointment_end_time(request.data['appointmentStartTime'],
                                                                            request.data['airconToService'])
         request.data['technicianId'] = get_technician_to_assign(nearby_technicians,
@@ -279,7 +301,7 @@ AirServe Team
                 print(f"Failed to send receipt to mailbox: {e}")
 
             serializer_data = dict(serializer.data)
-            modified_data = include_all_info(serializer_data)
+            modified_data = include_all_info(serializer_data, request)
             return Response(modified_data, status=201)
         return Response(serializer.errors, status=400)
 
@@ -288,7 +310,7 @@ AirServe Team
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
         serializer = AppointmentSerializer(item)
         serializer_data = dict(serializer.data)
-        modified_data = include_all_info(serializer_data)
+        modified_data = include_all_info(serializer_data, request)
         return Response(modified_data)
 
     def update(self, request, pk=None):
@@ -298,7 +320,7 @@ AirServe Team
         if serializer.is_valid():
             serializer.save()
             serializer_data = dict(serializer.data)
-            modified_data = include_all_info(serializer_data)
+            modified_data = include_all_info(serializer_data, request)
             return Response(modified_data)
         return Response(status=400)
 
@@ -370,7 +392,9 @@ AirServe Team
 
         # Only auto-assign technician if not manually assigned and time/aircons are being changed
         if not manual_technician_assignment:
-            nearby_technicians = get_nearby_technicians(item.customerId.id)
+            aircon_ids = request.data.get('airconToService', item.airconToService or [])
+            aircon_brand = extract_aircon_brand(aircon_ids)
+            nearby_technicians = get_nearby_technicians(item.customerId.id, aircon_brand=aircon_brand)
 
             if nearby_technicians is None:
                 if request.data.get('appointmentStartTime') is not None:
@@ -440,7 +464,8 @@ AirServe Team
                     # Check and apply penalty if customer is cancelling
                     penalty_result = None
                     if cancelled_by == 'customer':
-                        penalty_result = check_and_apply_penalty(customer.id)
+                        appt_start = getattr(updated_appointment, 'appointmentStartTime', None)
+                        penalty_result = check_and_apply_penalty(customer.id, appointment_start_time_unix=appt_start)
                         print(f"Penalty check result: {penalty_result}")
 
                     send_appointment_cancellation(
@@ -453,10 +478,18 @@ AirServe Team
 
                     # Send penalty notification to customer if penalty was applied
                     if penalty_result and penalty_result['penalty_applied']:
+                        penalty_reasons = []
+                        if penalty_result.get('short_notice_penalty'):
+                            penalty_reasons.append("Short-notice cancellation (within 30 mins of appointment)")
+                        if penalty_result.get('monthly_limit_penalty'):
+                            penalty_reasons.append("Exceeded monthly cancellation limit (3 free per month)")
+                        reasons_text = "\n".join(f"• {r}" for r in penalty_reasons)
                         penalty_message = f"""
 Dear {customer.customerName},
 
-Your appointment has been cancelled. However, you have exceeded the monthly cancellation limit of 5 free cancellations.
+Your appointment has been cancelled. The following penalty(ies) have been applied:
+
+{reasons_text}
 
 PENALTY NOTICE:
 ================
@@ -466,7 +499,7 @@ Total pending penalty: ${penalty_result['total_pending_penalty']}
 
 This penalty fee will be added to your next payment.
 
-To avoid future penalties, please ensure you only cancel appointments when absolutely necessary.
+To avoid future penalties: cancel at least 30 minutes before your appointment, and limit cancellations to 3 per month.
 
 If you have any questions, please contact us.
 
@@ -490,7 +523,7 @@ AirServe Team
                     print(f"Failed to send cancellation email: {e}")
 
             serializer_data = dict(serializer.data)
-            modified_data = include_all_info(serializer_data)
+            modified_data = include_all_info(serializer_data, request)
             print(f"Update successful, returning data")
             return Response(modified_data, status=200)
 
@@ -502,6 +535,90 @@ AirServe Team
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
+
+    @action(detail=True, methods=['post'], url_path='rate-technician')
+    def rate_technician(self, request, pk=None):
+        """
+        Customer rates technician (1-5 stars). Call from customer context.
+        Body: { rating: 1-5, customerId: uuid }
+        """
+        appointment = get_object_or_404(Appointments.objects.all(), pk=pk)
+        customer_id = request.data.get('customerId')
+        rating = request.data.get('rating')
+        if not customer_id:
+            return Response({"error": "customerId is required"}, status=400)
+        if rating is None:
+            return Response({"error": "rating is required (1-5)"}, status=400)
+        try:
+            rating = int(rating)
+        except (TypeError, ValueError):
+            return Response({"error": "rating must be an integer 1-5"}, status=400)
+
+        if str(appointment.customerId.id) != str(customer_id):
+            return Response({"error": "You can only rate appointments that belong to you."}, status=403)
+        if appointment.appointmentStatus != '3':
+            return Response({"error": "You can only rate completed appointments."}, status=400)
+        if not appointment.technicianId:
+            return Response({"error": "No technician was assigned to this appointment."}, status=400)
+        if not (1 <= rating <= 5):
+            return Response({"error": "Rating must be between 1 and 5."}, status=400)
+
+        existing = AppointmentRating.objects.filter(appointment=appointment, ratedBy='customer').first()
+        if existing:
+            return Response({"error": "You have already rated this technician for this appointment."}, status=400)
+
+        from decimal import Decimal
+        technician = appointment.technicianId
+        old_avg = float(technician.technicianRating)
+        old_count = technician.technicianRatingCount
+        new_count = old_count + 1
+        new_avg = (old_avg * old_count + rating) / new_count
+        technician.technicianRating = Decimal(str(round(new_avg, 2)))
+        technician.technicianRatingCount = new_count
+        technician.save()
+        AppointmentRating.objects.create(appointment=appointment, ratedBy='customer', rating=rating)
+        return Response({"technicianRating": float(technician.technicianRating), "technicianRatingCount": technician.technicianRatingCount}, status=200)
+
+    @action(detail=True, methods=['post'], url_path='rate-customer')
+    def rate_customer(self, request, pk=None):
+        """
+        Technician rates customer (1-5 stars). Call from technician context.
+        Body: { rating: 1-5, technicianId: uuid }
+        """
+        appointment = get_object_or_404(Appointments.objects.all(), pk=pk)
+        technician_id = request.data.get('technicianId')
+        rating = request.data.get('rating')
+        if not technician_id:
+            return Response({"error": "technicianId is required"}, status=400)
+        if rating is None:
+            return Response({"error": "rating is required (1-5)"}, status=400)
+        try:
+            rating = int(rating)
+        except (TypeError, ValueError):
+            return Response({"error": "rating must be an integer 1-5"}, status=400)
+
+        if not appointment.technicianId or str(appointment.technicianId.id) != str(technician_id):
+            return Response({"error": "You can only rate appointments assigned to you."}, status=403)
+        if appointment.appointmentStatus != '3':
+            return Response({"error": "You can only rate completed appointments."}, status=400)
+        if not (1 <= rating <= 5):
+            return Response({"error": "Rating must be between 1 and 5."}, status=400)
+
+        existing = AppointmentRating.objects.filter(appointment=appointment, ratedBy='technician').first()
+        if existing:
+            return Response({"error": "You have already rated this customer for this appointment."}, status=400)
+
+        from decimal import Decimal
+        customer = appointment.customerId
+        old_avg = float(customer.customerRating)
+        old_count = customer.ratingCount
+        new_count = old_count + 1
+        new_avg = (old_avg * old_count + rating) / new_count
+        customer.customerRating = Decimal(str(round(new_avg, 2)))
+        customer.ratingCount = new_count
+        customer.save()
+        AppointmentRating.objects.create(appointment=appointment, ratedBy='technician', rating=rating)
+        return Response({"customerRating": float(customer.customerRating), "ratingCount": customer.ratingCount}, status=200)
 
     @action(detail=False, methods=['get'], url_path='penalty-status')
     def penalty_status(self, request):
@@ -543,6 +660,7 @@ AirServe Team
             postal_code = request.data.get('customerPostalCode')
             aircon_brand = request.data.get('airconBrand')
             aircon_model = request.data.get('airconModel', 'Standard')
+            number_of_units = int(request.data.get('numberOfUnits', 1))
             appointment_time = request.data.get('appointmentStartTime')
             payment_method = request.data.get('paymentMethod', 'cash')
 
@@ -558,8 +676,15 @@ AirServe Team
             ).first()
 
             if existing_customer:
-                # Use existing customer
+                # Use existing customer but update their details
                 customer = existing_customer
+                customer.customerName = name
+                customer.customerPhone = phone
+                customer.customerEmail = email
+                customer.customerAddress = address
+                customer.customerPostalCode = postal_code
+                customer.customerLocation = geo_onemap.get_location_from_postal(postal_code)
+                customer.save()
             else:
                 # Create temporary guest customer with a default password
                 customer = Customers.objects.create(
@@ -568,22 +693,23 @@ AirServe Team
                     customerEmail=email,
                     customerAddress=address,
                     customerPostalCode=postal_code,
-                    customerLocation='',  # Will be populated by get_lat_long if needed
+                    customerLocation=geo_onemap.get_location_from_postal(postal_code),
                     customerPassword='GUEST_ACCOUNT_' + str(uuid.uuid4())[:8]  # Random password for guest
                 )
 
             # Create a temporary aircon device for this booking
+            # Add timestamp to make the name unique for each booking
+            booking_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             aircon_device = CustomerAirconDevices.objects.create(
                 customerId=customer,
-                airconName=f"{aircon_brand} - {aircon_model}",
-                airconBrand=aircon_brand,
-                airconModel=aircon_model,
-                isActive=True
+                airconName=f"{aircon_brand} - {aircon_model} (Booking {booking_timestamp})",
+                numberOfUnits=number_of_units,
+                airconType='split'  # Default type for guest bookings
             )
 
-            # Get nearby technicians and find available slot
-            nearby_technicians = get_nearby_technicians(customer.id)
-            appointment_end_time = appointment_time + 3600  # 1 hour per aircon
+            # Get nearby technicians and find available slot (prioritize specialists for this brand)
+            nearby_technicians = get_nearby_technicians(customer.id, aircon_brand=aircon_brand)
+            appointment_end_time = appointment_time + (3600 * number_of_units)  # 1 hour per aircon unit
 
             # Try to assign a technician
             assigned_technician = None
@@ -605,32 +731,46 @@ AirServe Team
                 # Assign to first technician if no one is perfectly available
                 assigned_technician = Technicians.objects.get(id=nearby_technicians[0])
 
-            # Calculate travel distance
-            travel_distance = 0
-            if assigned_technician:
-                try:
-                    travel_distance = get_distance(customer.id, assigned_technician.id)
-                except Exception as e:
-                    print(f"Error calculating distance: {e}")
-                    travel_distance = 5  # Default 5km
-
             # Create the appointment
+            # Set status to '2' (Confirmed) if technician is assigned, otherwise '1' (Pending)
+            appointment_status = '2' if assigned_technician else '1'
             appointment = Appointments.objects.create(
                 customerId=customer,
                 technicianId=assigned_technician,
                 appointmentStartTime=appointment_time,
                 appointmentEndTime=appointment_end_time,
-                appointmentStatus='1',  # Pending coordinator approval
-                paymentMethod=payment_method,
-                travelDistance=travel_distance
+                appointmentStatus=appointment_status,
+                paymentMethod=payment_method
             )
 
-            # Link the aircon device to the appointment
-            appointment.airconToService.add(aircon_device)
+            # Link the aircon device to the appointment (airconToService is a JSONField list of IDs)
+            appointment.airconToService = [str(aircon_device.id)]
+            appointment.save()
 
             # Send email confirmation directly to guest's email
             appointment_datetime = datetime.fromtimestamp(appointment_time)
             formatted_time = appointment_datetime.strftime('%B %d, %Y at %I:%M %p')
+
+            # Calculate costs
+            service_fee = 50 * number_of_units  # $50 per unit
+            travel_fee = 10
+            total_cost = service_fee + travel_fee
+
+            # Build technician info for customer email
+            technician_note = ""
+            if assigned_technician:
+                technician_note = f"""
+ASSIGNED TECHNICIAN
+===================
+Name: {assigned_technician.technicianName}
+Phone: {assigned_technician.technicianPhone}
+
+Your assigned technician will contact you shortly to confirm the appointment details and discuss any specific requirements for the service.
+"""
+            else:
+                technician_note = """
+NOTE: A technician will be assigned to your appointment shortly. Once assigned, they will contact you to confirm the details.
+"""
 
             email_subject = f"Booking Confirmation - AirServe Appointment"
             email_body = f"""
@@ -638,25 +778,24 @@ Dear {name},
 
 Thank you for booking with AirServe!
 
-Your appointment has been confirmed and is pending coordinator approval.
+Your appointment has been {'confirmed' if assigned_technician else 'received and is pending technician assignment'}.
 
 APPOINTMENT DETAILS
 ===================
 Booking Reference: {str(appointment.id)[:8].upper()}
 Date & Time: {formatted_time}
 Aircon: {aircon_brand} - {aircon_model}
+Number of Units: {number_of_units}
 Address: {address}, Singapore {postal_code}
-
+{technician_note}
 COST BREAKDOWN
 ==============
-Service Fee (1 aircon x $50):    $50.00
+Service Fee ({number_of_units} unit(s) x $50):  ${service_fee:.2f}
 Travel Fee:                       $10.00
 -------------------------------------------
-TOTAL AMOUNT:                     $60.00
+TOTAL AMOUNT:                     ${total_cost:.2f}
 
 Payment Method: {payment_method.replace('_', ' ').title()}
-
-A coordinator will review and approve your appointment shortly. You will receive further updates via email.
 
 If you have any questions, please contact us at support@airserve.com
 
@@ -666,15 +805,113 @@ Best regards,
 AirServe Team
 """
 
+            # Send confirmation email to customer
             try:
                 sendMail.send_email(email_subject, email_body, email, 'AirServe System')
-                print(f"Confirmation email sent to {email}")
+                print(f"Confirmation email sent to customer: {email}")
             except Exception as e:
-                print(f"Failed to send email: {e}")
+                print(f"Failed to send customer email: {e}")
+
+            # Send email notification to assigned technician
+            if assigned_technician and assigned_technician.technicianEmail:
+                tech_email_subject = f"New Appointment Assignment - {formatted_time}"
+                tech_email_body = f"""
+Dear {assigned_technician.technicianName},
+
+You have been assigned a new appointment. Please review the details below and contact the customer to confirm.
+
+APPOINTMENT DETAILS
+===================
+Booking Reference: {str(appointment.id)[:8].upper()}
+Date & Time: {formatted_time}
+Status: Confirmed
+
+CUSTOMER INFORMATION
+====================
+Name: {name}
+Phone: {phone}
+Email: {email}
+Address: {address}, Singapore {postal_code}
+
+SERVICE DETAILS
+===============
+Aircon: {aircon_brand} - {aircon_model}
+Number of Units: {number_of_units}
+Estimated Duration: {number_of_units} hour(s)
+
+ACTION REQUIRED
+===============
+Please contact the customer to confirm the appointment and discuss any specific requirements.
+
+You can view this appointment in your technician dashboard.
+
+Best regards,
+AirServe Scheduling System
+"""
+                try:
+                    sendMail.send_email(tech_email_subject, tech_email_body, assigned_technician.technicianEmail, 'AirServe Assignments')
+                    print(f"Assignment email sent to technician: {assigned_technician.technicianEmail}")
+                except Exception as e:
+                    print(f"Failed to send technician email: {e}")
+
+            # Send notification email to coordinator(s)
+            try:
+                from ..models import Coordinators
+                coordinators = Coordinators.objects.all()
+
+                if assigned_technician:
+                    coord_email_subject = f"New Guest Booking - {name}"
+                    coord_status = "Confirmed - Technician Assigned"
+                    coord_action = f"Technician {assigned_technician.technicianName} has been automatically assigned."
+                else:
+                    coord_email_subject = f"[ACTION REQUIRED] New Guest Booking - No Technician Available"
+                    coord_status = "Pending - No Technician Assigned"
+                    coord_action = "ATTENTION: No technician could be automatically assigned. Please manually assign a technician to this appointment."
+
+                coord_email_body = f"""
+New guest booking received via the website.
+
+BOOKING STATUS
+==============
+Status: {coord_status}
+{coord_action}
+
+APPOINTMENT DETAILS
+===================
+Booking Reference: {str(appointment.id)[:8].upper()}
+Date & Time: {formatted_time}
+
+CUSTOMER INFORMATION
+====================
+Name: {name}
+Phone: {phone}
+Email: {email}
+Address: {address}, Singapore {postal_code}
+
+SERVICE DETAILS
+===============
+Aircon: {aircon_brand} - {aircon_model}
+Number of Units: {number_of_units}
+Payment Method: {payment_method.replace('_', ' ').title()}
+Estimated Cost: ${total_cost:.2f}
+
+Please review this booking in the coordinator dashboard.
+
+Best regards,
+AirServe Scheduling System
+"""
+                for coordinator in coordinators:
+                    try:
+                        sendMail.send_email(coord_email_subject, coord_email_body, coordinator.coordinatorEmail, 'AirServe Notifications')
+                        print(f"Notification email sent to coordinator: {coordinator.coordinatorEmail}")
+                    except Exception as e:
+                        print(f"Failed to send coordinator email to {coordinator.coordinatorEmail}: {e}")
+            except Exception as e:
+                print(f"Failed to notify coordinators: {e}")
 
             # Return appointment details
             serializer = AppointmentSerializer(appointment)
-            response_data = include_all_info(dict(serializer.data))
+            response_data = include_all_info(dict(serializer.data), request)
 
             return Response({
                 'message': 'Booking created successfully! A confirmation email has been sent.',

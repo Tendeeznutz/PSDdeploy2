@@ -282,9 +282,12 @@ Technicians perform the aircon servicing. **IMPORTANT: Technicians login with th
 
 | Name | Phone (Login) | Postal Code | Travel Type | Address |
 |------|---------------|-------------|-------------|---------|
-| Benjamin Loh | 92222221 | 520123 | Car (drive) | Block 500 Bishan Street 11 |
-| Wang Richie | 92222222 | 560123 | Bicycle (cycle) | Block 560 Ang Mo Kio Avenue 10 |
-| Timothy Neam | 92222223 | 640123 | Walk | Block 640 Jurong West Street 61 |
+| Benjamin Loh | 92222221 | 520123 | Own Vehicle | Block 500 Bishan Street 11 |
+
+**Available Travel Types:**
+- **Own Vehicle** - Technician uses their personal vehicle
+- **Company Vehicle** - Technician uses a company-provided vehicle
+- **Rental Van** - Technician uses a rented van for larger jobs
 
 **Login URL:** http://localhost:3000/technicianlogin
 
