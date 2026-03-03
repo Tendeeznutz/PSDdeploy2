@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Checkbox, Upload, message, Select, Card, Space } from 'antd';
 import { UploadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../../axiosConfig";
 
 const { TextArea } = Input;
 const { Option } = Select;
 
-const COORDINATOR_API = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/hiring-applications`;
-const PUBLIC_API = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications`;
+const COORDINATOR_API = `/api/coordinator/hiring-applications`;
+const PUBLIC_API = `/api/hiring-applications`;
 
 function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNextTab, isSelfApply = false }) {
     const [form] = Form.useForm();
@@ -156,7 +156,7 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
             const apiBase = isSelfApply ? PUBLIC_API : COORDINATOR_API;
 
             // Create the application
-            const response = await axios.post(`${apiBase}/`, data);
+            const response = await api.post(`${apiBase}/`, data);
 
             message.success('Personal details submitted successfully!');
 
@@ -169,7 +169,7 @@ function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNex
             });
 
             // Confirm personal details to move to next stage
-            await axios.post(`${apiBase}/${response.data.id}/confirm-personal-details/`);
+            await api.post(`${apiBase}/${response.data.id}/confirm-personal-details/`);
 
             updateApplicationData({ personalDetailsConfirmed: true, applicationStatus: 'bank_info' });
             moveToNextTab();

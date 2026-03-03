@@ -17,28 +17,22 @@ function InactivityTimer() {
 
     // Check if user is logged in (any type of user)
     const isLoggedIn = () => {
-        return localStorage.getItem('coordinators_email') ||
-               localStorage.getItem('customers_email') ||
-               localStorage.getItem('technicians_id');
+        return !!localStorage.getItem('access_token');
     };
 
-    // Determine user type and clear appropriate localStorage
+    // Clear all auth data on logout
     const logout = useCallback(() => {
-        if (localStorage.getItem('coordinators_email')) {
-            localStorage.removeItem('coordinators_email');
-            localStorage.removeItem('coordinators_id');
-            localStorage.removeItem('coordinators_name');
-        }
-        if (localStorage.getItem('customers_email')) {
-            localStorage.removeItem('customers_email');
-            localStorage.removeItem('customers_id');
-            localStorage.removeItem('customers_name');
-        }
-        if (localStorage.getItem('technicians_id')) {
-            localStorage.removeItem('technicians_id');
-            localStorage.removeItem('technicians_phone');
-            localStorage.removeItem('technicians_name');
-        }
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('coordinators_email');
+        localStorage.removeItem('coordinators_id');
+        localStorage.removeItem('coordinators_name');
+        localStorage.removeItem('customers_email');
+        localStorage.removeItem('customers_id');
+        localStorage.removeItem('customers_name');
+        localStorage.removeItem('technicians_id');
+        localStorage.removeItem('technicians_phone');
+        localStorage.removeItem('technicians_name');
         setShowWarning(false);
         navigate('/login');
     }, [navigate]);

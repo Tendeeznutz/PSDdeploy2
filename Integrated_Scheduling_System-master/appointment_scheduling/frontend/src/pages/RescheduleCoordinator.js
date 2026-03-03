@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import axios from 'axios';
+import api from "../axiosConfig";
 import DatePicker from 'react-datepicker';
 import { useNavigate } from 'react-router-dom';
 
@@ -22,7 +22,7 @@ function RescheduleCoordinator() {
     useEffect(() => {
         const fetchAirconData = async () => {
             try {
-                const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/aircons/?customerId=` + custId);
+                const response = await api.get(`/api/customers/aircons/?customerId=` + custId);
                 setAirconData(response.data);
             } catch (error) {
                 console.error('Error fetching aircon data:', error);
@@ -31,9 +31,7 @@ function RescheduleCoordinator() {
 
         const fetchAppointmentData = async () => {
             try {
-                const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/` + apptId + `/`);
-                // const reqDateTimeUrl = await axios.get(`http://127.0.0.1:8000/api/rescheduleappointment/getRescheduleRequest/?id=` + custId)
-                console.log('Appointment data: ', response.data);
+                const response = await api.get(`/api/appointments/` + apptId + `/`);
                 // setDateTime(new Date(response.data.dateTime));
                 setSelectedAircons(response.data.airconToService);
                 setTechnicianData({
@@ -52,12 +50,11 @@ function RescheduleCoordinator() {
 
         const fetchReqDateTime = async () => {
             try {
-                const reqDateTimeUrl = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/rescheduleappointment/getRescheduleRequest/?id=` + apptId)
+                const reqDateTimeUrl = await api.get(`/api/rescheduleappointment/getRescheduleRequest/?id=` + apptId)
                 const date = new Date(reqDateTimeUrl.data.requestedDatetime);
                 const singaporeTime = new Date(date.getTime() - 8 * 60 * 60 * 1000);
                 setDateTime(singaporeTime);
                 setReason(reqDateTimeUrl.data.reason);
-                console.log("requested date time: ", reqDateTimeUrl.data);
             } catch (error) {
                 console.error("Error fetching requested date time: ", error);
             }
@@ -74,20 +71,16 @@ function RescheduleCoordinator() {
 
         const singaporeDateTime = new Date(dateTime.getTime() + 8 * 60 * 60 * 1000);
         const formattedDate = `${singaporeDateTime.toISOString().slice(0, 19).replace('T', ' ')}`;
-        console.log(formattedDate);
 
         try {
-            const updateDateTime = await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/` + apptId + '/', {
+            const updateDateTime = await api.patch(`/api/appointments/` + apptId + '/', {
                 dateTime: formattedDate
             });
 
-            const updateStatus = await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/rescheduleappointment/` + apptId + '/', {
+            const updateStatus = await api.patch(`/api/rescheduleappointment/` + apptId + '/', {
                 status: "Approved",
                 reason: reason
-            })
-
-            console.log("Date time successfully updated: ", updateDateTime.data);
-            console.log("Status is approved: ", updateStatus.data);
+            });
             navigate('/CoordinatorHome')
         } catch (error) {
             console.error('Error updating date time and status of rescheduled appointment:', error.response);
@@ -100,11 +93,10 @@ function RescheduleCoordinator() {
         setError('');
 
         try {
-            const updateStatus = await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/rescheduleappointment/` + apptId + '/', {
+            await api.patch(`/api/rescheduleappointment/` + apptId + '/', {
                 status: "Denied",
                 reason: reason
-            })
-            console.log("Appointment reschedule is rejected: ", updateStatus.data);
+            });
             navigate('/CoordinatorHome');
         } catch (error) {
             console.error('Error updating status of rescheduled appointment:', error.response);

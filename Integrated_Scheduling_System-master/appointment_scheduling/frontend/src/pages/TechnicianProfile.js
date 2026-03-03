@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {Link, useNavigate} from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -40,7 +40,7 @@ function TechnicianProfile() {
 
 
     useEffect(() => {
-        axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technicians/?technicianId=` + localStorage.getItem("technicians_id"))
+        api.get(`/api/technicians/?technicianId=` + localStorage.getItem("technicians_id"))
             .then(response => {
                 setTechniciandetails(response.data[0]);
                 setEditedDetails({
@@ -54,7 +54,6 @@ function TechnicianProfile() {
                     technicianPassword: '',
                     technicianPasswordConfirm: ''
                 });
-                console.log(response.data[0]);
             })
             .catch(error => {
                 console.error('There was an error!', error);
@@ -110,8 +109,8 @@ function TechnicianProfile() {
                 payload.technicianPassword = editedDetails.technicianPassword;
             }
 
-            const response = await axios.patch(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technicians/${techniciandetails.id}/`,
+            const response = await api.patch(
+                `/api/technicians/${techniciandetails.id}/`,
                 payload
             );
 

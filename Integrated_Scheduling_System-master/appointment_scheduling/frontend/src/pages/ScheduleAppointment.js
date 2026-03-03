@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Progress } from 'antd';
@@ -37,7 +37,7 @@ function ScheduleAppointment() {
 
     const fetchUserAirconData = async () => {
         try {
-            const userAirconResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/?customerId=${customer_id}`);
+            const userAirconResponse = await api.get(`/api/customeraircondevices/?customerId=${customer_id}`);
             return userAirconResponse.data;
         } catch (error) {
             console.error('Error fetching aircon data:', error);
@@ -71,7 +71,7 @@ function ScheduleAppointment() {
 
             const singaporeDateTimeUnix = dateTime.getTime() / 1000;
 
-            const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/`, {
+            const response = await api.post(`/api/appointments/`, {
                 customerId: customer_id,
                 appointmentStartTime : singaporeDateTimeUnix,
                 airconToService : selectedAircons,

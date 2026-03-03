@@ -26,18 +26,14 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
 
     # GET request of a technician's data
     def retrieve(self, request, pk):
-        print("GET: Retrieve customer aircon device")
         item = get_object_or_404(CustomerAirconDevices.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
     # POST request to create technician
     def create(self, request):
-        print("POST: Create customer aircon device")
         # deserialize request data
         serializer = self.serializer_class(data=request.data)
-        # print data
-        print(request.data)
         if serializer.is_valid():
             # save data to database
             serializer.save()
@@ -52,7 +48,6 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
 
     # PATCH request
     def partial_update(self, request, pk):
-        print("PATCH: Partial update customer aircon device")
         item = get_object_or_404(CustomerAirconDevices.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():

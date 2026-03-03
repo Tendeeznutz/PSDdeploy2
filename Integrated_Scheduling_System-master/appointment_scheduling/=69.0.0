@@ -1,0 +1,4 @@
+Requirement already satisfied: setuptools in /Users/cantabile/.pyenv/versions/3.12.7/lib/python3.12/site-packages (82.0.0)
+
+[notice] A new release of pip is available: 24.2 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip

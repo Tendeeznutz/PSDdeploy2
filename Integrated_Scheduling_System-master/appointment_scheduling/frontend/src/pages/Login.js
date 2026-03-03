@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Input, Button, Typography } from "@material-tailwind/react";
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import axios from "axios";
+import api from "../axiosConfig";
 import backgroundImage from '../asset/img/air_servicing.png';
 
 const ROLES = [
@@ -43,14 +43,14 @@ function Login() {
         event.preventDefault();
         setErrorMessage('');
 
-        const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
-        const endpoint = `${baseUrl}/api/${selectedRole}/profile/login/`;
+        const endpoint = `/api/${selectedRole}/profile/login/`;
 
         try {
             // Backend expects 'email' and 'password' keys for all roles (technician uses phone in 'email' field)
             const payload = { email: emailOrPhone, password: password };
-            const response = await axios.post(endpoint, payload);
+            const response = await api.post(endpoint, payload);
 
+            // Clear previous session data
             localStorage.removeItem('customers_id');
             localStorage.removeItem('customers_name');
             localStorage.removeItem('technicians_id');
@@ -59,8 +59,14 @@ function Login() {
             localStorage.removeItem('coordinators_id');
             localStorage.removeItem('coordinators_email');
             localStorage.removeItem('coordinators_name');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
 
             if (response.status === 200) {
+                // Store JWT tokens
+                localStorage.setItem('access_token', response.data.access);
+                localStorage.setItem('refresh_token', response.data.refresh);
+
                 if (selectedRole === 'customer') {
                     localStorage.setItem('customers_id', response.data.customer_id);
                     localStorage.setItem('customers_name', response.data.customerName);
@@ -78,7 +84,6 @@ function Login() {
                 }
             }
         } catch (error) {
-            console.error('Login failed:', error);
             const msg = error.response?.data?.error || error.response?.data?.detail || 'Login failed. Please try again.';
             setErrorMessage(typeof msg === 'string' ? msg : 'Login failed. Please try again.');
         }

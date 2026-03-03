@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { Tabs, Badge, Modal, Input, Button, Empty, message, Select } from 'antd';
 import { MailOutlined, SendOutlined, InboxOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 
@@ -75,8 +75,8 @@ function Mailbox() {
         setLoading(true);
         try {
             // Fetch inbox messages
-            const inboxResponse = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/inbox/`,
+            const inboxResponse = await api.get(
+                `/api/messages/inbox/`,
                 {
                     params: {
                         recipientId: userInfo.userId,
@@ -87,8 +87,8 @@ function Mailbox() {
             setInboxMessages(inboxResponse.data);
 
             // Fetch sent messages
-            const sentResponse = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/sent/`,
+            const sentResponse = await api.get(
+                `/api/messages/sent/`,
                 {
                     params: {
                         senderId: userInfo.userId,
@@ -106,8 +106,8 @@ function Mailbox() {
 
     const fetchUnreadCount = async () => {
         try {
-            const response = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/unread-count/`,
+            const response = await api.get(
+                `/api/messages/unread-count/`,
                 {
                     params: {
                         recipientId: userInfo.userId,
@@ -123,8 +123,8 @@ function Mailbox() {
 
     const fetchCustomers = async () => {
         try {
-            const response = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/`
+            const response = await api.get(
+                `/api/customers/`
             );
             setCustomers(response.data);
         } catch (error) {
@@ -134,8 +134,8 @@ function Mailbox() {
 
     const fetchTechnicians = async () => {
         try {
-            const response = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/technicians/`
+            const response = await api.get(
+                `/api/technicians/`
             );
             setTechnicians(response.data);
         } catch (error) {
@@ -150,8 +150,8 @@ function Mailbox() {
         // Mark as read if it's an inbox message and not already read
         if (activeTab === 'inbox' && !message.isRead) {
             try {
-                await axios.patch(
-                    `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/${message.id}/mark-read/`
+                await api.patch(
+                    `/api/messages/${message.id}/mark-read/`
                 );
                 // Refresh messages and unread count
                 fetchMessages();
@@ -187,8 +187,6 @@ function Mailbox() {
                 body: composeForm.body.trim()
             };
 
-            // Debug logging
-            console.log('Sending message with data:', messageData);
 
             // For customers, backend will handle routing to coordinator and technician
             // For coordinators/technicians, they need to specify recipient
@@ -203,8 +201,8 @@ function Mailbox() {
                 messageData.recipientName = composeForm.recipientName;
             }
 
-            const response = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/`,
+            const response = await api.post(
+                `/api/messages/`,
                 messageData
             );
 

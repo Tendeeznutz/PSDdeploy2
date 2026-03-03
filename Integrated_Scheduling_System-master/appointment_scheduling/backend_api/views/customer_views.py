@@ -3,7 +3,10 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .format_response import include_all_info
 from ..scheduling_algo import *
@@ -11,9 +14,18 @@ from ..serializers import CustomerSerializer
 from ..sg_geo.src import geo_onemap as geo
 
 
+class LoginRateThrottle(AnonRateThrottle):
+    rate = '5/minute'
+
+
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customers.objects.all()
     serializer_class = CustomerSerializer
+
+    def get_permissions(self):
+        if self.action in ['login', 'create']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     # GET request
     def list(self, request):
@@ -68,21 +80,24 @@ class CustomerViewSet(viewsets.ModelViewSet):
             customer = Customers.objects.filter(customerEmail=email).first()
 
             if customer is None:
-                return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-            # Handle both plain text and hashed passwords
-            # Plain text check first, then try hashed password check
-            if password == customer.customerPassword or check_password(password, customer.customerPassword):
+            if check_password(password, customer.customerPassword):
+                refresh = RefreshToken()
+                refresh['user_id'] = str(customer.id)
+                refresh['role'] = 'customer'
                 response_data = {
                     'customer_id': customer.id,
                     'customerName': customer.customerName,
                     'role': 'customer',
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
             else:
-                return Response({'error': 'Incorrect password'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
-            return Response({'error': f'Login failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def retrieve(self, request, pk=None):
         item = get_object_or_404(Customers.objects.all(), pk=pk)

@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import axios from 'axios';
+import api from "../axiosConfig";
 import {message, Button} from "antd";
 
 const CustomerEnquiry = () => {
@@ -28,12 +28,11 @@ const CustomerEnquiry = () => {
             const coordinatorName = localStorage.getItem("coordinators_name");
 
             // Send email (existing functionality)
-            const emailResponse = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/sendEnquiry/`, formData);
-            console.log(emailResponse.data);
+            await api.post(`/api/appointments/sendEnquiry/`, formData);
 
             // Save message to database for in-app messaging system
             if (coordinatorId && coordinatorName) {
-                await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/messages/`, {
+                await api.post(`/api/messages/`, {
                     senderId: coordinatorId,
                     senderType: 'coordinator',
                     senderName: coordinatorName,

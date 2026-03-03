@@ -1,5 +1,5 @@
 // React example
-import axios from 'axios';
+import api from "../axiosConfig";
 import { useState } from 'react';        
 import {Card,Input,Checkbox,Button,Typography,} from "@material-tailwind/react";
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,7 @@ export default function ReportIssues() {
         event.preventDefault();
 
         try {
-            await axios.post('/api/issues', {
+            await api.post('/api/issues', {
                 title: issueTitle,
                 description: issueDescription,
             });

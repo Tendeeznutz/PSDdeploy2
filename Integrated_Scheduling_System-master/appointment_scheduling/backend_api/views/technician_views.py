@@ -1,3 +1,4 @@
+import logging
 import secrets
 import re
 from datetime import datetime, timedelta
@@ -7,7 +8,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..scheduling_algo import *
 from ..models import TechnicianPasswordResetToken, TechnicianHiringApplication
@@ -15,10 +18,17 @@ from ..serializers import TechnicianSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail
 
+logger = logging.getLogger(__name__)
+
 
 class TechnicianViewSet(viewsets.ModelViewSet):
     queryset = Technicians.objects.all()
     serializer_class = TechnicianSerializer
+
+    def get_permissions(self):
+        if self.action in ['login', 'forgot_password', 'validate_reset_token', 'reset_password']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     # GET request of all techicians data
     def list(self, request):
@@ -47,7 +57,6 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     # GET request of a technician's data
     def retrieve(self, request, pk):
-        # print("GET: Retrieve technician")
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
@@ -70,7 +79,6 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     # PATCH request
     def partial_update(self, request, pk):
-        print("PATCH: Partial update technician")
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
@@ -89,34 +97,42 @@ class TechnicianViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request, *args, **kwargs):
         try:
-            phone = request.data['email']
-            password = request.data['password']
-            technician = Technicians.objects.get(technicianPhone=phone)
+            phone = request.data.get('email')
+            password = request.data.get('password')
+
+            if not phone or not password:
+                return Response({'detail': 'Phone and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            technician = Technicians.objects.filter(technicianPhone=phone).first()
+
+            if technician is None:
+                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
             # Check if technician account is active
             if not technician.isActive:
                 return Response({'detail': 'Your account has been deactivated. Please contact the coordinator.'}, status=status.HTTP_403_FORBIDDEN)
 
-            # Handle both plain text and hashed passwords
-            # Plain text check first, then try hashed password check
-            if password == technician.technicianPassword or check_password(password, technician.technicianPassword):
+            if check_password(password, technician.technicianPassword):
+                refresh = RefreshToken()
+                refresh['user_id'] = str(technician.id)
+                refresh['role'] = 'technician'
                 response_data = {
                     'technician_phone': technician.technicianPhone,
-                    'technician_id' : technician.id,
+                    'technician_id': technician.id,
                     'technicianName': technician.technicianName,
                     'role': 'technician',
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
-            return Response({'detail': 'Incorrect password'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        except Technicians.DoesNotExist:
-            return Response({'detail': 'Technician not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception("Technician login error")
+            return Response({'detail': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # DELETE request to delete technician
     def destroy(self, request, pk):
-        print("DELETE: Delete technician")
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
@@ -181,7 +197,6 @@ AirServe Team"""
             sendMail.send_email(subject, body, email, 'AirServe')
             return Response({'message': 'Password reset email sent successfully'}, status=status.HTTP_200_OK)
         except Exception as e:
-            print(f"Failed to send password reset email: {e}")
             return Response({'error': 'Failed to send password reset email'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'], url_path='validate-reset-token')
@@ -261,11 +276,11 @@ AirServe Team"""
     @action(detail=True, methods=['post'], url_path='coordinator-reset-password')
     def coordinator_reset_password(self, request, pk=None):
         """
-        Coordinator resets technician password to default "password123".
+        Coordinator resets technician password to a secure random temporary password.
         """
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
 
-        default_password = "password123"
+        default_password = secrets.token_urlsafe(12)
         technician.technicianPassword = make_password(default_password)
         technician.save()
 
@@ -286,7 +301,7 @@ Best regards,
 AirServe Team"""
                 sendMail.send_email(subject, body, application.applicantEmail, 'AirServe')
         except Exception as e:
-            print(f"Failed to send password reset notification: {e}")
+            pass
 
         return Response({
             'message': f'Password for {technician.technicianName} has been reset to default',
@@ -324,7 +339,7 @@ Best regards,
 AirServe Team"""
                     sendMail.send_email(subject, body, application.applicantEmail, 'AirServe')
             except Exception as e:
-                print(f"Failed to send deactivation notification: {e}")
+                pass
 
             return Response({
                 'message': f'{technician.technicianName} has been deactivated',
@@ -351,7 +366,7 @@ Best regards,
 AirServe Team"""
                     sendMail.send_email(subject, body, application.applicantEmail, 'AirServe')
             except Exception as e:
-                print(f"Failed to send reactivation notification: {e}")
+                pass
 
             return Response({
                 'message': f'{technician.technicianName} has been reactivated',

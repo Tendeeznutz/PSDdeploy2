@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Checkbox, message, Card, Select, Space } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import api from "../../axiosConfig";
 
 const { Option } = Select;
 
@@ -31,8 +31,8 @@ function BankInfoForm({ applicationData, updateApplicationData, moveToNextTab, m
             };
 
             // Submit bank information
-            await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/hiring-applications/${applicationData.id}/submit-bank-info/`,
+            await api.post(
+                `/api/hiring-applications/${applicationData.id}/submit-bank-info/`,
                 bankData
             );
 

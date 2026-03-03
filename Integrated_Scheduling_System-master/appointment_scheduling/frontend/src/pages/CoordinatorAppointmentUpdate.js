@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { Button, Select, message, Modal, Input } from "antd";
 
 const { TextArea } = Input;
@@ -30,11 +30,10 @@ function CoordinatorAppointmentUpdate() {
     useEffect(() => {
         const fetchAppointments = async () => {
             try {
-                const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${apptId}/`);
+                const response = await api.get(`/api/appointments/${apptId}/`);
                 setUpdatedAppointment(response.data);
                 setSelectedTechnicianId(response.data.technicianId || null);
                 setSelectedStatus(response.data.appointmentStatus);
-                console.log("Appt:", response.data);
             } catch (error) {
                 console.error('Error fetching appointment data:', error);
             } finally {
@@ -44,9 +43,8 @@ function CoordinatorAppointmentUpdate() {
 
         const fetchTechnicians = async () => {
             try {
-                const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/technicians/`);
+                const response = await api.get(`/api/technicians/`);
                 setTechnicians(response.data);
-                console.log("Tech: ", response.data);
             } catch (error) {
                 console.error('Error fetching technicians:', error);
             }
@@ -122,9 +120,7 @@ function CoordinatorAppointmentUpdate() {
                 return;
             }
 
-            console.log('Updating with data:', updateData);
-
-            await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${apptId}/`, updateData);
+            await api.patch(`/api/appointments/${apptId}/`, updateData);
 
             message.success('Appointment updated successfully');
             setTimeout(() => {

@@ -7,6 +7,17 @@ from rest_framework import serializers
 from .models import Appointments, AppointmentRequest, Customers, Technicians, Coordinators, \
     CustomerAirconDevices, Messages, TechnicianHiringApplication, TechnicianAvailability, AirconCatalogs
 
+ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+ALLOWED_DOCUMENT_TYPES = ALLOWED_IMAGE_TYPES + ['application/pdf']
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+def validate_file_upload(file, allowed_types, max_size=MAX_FILE_SIZE):
+    if file.size > max_size:
+        raise serializers.ValidationError(f"File size must not exceed {max_size // (1024 * 1024)} MB.")
+    if hasattr(file, 'content_type') and file.content_type not in allowed_types:
+        raise serializers.ValidationError(f"File type '{file.content_type}' is not allowed.")
+
 
 class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -192,6 +203,31 @@ class TechnicianHiringApplicationSerializer(serializers.ModelSerializer):
             query = query.exclude(pk=instance.pk)
         if query.exists():
             raise serializers.ValidationError("An application with this NRIC already exists")
+        return value
+
+    def validate_resumeFile(self, value):
+        if value:
+            validate_file_upload(value, ALLOWED_DOCUMENT_TYPES)
+        return value
+
+    def validate_profilePhoto(self, value):
+        if value:
+            validate_file_upload(value, ALLOWED_IMAGE_TYPES)
+        return value
+
+    def validate_nricPhotoFront(self, value):
+        if value:
+            validate_file_upload(value, ALLOWED_IMAGE_TYPES)
+        return value
+
+    def validate_nricPhotoBack(self, value):
+        if value:
+            validate_file_upload(value, ALLOWED_IMAGE_TYPES)
+        return value
+
+    def validate_drivingLicense(self, value):
+        if value:
+            validate_file_upload(value, ALLOWED_IMAGE_TYPES)
         return value
 
     def validate(self, attrs):

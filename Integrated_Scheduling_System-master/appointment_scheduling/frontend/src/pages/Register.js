@@ -1,7 +1,7 @@
 import { Input, Button, Typography } from '@material-tailwind/react';
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faTimes } from '@fortawesome/free-solid-svg-icons';
 import backgroundImage from '../asset/img/air_servicing.png'; // replace this with your actual background image path
@@ -53,7 +53,7 @@ const Register = () => {
     }
 
     try {
-      const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/customers/`, {
+      const response = await api.post(`/api/customers/`, {
         customerName: customerObject.customerName,
         customerAddress: customerObject.customerAddress,
         customerPhone: customerObject.customerPhone,
