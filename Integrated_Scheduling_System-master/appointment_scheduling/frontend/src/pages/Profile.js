@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { Button, Popconfirm, Progress, DatePicker } from 'antd';
 import dayjs from 'dayjs';
 
@@ -49,7 +49,7 @@ function Profile() {
                 console.error('No customer ID found in localStorage');
                 return;
             }
-            const userDataResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/${customer_id}/`);
+            const userDataResponse = await api.get(`/api/customers/${customer_id}/`);
             return userDataResponse.data;
         } catch (error) {
             console.error('Error fetching user data:', error);
@@ -58,7 +58,7 @@ function Profile() {
 
     const fetchUserAirconData = async () => {
         try {
-            const userAirconResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/?customerId=${customer_id}`);
+            const userAirconResponse = await api.get(`/api/customeraircondevices/?customerId=${customer_id}`);
             return userAirconResponse.data;
         } catch (error) {
             console.error('Error fetching user aircon data:', error)
@@ -81,7 +81,7 @@ function Profile() {
     const handleDeleteAircon = (airconId) => async () => {
         setError('');
         try {
-            const existingAppointmentResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerId=${customer_id}`);
+            const existingAppointmentResponse = await api.get(`/api/appointments/?customerId=${customer_id}`);
 
             if (existingAppointmentResponse.status === 200) {
                 // Only block deletion if there are active (non-cancelled) appointments
@@ -96,7 +96,7 @@ function Profile() {
                     throw new Error('Cannot remove aircon with active appointments. Cancel or complete the appointments first.');
                 }
 
-                const response = await axios.delete(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/${airconId}/`);
+                const response = await api.delete(`/api/customeraircondevices/${airconId}/`);
                 if (response.status === 204) {
                     setUserAirconList(userAirconList.filter(aircon => aircon.id !== airconId));
                 }
@@ -150,8 +150,8 @@ function Profile() {
                 remarks: editingAircon.remarks || null
             };
 
-            const response = await axios.patch(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/${editingAircon.id}/`,
+            const response = await api.patch(
+                `/api/customeraircondevices/${editingAircon.id}/`,
                 payload
             );
 
@@ -205,7 +205,7 @@ function Profile() {
                 remarks: remarks || null
             };
 
-            const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/`, payload);
+            const response = await api.post(`/api/customeraircondevices/`, payload);
             if (response.status === 201) {
                 setProgress(100);
                 setTimeout(() => {
@@ -288,8 +288,8 @@ function Profile() {
                 payload.customerPassword = editedDetails.customerPassword;
             }
 
-            const response = await axios.patch(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/customers/${customer_id}/`,
+            const response = await api.patch(
+                `/api/customers/${customer_id}/`,
                 payload
             );
 

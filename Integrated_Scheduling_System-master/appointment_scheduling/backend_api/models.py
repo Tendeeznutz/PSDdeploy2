@@ -43,7 +43,7 @@ class Customers(TimeStampedModel):
     customerLocation = models.CharField(max_length=32, null=True)
     customerAddress = models.CharField(max_length=50, null=False)
     customerPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
-    customerPassword = models.CharField(max_length=50, null=False)  # TODO: hash later
+    customerPassword = models.CharField(max_length=128, null=False)
     customerEmail = models.CharField(max_length=50, unique=True, null=False, validators=[validate_email])
     pendingPenaltyFee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text='Accumulated penalty fees for excessive cancellations')
     customerRating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00, help_text='Average rating from technicians (1-5), default 5')
@@ -123,7 +123,7 @@ class Technicians(models.Model):
     technicianLocation = models.CharField(max_length=32, null=True)
     technicianPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
     technicianEmail = models.CharField(max_length=50, unique=True, null=True, blank=True, validators=[validate_email], help_text='Email address for notifications')
-    technicianPassword = models.CharField(max_length=50, null=False)
+    technicianPassword = models.CharField(max_length=128, null=False)
     technicianStatus = models.CharField(default=1, choices=STATUS_CHOICES, max_length=1, null=False)
     specializations = models.JSONField(default=list, blank=True, help_text='List of AC brands the technician specializes in')
     technicianTravelType = models.CharField(max_length=20, choices=TRAVEL_TYPE_CHOICES, null=True, blank=True, default=None)
@@ -157,7 +157,7 @@ class Coordinators(TimeStampedModel):
     coordinatorEmail = models.CharField(max_length=50, unique=True, null=False, validators=[validate_email])
     coordinatorPhone = models.CharField(max_length=50, unique=True, null=False,
                                         validators=[RegexValidator(r'^\d{8}$')])
-    coordinatorPassword = models.CharField(max_length=50)
+    coordinatorPassword = models.CharField(max_length=128)
 
     class Meta:
         indexes = [

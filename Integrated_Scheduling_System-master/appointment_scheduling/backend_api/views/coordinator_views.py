@@ -3,7 +3,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..models import Coordinators
 from ..serializers import CoordinatorSerializer
@@ -13,12 +15,14 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
     queryset = Coordinators.objects.all()
     serializer_class = CoordinatorSerializer
 
+    def get_permissions(self):
+        if self.action == 'login':
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
     # GET request of all techicians data
     def list(self, request):
-        print("GET: List all coordinators")
         queryset = Coordinators.objects.all()
-        # print all data
-        print(queryset)
         # serialize queryset
         serializer = self.serializer_class(queryset, many=True)
         # return response
@@ -26,19 +30,15 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
 
     # GET request of a technician's data
     def retrieve(self, request, pk):
-        print("GET: Retrieve coordinator")
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
     # POST request to create technician
     def create(self, request):
-        print("POST: Create coordinator")
         # deserialize request data
         serializer = self.serializer_class(data=request.data)
         password = request.data.get('coordinatorPassword')
-        # print data
-        print(request.data)
         if serializer.is_valid():
             # save data to database
             serializer.validated_data['coordinatorPassword'] = make_password(password)
@@ -54,7 +54,6 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
 
     # PATCH request
     def partial_update(self, request, pk):
-        print("PATCH: Partial update coordinator")
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
@@ -72,23 +71,31 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request, *args, **kwargs):
         try:
-            email = request.data['email']
-            password = request.data['password']
-            coordinator = Coordinators.objects.get(coordinatorEmail=email)
-            print(coordinator.coordinatorPassword)
-            # Handle both plain text and hashed passwords
-            # Plain text check first, then try hashed password check
-            if password == coordinator.coordinatorPassword or check_password(password, coordinator.coordinatorPassword):
+            email = request.data.get('email')
+            password = request.data.get('password')
+
+            if not email or not password:
+                return Response({'detail': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            coordinator = Coordinators.objects.filter(coordinatorEmail=email).first()
+
+            if coordinator is None:
+                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if check_password(password, coordinator.coordinatorPassword):
+                refresh = RefreshToken()
+                refresh['user_id'] = str(coordinator.id)
+                refresh['role'] = 'coordinator'
                 response_data = {
                     'coordinator_id': coordinator.id,
                     'coordinatorEmail': coordinator.coordinatorEmail,
                     'coordinatorName': coordinator.coordinatorName,
                     'role': 'coordinator',
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
-            return Response({'detail': 'Incorrect password'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        except Coordinators.DoesNotExist:
-            return Response({'detail': 'Coordinator not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'detail': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

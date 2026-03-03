@@ -20,7 +20,11 @@ function CoordinatorNavbar() {
 
     const logout = () => {
         try {
-            localStorage.removeItem('coordinator_id');
+            localStorage.removeItem('coordinators_id');
+            localStorage.removeItem('coordinators_email');
+            localStorage.removeItem('coordinators_name');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
             navigate('/');
         } catch (err) {
             console.error(err.message);

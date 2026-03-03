@@ -1,5 +1,10 @@
+import logging
+import os
 import smtplib
 from email.mime.text import MIMEText
+
+logger = logging.getLogger(__name__)
+
 
 def send_email(subject, body, to_email, alias_name):
     """
@@ -9,17 +14,18 @@ def send_email(subject, body, to_email, alias_name):
     - subject (str): Subject of the email.
     - body (str): Body content of the email.
     - to_email (str): Recipient email address.
-    - from_email (str): Sender's Gmail email address.
-    - from_password (str): Sender's Gmail password or app password.
     - alias_name (str): Alias name to be displayed as the sender.
 
     Returns:
     - bool: True if email was sent successfully, False otherwise.
     """
-    from_email='pureinc933@gmail.com'
-    from_password='dnmttxedjzlwjbdr'
+    from_email = os.environ.get('EMAIL_HOST_USER')
+    from_password = os.environ.get('EMAIL_HOST_PASSWORD')
 
-    # Constructing the email
+    if not from_email or not from_password:
+        logger.error("Email credentials not configured. Set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD env vars.")
+        return False
+
     msg = MIMEText(body)
 
     if alias_name:
@@ -37,19 +43,9 @@ def send_email(subject, body, to_email, alias_name):
         server.sendmail(from_email, to_email, msg.as_string())
         server.close()
 
-        print('Email sent!')
+        logger.info("Email sent to %s", to_email)
         return True
 
     except Exception as e:
-        print('Something went wrong:', e)
+        logger.exception("Failed to send email to %s", to_email)
         return False
-
-# Usage:
-# from_email = 'pureinc933@gmail.com'
-# from_password = 'dnmttxedjzlwjbdr'
-# to_email = 'xrando20@gmail.com'
-# subject = 'Test Subject'
-# body = 'This is the body of the email.'
-# alias_name = 'John Doe'
-#
-# send_email(subject, body, to_email, from_email, from_password, alias_name)

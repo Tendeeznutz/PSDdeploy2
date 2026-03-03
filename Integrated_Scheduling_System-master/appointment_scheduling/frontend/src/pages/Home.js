@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { useNavigate } from 'react-router-dom';
 import ReportIssues from '../pages/ReportIssues';
 import { Box, ListItemIcon, MenuItem } from '@mui/material';
@@ -40,8 +40,8 @@ function Home() {
             cancelText: 'No, Keep It',
             onOk: async () => {
                 try {
-                    await axios.patch(
-                        `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${appointmentId}/`,
+                    await api.patch(
+                        `/api/appointments/${appointmentId}/`,
                         {
                             appointmentStatus: '4', // 4 = Cancelled
                             cancellationReason: 'Cancelled by customer',
@@ -62,8 +62,8 @@ function Home() {
 
     const fetchUnreadCount = async () => {
         try {
-            const response = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/messages/unread-count/`,
+            const response = await api.get(
+                `/api/messages/unread-count/`,
                 {
                     params: {
                         recipientId: customer_id,
@@ -79,7 +79,7 @@ function Home() {
     
     const getAllAppointments = () => {
         try {
-            const allAppointmentResponse = axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerId=${customer_id}`);
+            const allAppointmentResponse = api.get(`/api/appointments/?customerId=${customer_id}`);
             return allAppointmentResponse;
         } catch (error) {
             console.error(error.message);

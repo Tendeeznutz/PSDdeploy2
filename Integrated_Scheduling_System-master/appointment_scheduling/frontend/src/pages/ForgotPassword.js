@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Typography } from "@material-tailwind/react";
 import { Link } from 'react-router-dom';
-import axios from "axios";
+import api from "../axiosConfig";
 import backgroundImage from '../asset/img/air_servicing.png';
 
 function ForgotPassword() {
@@ -17,10 +17,8 @@ function ForgotPassword() {
         setError('');
         setLoading(true);
 
-        const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
-
         try {
-            const response = await axios.post(`${baseUrl}/api/technician/profile/forgot-password/`, {
+            const response = await api.post(`/api/technician/profile/forgot-password/`, {
                 phone: phone
             });
 

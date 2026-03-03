@@ -32,11 +32,8 @@ class AirconCatalogViewSet(viewsets.ModelViewSet):
 
     # POST request
     def create(self, request):
-        print("POST request")
         # deserialize request data
         serializer = AirconSerializer(data=request.data)
-        # print data
-        print(request.data)
         if serializer.is_valid():
             # save data to database
             serializer.save()
@@ -55,7 +52,6 @@ class AirconCatalogViewSet(viewsets.ModelViewSet):
             created_entries = []
 
             for row in csv_reader:
-                print(row)
                 # Remove BOM character from keys
                 cleaned_row = {key.lstrip('\ufeff'): value for key, value in row.items()}
                 serializer = AirconSerializer(data=cleaned_row)

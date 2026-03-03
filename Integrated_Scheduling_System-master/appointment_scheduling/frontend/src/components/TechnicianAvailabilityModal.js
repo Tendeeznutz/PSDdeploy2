@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, TimePicker, message, Spin, Badge } from 'antd';
 import { CalendarOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { Calendar } from 'antd';
-import axios from 'axios';
+import api from "../axiosConfig";
 import dayjs from 'dayjs';
 
 const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
@@ -23,8 +23,8 @@ const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
     const loadExistingAvailability = async () => {
         setLoading(true);
         try {
-            const response = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technician-availability/?technicianId=${technicianId}`
+            const response = await api.get(
+                `/api/technician-availability/?technicianId=${technicianId}`
             );
 
             if (response.data && response.data.length > 0) {
@@ -99,8 +99,8 @@ const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
         setLoading(true);
         try {
             // First, delete all existing specific date records for this technician
-            const existingResponse = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technician-availability/?technicianId=${technicianId}`
+            const existingResponse = await api.get(
+                `/api/technician-availability/?technicianId=${technicianId}`
             );
 
             if (existingResponse.data && existingResponse.data.length > 0) {
@@ -108,8 +108,8 @@ const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
                     existingResponse.data
                         .filter(record => record.specificDate)
                         .map(record =>
-                            axios.delete(
-                                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technician-availability/${record.id}/`
+                            api.delete(
+                                `/api/technician-availability/${record.id}/`
                             )
                         )
                 );
@@ -120,8 +120,8 @@ const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
                 const date = dayjs(dateString);
                 const dayOfWeek = date.format('dddd').toLowerCase();
 
-                return axios.post(
-                    `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technician-availability/`,
+                return api.post(
+                    `/api/technician-availability/`,
                     {
                         technicianId: technicianId,
                         specificDate: dateString,

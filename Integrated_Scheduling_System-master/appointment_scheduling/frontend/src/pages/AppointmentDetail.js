@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Progress, Popconfirm, Modal, Input } from 'antd';
@@ -32,7 +32,7 @@ function AppointmentDetails() {
     const apptId = new URLSearchParams(window.location.search).get('id');
     const fetchSelectedAppointmentData = async () => {
         try {
-            const appointmentDataResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/` + apptId + `/`);
+            const appointmentDataResponse = await api.get(`/api/appointments/` + apptId + `/`);
             return appointmentDataResponse.data;
         } catch (error) {
             console.error('Error fetching appointment data:', error);
@@ -41,7 +41,7 @@ function AppointmentDetails() {
 
     const fetchSelectedUserAircon = async (customerId) => {
         try {
-            const userSelectedAirconResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customeraircondevices/?customerId=${customerId}`);
+            const userSelectedAirconResponse = await api.get(`/api/customeraircondevices/?customerId=${customerId}`);
             return userSelectedAirconResponse.data;
         } catch (error) {
             console.error('Error fetching user selected aircon:', error);
@@ -101,7 +101,7 @@ function AppointmentDetails() {
 
             const singaporeDateTimeUnix = dateTime.getTime() / 1000;
 
-            const response = await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/` + apptId + '/', {
+            const response = await api.patch(`/api/appointments/` + apptId + '/', {
                 appointmentStartTime: singaporeDateTimeUnix,
                 airconToService: selectedAircons,
                 customerFeedback: feedback || null
@@ -111,7 +111,6 @@ function AppointmentDetails() {
                 setProgress(100);
 
                 setTimeout(() => {
-                    console.log('Appointment scheduled:', response.data);
                     navigate('/home');
                 }, 1000);
             }
@@ -151,8 +150,7 @@ function AppointmentDetails() {
         setShowProgress(true);
 
         try {
-            console.log('Deleting appointment:', apptId);
-            const response = await axios.delete(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/` + apptId + '/');
+            const response = await api.delete(`/api/appointments/` + apptId + '/');
 
             if (response.status === 204) {
                 setProgress(100);
@@ -183,8 +181,7 @@ function AppointmentDetails() {
         setShowCancelModal(false);
 
         try {
-            console.log('Cancelling appointment:', apptId);
-            const response = await axios.patch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/` + apptId + '/', {
+            const response = await api.patch(`/api/appointments/` + apptId + '/', {
                 appointmentStatus: '4',
                 cancellationReason: cancellationReason,
                 cancelledBy: 'technician'

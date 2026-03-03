@@ -1,9 +1,11 @@
+import secrets
 from datetime import datetime
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import TechnicianHiringApplication, Technicians
@@ -14,6 +16,11 @@ from ..sg_geo.src import geo_onemap as geo
 class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     queryset = TechnicianHiringApplication.objects.all()
     serializer_class = TechnicianHiringApplicationSerializer
+
+    def get_permissions(self):
+        if self.action in ['create', 'confirm_personal_details', 'submit_bank_info']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def list(self, request):
         """Get all hiring applications with optional filtering"""
@@ -42,9 +49,6 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     def create(self, request):
         """Create a new hiring application (Stage 1: Personal Details)"""
-        print("POST: Create hiring application")
-        print(request.data)
-
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             # Set initial status to personal_details
@@ -52,12 +56,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        print("Validation errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def partial_update(self, request, pk):
         """Update a hiring application"""
-        print(f"PATCH: Update hiring application {pk}")
         application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
         serializer = self.serializer_class(application, data=request.data, partial=True)
 
@@ -69,7 +71,6 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, pk):
         """Delete a hiring application"""
-        print(f"DELETE: Delete hiring application {pk}")
         application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
         application.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -77,7 +78,6 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='confirm-personal-details')
     def confirm_personal_details(self, request, pk=None):
         """Confirm Stage 1 (Personal Details) and move to Stage 2 (Bank Info)"""
-        print(f"POST: Confirm personal details for application {pk}")
         application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
 
         # Update confirmation status
@@ -92,7 +92,6 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='submit-bank-info')
     def submit_bank_info(self, request, pk=None):
         """Submit Stage 2 (Bank Info) and move to Stage 3 (Coordinator Review)"""
-        print(f"POST: Submit bank info for application {pk}")
         application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
 
         # Validate that personal details were confirmed
@@ -119,7 +118,6 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         """
         Stage 3: Coordinator approves application and creates technician account
         """
-        print(f"POST: Coordinator approve application {pk}")
         application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
 
         # Validate that bank info was submitted
@@ -151,8 +149,7 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
         # Create the technician account
         try:
-            # Default password for all new technicians
-            temp_password = "password123"
+            temp_password = secrets.token_urlsafe(12)
 
             technician = Technicians.objects.create(
                 technicianName=application.applicantName,
@@ -180,14 +177,13 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response(
-                {'error': f'Failed to create technician account: {str(e)}'},
+                {'error': 'Failed to create technician account'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     @action(detail=True, methods=['post'], url_path='coordinator-reject')
     def coordinator_reject(self, request, pk=None):
         """Coordinator rejects application"""
-        print(f"POST: Coordinator reject application {pk}")
         application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
 
         coordinator_id = request.data.get('coordinatorId')

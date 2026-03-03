@@ -39,13 +39,16 @@ function Navbar() {
 
     const logout = () => {
         try {
-            if (localStorage.getItem('customers_id') || localStorage.getItem('technicians_phone')) {
-                localStorage.removeItem('customers_id');
-                localStorage.removeItem('technicians_phone');
-                localStorage.removeItem('technicians_id');
-            } else if (localStorage.getItem('coordinators_email')) {
-                localStorage.removeItem('coordinators_email');
-            }
+            localStorage.removeItem('customers_id');
+            localStorage.removeItem('customers_name');
+            localStorage.removeItem('technicians_phone');
+            localStorage.removeItem('technicians_id');
+            localStorage.removeItem('technicians_name');
+            localStorage.removeItem('coordinators_email');
+            localStorage.removeItem('coordinators_id');
+            localStorage.removeItem('coordinators_name');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
             navigate('/');
         } catch (err) {
             console.error(err.message);
