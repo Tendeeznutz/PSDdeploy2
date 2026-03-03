@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { Button } from "antd";
 
 function CoordinatorAppointmentView() {
@@ -17,9 +17,8 @@ function CoordinatorAppointmentView() {
     useEffect(() => {
         const fetchAppointments = async () => {
             try {
-                const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/${apptId}/`);
+                const response = await api.get(`/api/appointments/${apptId}/`);
                 setAppointment(response.data);
-                console.log(response.data);
             } catch (error) {
                 console.error('Error fetching appointment data:', error);
             } finally {

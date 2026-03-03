@@ -4,6 +4,7 @@ from django.db import models
 from datetime import datetime, timedelta
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 import uuid
 
@@ -44,6 +45,11 @@ TRAVEL_FEE = 10  # $10 standard travel fee
 class AppointmentViewSet(viewsets.ModelViewSet):
     queryset = Appointments.objects.all()
     serializer_class = AppointmentSerializer
+
+    def get_permissions(self):
+        if self.action == 'guest_booking':
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def send_receipt_to_mailbox(self, appointment, customer, aircon_ids):
         """
@@ -146,10 +152,8 @@ AirServe Team
                 relatedAppointment=appointment
             )
 
-            print(f"Receipt sent to mailbox for customer {customer.customerName}")
-
         except Exception as e:
-            print(f"Failed to send receipt to mailbox: {e}")
+            pass
 
     def check_monthly_cancellation_limit(self, technician_id):
         """
@@ -252,7 +256,6 @@ AirServe Team
 
         # get customer data from database
         customer = get_object_or_404(Customers, id=customerId)
-        print(customer)
 
         # send email
         sendMail.send_email(emailSubject, emailBody, customer.customerEmail, 'Coordinator')
@@ -288,8 +291,7 @@ AirServe Team
                 technician = appointment.technicianId if appointment.technicianId else None
                 send_appointment_confirmation(appointment, customer, technician)
             except Exception as e:
-                # Log error but don't fail the appointment creation
-                print(f"Failed to send confirmation email: {e}")
+                pass
 
             # Send receipt to customer's mailbox
             try:
@@ -297,8 +299,7 @@ AirServe Team
                 aircon_ids = request.data.get('airconToService', [])
                 self.send_receipt_to_mailbox(appointment, customer, aircon_ids)
             except Exception as e:
-                # Log error but don't fail the appointment creation
-                print(f"Failed to send receipt to mailbox: {e}")
+                pass
 
             serializer_data = dict(serializer.data)
             modified_data = include_all_info(serializer_data, request)
@@ -328,14 +329,6 @@ AirServe Team
     def partial_update(self, request, pk=None):
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
 
-        # Debug logging
-        print(f"\n{'='*80}")
-        print(f"PATCH request for appointment {pk}")
-        print(f"Request data: {request.data}")
-        print(f"technicianId in request: {request.data.get('technicianId')}")
-        print(f"Current appointment technicianId: {item.technicianId}")
-        print(f"{'='*80}\n")
-
         # Handle empty string technicianId (convert to None for proper validation)
         if request.data.get('technicianId') == '' or request.data.get('technicianId') == 'null':
             request.data['technicianId'] = None
@@ -351,7 +344,6 @@ AirServe Team
                 uuid.UUID(tech_id)  # This will raise ValueError if invalid
                 request.data['technicianId'] = tech_id
             except (ValueError, AttributeError) as e:
-                print(f"Invalid technicianId format: {e}")
                 return Response({"error": f"Invalid technician ID format: {tech_id}"}, status=400)
 
         # Track if this is a cancellation for sending notification later
@@ -418,9 +410,7 @@ AirServe Team
 
         serializer = AppointmentSerializer(item, data=request.data, partial=True, context={'request': request})
 
-        print(f"Serializer is_valid: {serializer.is_valid()}")
         if not serializer.is_valid():
-            print(f"Serializer errors: {serializer.errors}")
             # Return the actual validation errors to the frontend
             return Response({
                 "error": "Validation failed",
@@ -451,9 +441,8 @@ AirServe Team
                     customer = Customers.objects.get(id=updated_appointment.customerId.id)
                     technician = updated_appointment.technicianId
                     send_appointment_confirmation(updated_appointment, customer, technician)
-                    print(f"Sent confirmation email for technician assignment to appointment {updated_appointment.id}")
                 except Exception as e:
-                    print(f"Failed to send confirmation email: {e}")
+                    pass
 
             # Send cancellation email if this was a cancellation
             if is_cancellation:
@@ -466,7 +455,6 @@ AirServe Team
                     if cancelled_by == 'customer':
                         appt_start = getattr(updated_appointment, 'appointmentStartTime', None)
                         penalty_result = check_and_apply_penalty(customer.id, appointment_start_time_unix=appt_start)
-                        print(f"Penalty check result: {penalty_result}")
 
                     send_appointment_cancellation(
                         appointment=updated_appointment,
@@ -519,15 +507,12 @@ AirServe Team
                             relatedAppointment=updated_appointment
                         )
                 except Exception as e:
-                    # Log error but don't fail the cancellation
-                    print(f"Failed to send cancellation email: {e}")
+                    pass
 
             serializer_data = dict(serializer.data)
             modified_data = include_all_info(serializer_data, request)
-            print(f"Update successful, returning data")
             return Response(modified_data, status=200)
 
-        print(f"Update failed with errors: {serializer.errors}")
         return Response(serializer.errors, status=400)
 
     # DELETE request
@@ -808,9 +793,8 @@ AirServe Team
             # Send confirmation email to customer
             try:
                 sendMail.send_email(email_subject, email_body, email, 'AirServe System')
-                print(f"Confirmation email sent to customer: {email}")
             except Exception as e:
-                print(f"Failed to send customer email: {e}")
+                pass
 
             # Send email notification to assigned technician
             if assigned_technician and assigned_technician.technicianEmail:
@@ -850,9 +834,8 @@ AirServe Scheduling System
 """
                 try:
                     sendMail.send_email(tech_email_subject, tech_email_body, assigned_technician.technicianEmail, 'AirServe Assignments')
-                    print(f"Assignment email sent to technician: {assigned_technician.technicianEmail}")
                 except Exception as e:
-                    print(f"Failed to send technician email: {e}")
+                    pass
 
             # Send notification email to coordinator(s)
             try:
@@ -903,11 +886,10 @@ AirServe Scheduling System
                 for coordinator in coordinators:
                     try:
                         sendMail.send_email(coord_email_subject, coord_email_body, coordinator.coordinatorEmail, 'AirServe Notifications')
-                        print(f"Notification email sent to coordinator: {coordinator.coordinatorEmail}")
                     except Exception as e:
-                        print(f"Failed to send coordinator email to {coordinator.coordinatorEmail}: {e}")
+                        pass
             except Exception as e:
-                print(f"Failed to notify coordinators: {e}")
+                pass
 
             # Return appointment details
             serializer = AppointmentSerializer(appointment)
@@ -921,9 +903,6 @@ AirServe Scheduling System
             }, status=201)
 
         except Exception as e:
-            print(f"Error in guest booking: {e}")
-            import traceback
-            traceback.print_exc()
             return Response({
                 'error': f'Failed to create booking: {str(e)}'
             }, status=500)

@@ -1,6 +1,6 @@
 import React, {useState, useEffect, useMemo} from 'react';
 import {Link, useNavigate} from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import { Box, ListItem, ListItemIcon, MenuItem } from '@mui/material';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
 import { EventAvailable, PageviewRounded, PunchClock, LocationOn } from '@mui/icons-material';
@@ -72,8 +72,7 @@ function TechnicianHome() {
     // }
 
     const CompleteJob = (appointmentId) => {
-        console.log("Check in for appointment: " + appointmentId);
-        axios.put(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/${appointmentId}/`, {
+        api.put(`/api/appointments/${appointmentId}/`, {
             appointmentStatus: "3"
         })
             .then(response => {
@@ -102,9 +101,8 @@ function TechnicianHome() {
     };
 
     useEffect(() => {
-        axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technicians/?technicianId=` + localStorage.getItem("technicians_id"))
+        api.get(`/api/technicians/?technicianId=` + localStorage.getItem("technicians_id"))
             .then(response => {
-                    console.log(response.data);
                     localStorage.setItem("technicians_phone", response.data[0].phone);
                     localStorage.setItem("technicians_email", response.data[0].email);
                     localStorage.setItem("technicians_name", response.data[0].technicianName);
@@ -114,11 +112,9 @@ function TechnicianHome() {
                     console.error('There was an error!', error);
                 }
             );
-        console.log("Technician Phone in dashboard page: " + localStorage.getItem("technicians_id"));
-        axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?technicianId=${localStorage.getItem("technicians_id")}`)
+        api.get(`/api/appointments/?technicianId=${localStorage.getItem("technicians_id")}`)
             .then(response => {
                 setAppointments(response.data);
-                console.log("Number of appointments: ", response.data);
 
                 // Fetch customer data for each unique customer
                 const uniqueCustomerIds = [...new Set(response.data.map(appt => appt.customerId))];
@@ -126,7 +122,7 @@ function TechnicianHome() {
 
                 Promise.all(
                     uniqueCustomerIds.map(customerId =>
-                        axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/customers/${customerId}/`)
+                        api.get(`/api/customers/${customerId}/`)
                             .then(customerResponse => {
                                 customerDataMap[customerId] = {
                                     address: customerResponse.data.customerAddress,

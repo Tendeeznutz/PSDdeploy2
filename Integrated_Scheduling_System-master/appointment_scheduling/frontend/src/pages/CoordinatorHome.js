@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useMemo} from 'react';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
 import {Link, useNavigate} from 'react-router-dom';
-import axios from 'axios';
+import api from "../axiosConfig";
 import {Button, Modal, message} from 'antd';
 import DeleteAppointmentPopup from "../components/DeleteAppointmentPopup";
 import { ListItemIcon, MenuItem, Box } from '@mui/material';
@@ -35,7 +35,7 @@ function CoordinatorHome() {
     const [deactivationReason, setDeactivationReason] = useState('');
 
     const fetchAppointments = async () => {
-        let url = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/`;
+        let url = `/api/appointments/`;
 
         if (filterStatus) {
             url += `?appointmentStatus=${filterStatus}`;
@@ -44,28 +44,28 @@ function CoordinatorHome() {
         if (searchQuery) {
             switch (searchType) {
                 case 'customerName':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerName=${searchQuery}`;
+                    url = `/api/appointments/?customerName=${searchQuery}`;
                     break;
                 case 'customerPhone':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerPhone=${searchQuery}`;
+                    url = `/api/appointments/?customerPhone=${searchQuery}`;
                     break;
                 case 'customerEmail':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerEmail=${searchQuery}`;
+                    url = `/api/appointments/?customerEmail=${searchQuery}`;
                     break;
                 case 'customerPostal':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?customerPostalCode=${searchQuery}`;
+                    url = `/api/appointments/?customerPostalCode=${searchQuery}`;
                     break;
                 case 'technicianName':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?technicianName=${searchQuery}`;
+                    url = `/api/appointments/?technicianName=${searchQuery}`;
                     break;
                 case 'technicianPhone':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?technicianPhone=${searchQuery}`;
+                    url = `/api/appointments/?technicianPhone=${searchQuery}`;
                     break;
                 case 'technicianPostal':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?technicianPostalCode=${searchQuery}`;
+                    url = `/api/appointments/?technicianPostalCode=${searchQuery}`;
                     break;
                 case 'date':
-                    url = `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/appointments/?appointmentStartTime=${searchQuery}`;
+                    url = `/api/appointments/?appointmentStartTime=${searchQuery}`;
                     break;
                 default:
                     break;
@@ -73,9 +73,8 @@ function CoordinatorHome() {
         }
 
         try {
-            const response = await axios.get(url);
+            const response = await api.get(url);
             setAppointments(response.data);
-            console.log('Appointments fetched:', response.data);
         } catch (error) {
             console.error('Error fetching appointments!', error);
         }
@@ -85,7 +84,7 @@ function CoordinatorHome() {
     useEffect(() => {
 
         const fetchCustomers = async () => {
-            let customerUrl = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/customers/`;
+            let customerUrl = `/api/customers/`;
 
             if (customerSearchQuery && customerSearchType) {
                 const searchParam = {
@@ -101,17 +100,15 @@ function CoordinatorHome() {
             }
 
             try {
-                console.log('Customer URL:', customerUrl);
-                const response = await axios.get(customerUrl);
+                const response = await api.get(customerUrl);
                 setCustomers(response.data);
-                console.log('Customers searched:', response.data);
             } catch (error) {
                 console.error('Error fetching customers!', error);
             }
         };
 
         const fetchTechnicians = async () => {
-            let technicianUrl = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technicians/`;
+            let technicianUrl = `/api/technicians/`;
 
             if (technicianSearchQuery && technicianSearchType) {
                 const searchParam = {
@@ -126,12 +123,9 @@ function CoordinatorHome() {
                 }
             }
 
-            console.log(technicianUrl);
-
             try {
-                const response = await axios.get(technicianUrl);
+                const response = await api.get(technicianUrl);
                 setTechnicians(response.data);
-                console.log('Technicians fetched:', response.data);
             } catch (error) {
                 console.error('Error fetching technicians!', error);
             }
@@ -150,7 +144,7 @@ function CoordinatorHome() {
 
     const handleConfirmDelete = async () => {
         try {
-            await axios.delete(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/${deleteAppointmentId}/`);
+            await api.delete(`/api/appointments/${deleteAppointmentId}/`);
             fetchAppointments();
         } catch (error) {
             console.error('Error deleting appointment!', error);
@@ -177,8 +171,8 @@ function CoordinatorHome() {
 
         setResetPasswordLoading(true);
         try {
-            const response = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technician/profile/${resetPasswordTechnician.id}/coordinator-reset-password/`
+            const response = await api.post(
+                `/api/technician/profile/${resetPasswordTechnician.id}/coordinator-reset-password/`
             );
             message.success(`Password for ${response.data.technicianName} has been reset to default (password123)`);
             setShowResetPasswordModal(false);
@@ -208,8 +202,8 @@ function CoordinatorHome() {
 
         setToggleActiveLoading(true);
         try {
-            const response = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technician/profile/${toggleActiveTechnician.id}/toggle-active-status/`,
+            const response = await api.post(
+                `/api/technician/profile/${toggleActiveTechnician.id}/toggle-active-status/`,
                 { reason: deactivationReason }
             );
 
@@ -220,8 +214,7 @@ function CoordinatorHome() {
             }
 
             // Refresh technicians list
-            const technicianUrl = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/technicians/`;
-            const techResponse = await axios.get(technicianUrl);
+            const techResponse = await api.get(`/api/coordinator/technicians/`);
             setTechnicians(techResponse.data);
 
             setShowToggleActiveModal(false);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Checkbox, message, Card, InputNumber, Descriptions, Badge, Space, Tag } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import api from "../../axiosConfig";
 import { useNavigate } from 'react-router-dom';
 
 const { TextArea } = Input;
@@ -35,8 +35,8 @@ function CoordinatorApprovalForm({ applicationData, onComplete }) {
                 coordinatorApproved: true
             };
 
-            const response = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/hiring-applications/${applicationData.id}/coordinator-approve/`,
+            const response = await api.post(
+                `/api/coordinator/hiring-applications/${applicationData.id}/coordinator-approve/`,
                 approvalData
             );
 
@@ -74,8 +74,8 @@ function CoordinatorApprovalForm({ applicationData, onComplete }) {
                 coordinatorNotes: values.coordinatorNotes
             };
 
-            await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/coordinator/hiring-applications/${applicationData.id}/coordinator-reject/`,
+            await api.post(
+                `/api/coordinator/hiring-applications/${applicationData.id}/coordinator-reject/`,
                 rejectionData
             );
 
