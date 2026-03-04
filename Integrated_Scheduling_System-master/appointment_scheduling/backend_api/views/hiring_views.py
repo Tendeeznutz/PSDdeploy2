@@ -1,7 +1,10 @@
+import logging
 import secrets
 from datetime import datetime
 from django.contrib.auth.hashers import make_password
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -12,13 +15,15 @@ from ..models import TechnicianHiringApplication, Technicians
 from ..serializers import TechnicianHiringApplicationSerializer
 from ..sg_geo.src import geo_onemap as geo
 
+logger = logging.getLogger(__name__)
+
 
 class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     queryset = TechnicianHiringApplication.objects.all()
     serializer_class = TechnicianHiringApplicationSerializer
 
     def get_permissions(self):
-        if self.action in ['create', 'confirm_personal_details', 'submit_bank_info']:
+        if self.action in ["create", "confirm_personal_details", "submit_bank_info"]:
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -27,23 +32,29 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         queryset = TechnicianHiringApplication.objects.all()
 
         # Filter by application status
-        if request.query_params.get('applicationStatus'):
-            queryset = queryset.filter(applicationStatus=request.query_params.get('applicationStatus'))
+        if request.query_params.get("applicationStatus"):
+            queryset = queryset.filter(
+                applicationStatus=request.query_params.get("applicationStatus")
+            )
 
         # Filter by applicant name
-        if request.query_params.get('applicantName'):
-            queryset = queryset.filter(applicantName__icontains=request.query_params.get('applicantName'))
+        if request.query_params.get("applicantName"):
+            queryset = queryset.filter(
+                applicantName__icontains=request.query_params.get("applicantName")
+            )
 
         # Filter by NRIC
-        if request.query_params.get('nric'):
-            queryset = queryset.filter(nric=request.query_params.get('nric'))
+        if request.query_params.get("nric"):
+            queryset = queryset.filter(nric=request.query_params.get("nric"))
 
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
     def retrieve(self, request, pk):
         """Get a specific hiring application"""
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
         serializer = self.serializer_class(application)
         return Response(serializer.data)
 
@@ -52,7 +63,7 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             # Set initial status to personal_details
-            serializer.validated_data['applicationStatus'] = 'personal_details'
+            serializer.validated_data["applicationStatus"] = "personal_details"
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -60,7 +71,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, pk):
         """Update a hiring application"""
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
         serializer = self.serializer_class(application, data=request.data, partial=True)
 
         if serializer.is_valid():
@@ -71,72 +84,80 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, pk):
         """Delete a hiring application"""
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
         application.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['post'], url_path='confirm-personal-details')
+    @action(detail=True, methods=["post"], url_path="confirm-personal-details")
     def confirm_personal_details(self, request, pk=None):
         """Confirm Stage 1 (Personal Details) and move to Stage 2 (Bank Info)"""
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
 
         # Update confirmation status
         application.personalDetailsConfirmed = True
-        application.personalDetailsConfirmedAt = datetime.now()
-        application.applicationStatus = 'bank_info'
+        application.personalDetailsConfirmedAt = timezone.now()
+        application.applicationStatus = "bank_info"
         application.save()
 
         serializer = self.serializer_class(application)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], url_path='submit-bank-info')
+    @action(detail=True, methods=["post"], url_path="submit-bank-info")
     def submit_bank_info(self, request, pk=None):
         """Submit Stage 2 (Bank Info) and move to Stage 3 (Coordinator Review)"""
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
 
         # Validate that personal details were confirmed
         if not application.personalDetailsConfirmed:
             return Response(
-                {'error': 'Personal details must be confirmed first'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Personal details must be confirmed first"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Update bank information
-        application.bankName = request.data.get('bankName')
-        application.bankAccountNumber = request.data.get('bankAccountNumber')
-        application.bankAccountHolderName = request.data.get('bankAccountHolderName')
-        application.bankInfoConfirmed = request.data.get('bankInfoConfirmed', False)
-        application.bankInfoConfirmedAt = datetime.now()
-        application.applicationStatus = 'coordinator_review'
+        application.bankName = request.data.get("bankName")
+        application.bankAccountNumber = request.data.get("bankAccountNumber")
+        application.bankAccountHolderName = request.data.get("bankAccountHolderName")
+        application.bankInfoConfirmed = request.data.get("bankInfoConfirmed", False)
+        application.bankInfoConfirmedAt = timezone.now()
+        application.applicationStatus = "coordinator_review"
         application.save()
 
         serializer = self.serializer_class(application)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], url_path='coordinator-approve')
+    @action(detail=True, methods=["post"], url_path="coordinator-approve")
     def coordinator_approve(self, request, pk=None):
         """
         Stage 3: Coordinator approves application and creates technician account
         """
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
 
         # Validate that bank info was submitted
         if not application.bankInfoConfirmed:
             return Response(
-                {'error': 'Bank information must be confirmed first'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Bank information must be confirmed first"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get coordinator details and pay rate from request
-        coordinator_id = request.data.get('coordinatorId')
-        pay_rate = request.data.get('payRate')
-        coordinator_notes = request.data.get('coordinatorNotes', '')
-        coordinator_approved = request.data.get('coordinatorApproved', False)
+        coordinator_id = request.data.get("coordinatorId")
+        pay_rate = request.data.get("payRate")
+        coordinator_notes = request.data.get("coordinatorNotes", "")
+        coordinator_approved = request.data.get("coordinatorApproved", False)
 
         if not coordinator_approved:
             return Response(
-                {'error': 'Coordinator must confirm approval'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Coordinator must confirm approval"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Update application with coordinator details
@@ -144,56 +165,64 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         application.payRate = pay_rate
         application.coordinatorNotes = coordinator_notes
         application.coordinatorApproved = True
-        application.coordinatorApprovedAt = datetime.now()
-        application.applicationStatus = 'approved'
+        application.coordinatorApprovedAt = timezone.now()
+        application.applicationStatus = "approved"
 
-        # Create the technician account
+        # Create the technician account atomically to prevent orphan records
         try:
             temp_password = secrets.token_urlsafe(12)
 
-            technician = Technicians.objects.create(
-                technicianName=application.applicantName,
-                technicianPostalCode=application.applicantPostalCode,
-                technicianAddress=application.applicantAddress,
-                technicianLocation=geo.get_location_from_postal(application.applicantPostalCode),
-                technicianPhone=application.applicantPhone,
-                technicianEmail=application.applicantEmail,  # Copy email for notifications
-                technicianPassword=make_password(temp_password),
-                technicianStatus='1',  # Available
-                technicianTravelType=None,  # To be set by coordinator later
-                specializations=application.specializations or []
-            )
+            with transaction.atomic():
+                technician = Technicians.objects.create(
+                    technicianName=application.applicantName,
+                    technicianPostalCode=application.applicantPostalCode,
+                    technicianAddress=application.applicantAddress,
+                    technicianLocation=geo.get_location_from_postal(
+                        application.applicantPostalCode
+                    ),
+                    technicianPhone=application.applicantPhone,
+                    technicianEmail=application.applicantEmail,  # Copy email for notifications
+                    technicianPassword=make_password(temp_password),
+                    technicianStatus="1",  # Available
+                    technicianTravelType=None,  # To be set by coordinator later
+                    specializations=application.specializations or [],
+                )
 
-            # Link the created technician to the application
-            application.createdTechnician = technician
-            application.save()
+                # Link the created technician to the application
+                application.createdTechnician = technician
+                application.save()
 
             serializer = self.serializer_class(application)
             response_data = serializer.data
-            response_data['technicianId'] = str(technician.id)
-            response_data['temporaryPassword'] = temp_password
+            response_data["technicianId"] = str(technician.id)
+            response_data["temporaryPassword"] = temp_password
 
             return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.exception(
+                "Failed to create technician account for application %s: %s", pk, e
+            )
             return Response(
-                {'error': 'Failed to create technician account'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "Failed to create technician account"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=True, methods=['post'], url_path='coordinator-reject')
+    @action(detail=True, methods=["post"], url_path="coordinator-reject")
     def coordinator_reject(self, request, pk=None):
         """Coordinator rejects application"""
-        application = get_object_or_404(TechnicianHiringApplication.objects.all(), pk=pk)
+        application = get_object_or_404(
+            TechnicianHiringApplication.objects.all(), pk=pk
+        )
 
-        coordinator_id = request.data.get('coordinatorId')
-        coordinator_notes = request.data.get('coordinatorNotes', '')
+        coordinator_id = request.data.get("coordinatorId")
+        coordinator_notes = request.data.get("coordinatorNotes", "")
 
         application.coordinatorId_id = coordinator_id
         application.coordinatorNotes = coordinator_notes
         application.coordinatorApproved = False
-        application.coordinatorApprovedAt = datetime.now()
-        application.applicationStatus = 'rejected'
+        application.coordinatorApprovedAt = timezone.now()
+        application.applicationStatus = "rejected"
         application.save()
 
         serializer = self.serializer_class(application)

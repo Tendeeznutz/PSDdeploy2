@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -13,9 +15,11 @@ from ..scheduling_algo import *
 from ..serializers import CustomerSerializer
 from ..sg_geo.src import geo_onemap as geo
 
+logger = logging.getLogger(__name__)
+
 
 class LoginRateThrottle(AnonRateThrottle):
-    rate = '5/minute'
+    rate = "5/minute"
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
@@ -23,20 +27,30 @@ class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class = CustomerSerializer
 
     def get_permissions(self):
-        if self.action in ['login', 'create']:
+        if self.action in ["login", "create"]:
             return [AllowAny()]
         return [IsAuthenticated()]
 
     # GET request
     def list(self, request):
-        if request.query_params.get('customerEmail') is not None:
-            queryset = Customers.objects.filter(customerEmail__icontains=request.query_params.get('customerEmail'))
-        elif request.query_params.get('customerName') is not None:
-            queryset = Customers.objects.filter(customerName__icontains=request.query_params.get('customerName'))
-        elif request.query_params.get('customerPhone') is not None:
-            queryset = Customers.objects.filter(customerPhone__icontains=request.query_params.get('customerPhone'))
-        elif request.query_params.get('customerPostalCode') is not None:
-            queryset = Customers.objects.filter(customerPostalCode__icontains=request.query_params.get('customerPostalCode'))
+        if request.query_params.get("customerEmail") is not None:
+            queryset = Customers.objects.filter(
+                customerEmail__icontains=request.query_params.get("customerEmail")
+            )
+        elif request.query_params.get("customerName") is not None:
+            queryset = Customers.objects.filter(
+                customerName__icontains=request.query_params.get("customerName")
+            )
+        elif request.query_params.get("customerPhone") is not None:
+            queryset = Customers.objects.filter(
+                customerPhone__icontains=request.query_params.get("customerPhone")
+            )
+        elif request.query_params.get("customerPostalCode") is not None:
+            queryset = Customers.objects.filter(
+                customerPostalCode__icontains=request.query_params.get(
+                    "customerPostalCode"
+                )
+            )
         elif request.GET:
             return Response(status=400)
         else:
@@ -52,52 +66,74 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def create(self, request):
         serializer = CustomerSerializer(data=request.data)
 
-        customer_password = request.data.get('customerPassword')
+        customer_password = request.data.get("customerPassword")
 
-        existing_customer = Customers.objects.filter(customerEmail=request.data.get('customerEmail')).first()
+        existing_customer = Customers.objects.filter(
+            customerEmail=request.data.get("customerEmail")
+        ).first()
         if existing_customer:
-            return Response({"error": "Customer with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Customer with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if serializer.is_valid():
-            serializer.validated_data['customerPassword'] = make_password(customer_password)
-            serializer.validated_data['customerLocation'] = geo.get_location_from_postal(
-                serializer.validated_data['customerPostalCode'])
+            serializer.validated_data["customerPassword"] = make_password(
+                customer_password
+            )
+            serializer.validated_data["customerLocation"] = (
+                geo.get_location_from_postal(
+                    serializer.validated_data["customerPostalCode"]
+                )
+            )
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         # Return error response
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['post'], url_path='login')
+    @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
         try:
-            email = request.data.get('email')
-            password = request.data.get('password')
+            email = request.data.get("email")
+            password = request.data.get("password")
 
             if not email or not password:
-                return Response({'error': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Email and password are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             customer = Customers.objects.filter(customerEmail=email).first()
 
             if customer is None:
-                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response(
+                    {"error": "Invalid credentials"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
             if check_password(password, customer.customerPassword):
                 refresh = RefreshToken()
-                refresh['user_id'] = str(customer.id)
-                refresh['role'] = 'customer'
+                refresh["user_id"] = str(customer.id)
+                refresh["role"] = "customer"
                 response_data = {
-                    'customer_id': customer.id,
-                    'customerName': customer.customerName,
-                    'role': 'customer',
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
+                    "customer_id": customer.id,
+                    "customerName": customer.customerName,
+                    "role": "customer",
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
             else:
-                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response(
+                    {"error": "Invalid credentials"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
         except Exception as e:
-            return Response({'error': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception("Customer login error")
+            return Response(
+                {"error": "Login failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def retrieve(self, request, pk=None):
         item = get_object_or_404(Customers.objects.all(), pk=pk)
@@ -114,13 +150,16 @@ class CustomerViewSet(viewsets.ModelViewSet):
         serializer = CustomerSerializer(item, data=request.data, partial=True)
         if serializer.is_valid():
             # Hash password
-            password = request.data.get('customerPassword')
+            password = request.data.get("customerPassword")
             if password is not None:
-                serializer.validated_data['customerPassword'] = make_password(password)
+                serializer.validated_data["customerPassword"] = make_password(password)
             # get location from postal code
-            if serializer.validated_data.get('customerPostalCode') is not None:
-                serializer.validated_data['customerLocation'] = geo.get_location_from_postal(
-                    serializer.validated_data['customerPostalCode'])
+            if serializer.validated_data.get("customerPostalCode") is not None:
+                serializer.validated_data["customerLocation"] = (
+                    geo.get_location_from_postal(
+                        serializer.validated_data["customerPostalCode"]
+                    )
+                )
             # Save data to database
             serializer.save()
             return Response(serializer.data)

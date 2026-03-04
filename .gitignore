@@ -36,10 +36,12 @@ Thumbs.db
 # Django
 *.log
 local_settings.py
+*.sqlite3
 db.sqlite3
 media/
 
 # Environment
 .env
+.env.*
 .env.local
 *.local

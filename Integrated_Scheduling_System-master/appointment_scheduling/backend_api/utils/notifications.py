@@ -1,6 +1,7 @@
 """
 Notification utilities for appointment confirmations and cancellations.
 """
+
 from datetime import datetime
 from .sendMail import send_email
 
@@ -36,13 +37,8 @@ def send_appointment_confirmation(appointment, customer, technician=None):
     end_time = format_timestamp_to_readable(appointment.appointmentEndTime)
 
     # Get appointment status display
-    status_map = {
-        '1': 'Pending',
-        '2': 'Confirmed',
-        '3': 'Completed',
-        '4': 'Cancelled'
-    }
-    status = status_map.get(appointment.appointmentStatus, 'Unknown')
+    status_map = {"1": "Pending", "2": "Confirmed", "3": "Completed", "4": "Cancelled"}
+    status = status_map.get(appointment.appointmentStatus, "Unknown")
 
     # Get number of aircon units
     num_aircons = len(appointment.airconToService) if appointment.airconToService else 0
@@ -95,7 +91,7 @@ The AirServe Team
         subject=customer_subject,
         body=customer_body,
         to_email=customer.customerEmail,
-        alias_name="AirServe Appointments"
+        alias_name="AirServe Appointments",
     )
 
     # Email to Technician (if assigned)
@@ -130,20 +126,20 @@ Best regards,
 The AirServe Team
 """
 
-        # Note: Technicians don't have email in the current model
-        # This is a placeholder - you may need to add email field to Technicians model
-        # For now, we'll skip sending to technicians
-        # technician_email_sent = send_email(
-        #     subject=tech_subject,
-        #     body=tech_body,
-        #     to_email=technician.technicianEmail,  # This field doesn't exist yet
-        #     alias_name="AirServe Scheduling"
-        # )
+        if hasattr(technician, "technicianEmail") and technician.technicianEmail:
+            technician_email_sent = send_email(
+                subject=tech_subject,
+                body=tech_body,
+                to_email=technician.technicianEmail,
+                alias_name="AirServe Scheduling",
+            )
 
     return customer_email_sent and technician_email_sent
 
 
-def send_appointment_cancellation(appointment, customer, technician, cancelled_by, cancellation_reason):
+def send_appointment_cancellation(
+    appointment, customer, technician, cancelled_by, cancellation_reason
+):
     """
     Send appointment cancellation email to customer and technician.
 
@@ -162,10 +158,10 @@ def send_appointment_cancellation(appointment, customer, technician, cancelled_b
 
     # Determine who cancelled
     cancelled_by_text = {
-        'customer': 'the customer',
-        'technician': 'the assigned technician',
-        'coordinator': 'our scheduling team'
-    }.get(cancelled_by, 'the system')
+        "customer": "the customer",
+        "technician": "the assigned technician",
+        "coordinator": "our scheduling team",
+    }.get(cancelled_by, "the system")
 
     # Email to Customer
     customer_subject = f"Appointment Cancelled - AirServe"
@@ -189,7 +185,7 @@ SERVICE ADDRESS:
 Postal Code: {customer.customerPostalCode}
 """
 
-    if cancelled_by != 'customer':
+    if cancelled_by != "customer":
         customer_body += """
 We apologize for any inconvenience this may cause.
 
@@ -214,12 +210,12 @@ The AirServe Team
         subject=customer_subject,
         body=customer_body,
         to_email=customer.customerEmail,
-        alias_name="AirServe Appointments"
+        alias_name="AirServe Appointments",
     )
 
     # Email to Technician (if assigned and cancellation wasn't by technician)
     technician_email_sent = True  # Default to True
-    if technician and cancelled_by != 'technician':
+    if technician and cancelled_by != "technician":
         tech_subject = f"Appointment Cancelled - AirServe"
         tech_body = f"""Dear {technician.technicianName},
 
@@ -247,13 +243,12 @@ Best regards,
 The AirServe Team
 """
 
-        # Note: Technicians don't have email in the current model
-        # This is a placeholder
-        # technician_email_sent = send_email(
-        #     subject=tech_subject,
-        #     body=tech_body,
-        #     to_email=technician.technicianEmail,  # This field doesn't exist yet
-        #     alias_name="AirServe Scheduling"
-        # )
+        if hasattr(technician, "technicianEmail") and technician.technicianEmail:
+            technician_email_sent = send_email(
+                subject=tech_subject,
+                body=tech_body,
+                to_email=technician.technicianEmail,
+                alias_name="AirServe Scheduling",
+            )
 
     return customer_email_sent and technician_email_sent

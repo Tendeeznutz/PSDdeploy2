@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -10,17 +12,19 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from ..models import Coordinators
 from ..serializers import CoordinatorSerializer
 
+logger = logging.getLogger(__name__)
+
 
 class CoordinatorViewSet(viewsets.ModelViewSet):
     queryset = Coordinators.objects.all()
     serializer_class = CoordinatorSerializer
 
     def get_permissions(self):
-        if self.action == 'login':
+        if self.action == "login":
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    # GET request of all techicians data
+    # GET request of all coordinators data
     def list(self, request):
         queryset = Coordinators.objects.all()
         # serialize queryset
@@ -28,27 +32,27 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
         # return response
         return Response(serializer.data)
 
-    # GET request of a technician's data
+    # GET request of a coordinator's data
     def retrieve(self, request, pk):
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
-    # POST request to create technician
+    # POST request to create coordinator
     def create(self, request):
         # deserialize request data
         serializer = self.serializer_class(data=request.data)
-        password = request.data.get('coordinatorPassword')
+        password = request.data.get("coordinatorPassword")
         if serializer.is_valid():
             # save data to database
-            serializer.validated_data['coordinatorPassword'] = make_password(password)
+            serializer.validated_data["coordinatorPassword"] = make_password(password)
             serializer.save()
             # return success response
             return Response(serializer.data, status=201)
         # return error response
         return Response(serializer.errors, status=400)
 
-    # PUT request to update technician data
+    # PUT request to update coordinator data
     def update(self, request, pk):
         return Response(status=405)
 
@@ -57,45 +61,60 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
-            password = request.data.get('coordinatorPassword')
+            password = request.data.get("coordinatorPassword")
             if password is not None:
-                serializer.validated_data['coordinatorPassword'] = make_password(password)
+                serializer.validated_data["coordinatorPassword"] = make_password(
+                    password
+                )
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
-    # DELETE request to delete technician
+    # DELETE request to delete coordinator
     def destroy(self, request, pk):
-        pass
+        item = get_object_or_404(Coordinators.objects.all(), pk=pk)
+        item.delete()
+        return Response(status=204)
 
-    @action(detail=False, methods=['post'], url_path='login')
+    @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
         try:
-            email = request.data.get('email')
-            password = request.data.get('password')
+            email = request.data.get("email")
+            password = request.data.get("password")
 
             if not email or not password:
-                return Response({'detail': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": "Email and password are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             coordinator = Coordinators.objects.filter(coordinatorEmail=email).first()
 
             if coordinator is None:
-                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response(
+                    {"detail": "Invalid credentials"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
             if check_password(password, coordinator.coordinatorPassword):
                 refresh = RefreshToken()
-                refresh['user_id'] = str(coordinator.id)
-                refresh['role'] = 'coordinator'
+                refresh["user_id"] = str(coordinator.id)
+                refresh["role"] = "coordinator"
                 response_data = {
-                    'coordinator_id': coordinator.id,
-                    'coordinatorEmail': coordinator.coordinatorEmail,
-                    'coordinatorName': coordinator.coordinatorName,
-                    'role': 'coordinator',
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
+                    "coordinator_id": coordinator.id,
+                    "coordinatorEmail": coordinator.coordinatorEmail,
+                    "coordinatorName": coordinator.coordinatorName,
+                    "role": "coordinator",
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
-            return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
+            )
 
         except Exception as e:
-            return Response({'detail': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception("Coordinator login error")
+            return Response(
+                {"detail": "Login failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
