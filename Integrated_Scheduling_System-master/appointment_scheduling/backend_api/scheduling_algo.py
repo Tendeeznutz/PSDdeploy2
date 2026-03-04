@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from typing import Any
 from datetime import datetime, timedelta
@@ -10,8 +11,11 @@ from .sg_geo.src import geo_onemap
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 # Service and travel time buffer in seconds (2.5 hours)
 TIME_BUFFER_SECONDS = 2.5 * 60 * 60  # 9000 seconds
+
 
 def get_search_range(travel_type) -> int:
     """
@@ -38,24 +42,29 @@ def get_nearby_technicians(customer_id, aircon_brand=None) -> list[Any]:
     customer = Customers.objects.get(id=customer_id)
     customer_location = customer.customerLocation
 
-    if not customer_location or customer_location == '0,0':
+    if not customer_location or customer_location == "0,0":
         return []
 
-    customer_coords = tuple(customer_location.split(','))
+    customer_coords = tuple(customer_location.split(","))
 
-    for technician in Technicians.objects.filter(isActive=True, technicianStatus='1'):
+    for technician in Technicians.objects.filter(isActive=True, technicianStatus="1"):
         technician_location = technician.technicianLocation
-        if not technician_location or technician_location == '0,0':
+        if not technician_location or technician_location == "0,0":
             continue
 
         travel_type = technician.technicianTravelType
-        if geo_onemap.is_in_range(technician_location, customer_location, get_search_range(travel_type), travel_type):
+        if geo_onemap.is_in_range(
+            technician_location,
+            customer_location,
+            get_search_range(travel_type),
+            travel_type,
+        ):
             # Calculate straight-line distance for sorting (fast, no API call)
             try:
-                tech_coords = tuple(technician_location.split(','))
+                tech_coords = tuple(technician_location.split(","))
                 dist_meters = geo_distance(tech_coords, customer_coords).meters
             except Exception:
-                dist_meters = float('inf')
+                dist_meters = float("inf")
 
             # Check if technician specializes in the requested brand
             is_specialist = False
@@ -68,8 +77,7 @@ def get_nearby_technicians(customer_id, aircon_brand=None) -> list[Any]:
     nearby_technicians.sort(key=lambda x: (not x[2], x[1]))
 
     if len(nearby_technicians) == 0:
-        # TODO: send email to coordinator to inform that no technicians are available
-        pass
+        logger.warning("No available technicians found for customer %s", customer_id)
 
     # Return just the IDs, sorted by specialization priority then distance
     return [tech_id for tech_id, _, _ in nearby_technicians]
@@ -77,7 +85,10 @@ def get_nearby_technicians(customer_id, aircon_brand=None) -> list[Any]:
 
 def find_common_timerange(appointments) -> list[Any]:
     # Step 1: Retrieve time ranges
-    time_ranges = [(appointment.appointmentStartTime, appointment.appointmentEndTime) for appointment in appointments]
+    time_ranges = [
+        (appointment.appointmentStartTime, appointment.appointmentEndTime)
+        for appointment in appointments
+    ]
 
     # Step 2: Process time ranges to find overlaps
     # This algorithm assumes that time ranges are in Unix timestamp format (integers)
@@ -126,12 +137,11 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
     """
     appointment_datetime = datetime.fromtimestamp(appointment_timestamp)
     appointment_date = appointment_datetime.date()
-    day_name = appointment_datetime.strftime('%A').lower()
+    day_name = appointment_datetime.strftime("%A").lower()
 
     # Check for specific date override first
     specific_override = TechnicianAvailability.objects.filter(
-        technicianId=technician_id,
-        specificDate=appointment_date
+        technicianId=technician_id, specificDate=appointment_date
     ).first()
 
     if specific_override:
@@ -139,8 +149,11 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
         if not specific_override.isAvailable:
             return False
         # Check if appointment time falls within the specific date's time range
-        appointment_time = appointment_datetime.strftime('%H:%M')
-        if appointment_time < specific_override.startTime or appointment_time >= specific_override.endTime:
+        appointment_time = appointment_datetime.strftime("%H:%M")
+        if (
+            appointment_time < specific_override.startTime
+            or appointment_time >= specific_override.endTime
+        ):
             return False
         return True
 
@@ -149,7 +162,7 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
         technicianId=technician_id,
         dayOfWeek=day_name,
         specificDate__isnull=True,
-        isAvailable=True
+        isAvailable=True,
     ).first()
 
     if not weekly_schedule:
@@ -157,14 +170,22 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
         return False
 
     # Check if appointment time falls within working hours
-    appointment_time = appointment_datetime.strftime('%H:%M')
-    if appointment_time < weekly_schedule.startTime or appointment_time >= weekly_schedule.endTime:
+    appointment_time = appointment_datetime.strftime("%H:%M")
+    if (
+        appointment_time < weekly_schedule.startTime
+        or appointment_time >= weekly_schedule.endTime
+    ):
         return False
 
     return True
 
 
-def is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=None) -> bool:
+def is_slot_available(
+    appointment_start_time,
+    appointment_end_time,
+    technician_appointments,
+    technician_id=None,
+) -> bool:
     """
     Check if a time slot is available for a technician, considering 2.5 hour buffer for each appointment.
     :param appointment_start_time: Unix timestamp of appointment start
@@ -187,13 +208,20 @@ def is_slot_available(appointment_start_time, appointment_end_time, technician_a
         new_appointment_end_with_buffer = appointment_end_time + TIME_BUFFER_SECONDS
 
         if (
-                appointment_start_time < buffered_end and
-                new_appointment_end_with_buffer > buffered_start):
+            appointment_start_time < buffered_end
+            and new_appointment_end_with_buffer > buffered_start
+        ):
             return False
     return True
 
 
-def get_technician_to_assign(nearby_technicians, appointment_start_time, appointment_end_time, current_technician_id=None, current_appointment=None) -> Technicians.id:
+def get_technician_to_assign(
+    nearby_technicians,
+    appointment_start_time,
+    appointment_end_time,
+    current_technician_id=None,
+    current_appointment=None,
+) -> Technicians.id:
     """
     Assign a technician from the nearby_technicians list (already sorted by distance, closest first).
     Picks the closest available technician for the given time slot.
@@ -203,20 +231,45 @@ def get_technician_to_assign(nearby_technicians, appointment_start_time, appoint
         return None
 
     # If updating an existing appointment and current technician is still available, keep them
-    if current_technician_id is not None and current_technician_id in nearby_technicians:
-        technician_appointments = Appointments.objects.filter(technicianId=current_technician_id)
-        if current_appointment is not None and current_appointment in technician_appointments:
-            technician_appointments = [appt for appt in technician_appointments if appt != current_appointment]
-        if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=current_technician_id):
+    if (
+        current_technician_id is not None
+        and current_technician_id in nearby_technicians
+    ):
+        technician_appointments = Appointments.objects.filter(
+            technicianId=current_technician_id
+        )
+        if (
+            current_appointment is not None
+            and current_appointment in technician_appointments
+        ):
+            technician_appointments = [
+                appt for appt in technician_appointments if appt != current_appointment
+            ]
+        if is_slot_available(
+            appointment_start_time,
+            appointment_end_time,
+            technician_appointments,
+            technician_id=current_technician_id,
+        ):
             return current_technician_id
 
     # Iterate through technicians in distance order (closest first) and return the first available
     for technician in nearby_technicians:
         technician_appointments = Appointments.objects.filter(technicianId=technician)
-        if current_appointment is not None and current_appointment in technician_appointments:
-            technician_appointments = [appt for appt in technician_appointments if appt != current_appointment]
+        if (
+            current_appointment is not None
+            and current_appointment in technician_appointments
+        ):
+            technician_appointments = [
+                appt for appt in technician_appointments if appt != current_appointment
+            ]
 
-        if is_slot_available(appointment_start_time, appointment_end_time, technician_appointments, technician_id=technician):
+        if is_slot_available(
+            appointment_start_time,
+            appointment_end_time,
+            technician_appointments,
+            technician_id=technician,
+        ):
             return technician
 
     # No technicians available for this time slot
@@ -233,13 +286,12 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
     """
     from datetime import datetime, timedelta
 
-    target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    day_name = target_date.strftime('%A').lower()
+    target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    day_name = target_date.strftime("%A").lower()
 
     # Check for specific date override
     specific_override = TechnicianAvailability.objects.filter(
-        technicianId=technician_id,
-        specificDate=target_date
+        technicianId=technician_id, specificDate=target_date
     ).first()
 
     if specific_override:
@@ -253,7 +305,7 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
             technicianId=technician_id,
             dayOfWeek=day_name,
             specificDate__isnull=True,
-            isAvailable=True
+            isAvailable=True,
         ).first()
 
         if not weekly_schedule:
@@ -263,11 +315,15 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
         end_time_str = weekly_schedule.endTime
 
     # Parse working hours
-    start_hour, start_minute = map(int, start_time_str.split(':'))
-    end_hour, end_minute = map(int, end_time_str.split(':'))
+    start_hour, start_minute = map(int, start_time_str.split(":"))
+    end_hour, end_minute = map(int, end_time_str.split(":"))
 
-    work_start = datetime.combine(target_date, datetime.min.time().replace(hour=start_hour, minute=start_minute))
-    work_end = datetime.combine(target_date, datetime.min.time().replace(hour=end_hour, minute=end_minute))
+    work_start = datetime.combine(
+        target_date, datetime.min.time().replace(hour=start_hour, minute=start_minute)
+    )
+    work_end = datetime.combine(
+        target_date, datetime.min.time().replace(hour=end_hour, minute=end_minute)
+    )
 
     # Get existing appointments for this day
     day_start_timestamp = int(work_start.timestamp())
@@ -276,8 +332,8 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
     existing_appointments = Appointments.objects.filter(
         technicianId=technician_id,
         appointmentStartTime__gte=day_start_timestamp,
-        appointmentStartTime__lt=day_end_timestamp
-    ).order_by('appointmentStartTime')
+        appointmentStartTime__lt=day_end_timestamp,
+    ).order_by("appointmentStartTime")
 
     # Generate available slots
     available_slots = []
@@ -287,7 +343,9 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
 
     for appointment in existing_appointments:
         appointment_start = datetime.fromtimestamp(appointment.appointmentStartTime)
-        appointment_end = datetime.fromtimestamp(appointment.appointmentEndTime) + buffer_delta
+        appointment_end = (
+            datetime.fromtimestamp(appointment.appointmentEndTime) + buffer_delta
+        )
 
         # Check if there's a slot before this appointment
         while current_time + duration_delta + buffer_delta <= appointment_start:

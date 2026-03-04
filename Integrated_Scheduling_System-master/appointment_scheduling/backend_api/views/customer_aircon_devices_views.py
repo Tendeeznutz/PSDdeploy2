@@ -10,12 +10,18 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
     queryset = CustomerAirconDevices.objects.all()
     serializer_class = CustomerAirconDeviceSerializer
 
-    # GET request of all techicians data
+    # GET request of all customer aircon devices data
     def list(self, request):
-        if request.query_params.get('customerId') is not None:
-            queryset = CustomerAirconDevices.objects.filter(customerId=request.query_params.get('customerId'))
-        elif request.query_params.get('customerName') is not None:
-            queryset = CustomerAirconDevices.objects.filter(customerId__customerName__icontains=request.query_params.get('customerName'))
+        if request.query_params.get("customerId") is not None:
+            queryset = CustomerAirconDevices.objects.filter(
+                customerId=request.query_params.get("customerId")
+            )
+        elif request.query_params.get("customerName") is not None:
+            queryset = CustomerAirconDevices.objects.filter(
+                customerId__customerName__icontains=request.query_params.get(
+                    "customerName"
+                )
+            )
         elif request.GET:
             return Response(status=400)
         else:
@@ -24,13 +30,13 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
-    # GET request of a technician's data
+    # GET request of a customer aircon device's data
     def retrieve(self, request, pk):
         item = get_object_or_404(CustomerAirconDevices.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
-    # POST request to create technician
+    # POST request to create customer aircon device
     def create(self, request):
         # deserialize request data
         serializer = self.serializer_class(data=request.data)
@@ -42,7 +48,7 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
         # return error response
         return Response(serializer.errors, status=400)
 
-    # PUT request to update technician data
+    # PUT request to update customer aircon device data
     def update(self, request, pk):
         return Response(status=405)
 
@@ -55,7 +61,7 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
-    # DELETE request to delete technician
+    # DELETE request to delete customer aircon device
     def destroy(self, request, pk):
         item = get_object_or_404(CustomerAirconDevices.objects.all(), pk=pk)
         item.delete()
