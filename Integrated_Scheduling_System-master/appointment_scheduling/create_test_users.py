@@ -27,97 +27,116 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {coordinator1.coordinatorName} - {coordinator1.coordinatorEmail}")
 
-    coordinator2 = Coordinators.objects.create(
-        coordinatorName="John Admin",
+    coordinator2, created = Coordinators.objects.get_or_create(
         coordinatorEmail="john.admin@airserve.com",
-        coordinatorPhone="91111112",
-        coordinatorPassword="password123"
+        defaults={
+            "coordinatorName": "John Admin",
+            "coordinatorPhone": "91111112",
+            "coordinatorPassword": "password123"
+        }
     )
-    print(f"[OK] Created: {coordinator2.coordinatorName} - {coordinator2.coordinatorEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {coordinator2.coordinatorName} - {coordinator2.coordinatorEmail}")
 
     # Create Technicians
     print("\n=== Creating Technicians ===")
-    technician1 = Technicians.objects.create(
-        technicianName="Benjamin Loh",
-        technicianEmail="benjamin.tech@airserve.com",
+    technician1, created = Technicians.objects.get_or_create(
         technicianPhone="92222221",
-        technicianPassword="password123",
-        technicianPostalCode="520123",
-        technicianLocation="1.3521,103.8198",  # Sample Singapore coordinates
-        technicianStatus="Available",
-        technicianTravelType="drive"
+        defaults={
+            "technicianName": "Benjamin Loh",
+            "technicianEmail": "benjamin.tech@airserve.com",
+            "technicianPassword": "password123",
+            "technicianPostalCode": "520123",
+            "technicianLocation": "1.3521,103.8198",
+            "technicianAddress": "1 Punggol Coast Road",
+            "technicianStatus": "1",
+            "technicianTravelType": "own_vehicle"
+        }
     )
-    print(f"[OK] Created: {technician1.technicianName} - {technician1.technicianEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {technician1.technicianName} - {technician1.technicianEmail}")
 
-    technician2 = Technicians.objects.create(
-        technicianName="Wang Richie",
-        technicianEmail="richie.tech@airserve.com",
+    technician2, created = Technicians.objects.get_or_create(
         technicianPhone="92222222",
-        technicianPassword="password123",
-        technicianPostalCode="560123",
-        technicianLocation="1.3500,103.8500",
-        technicianStatus="Available",
-        technicianTravelType="cycle"
+        defaults={
+            "technicianName": "Wang Richie",
+            "technicianEmail": "richie.tech@airserve.com",
+            "technicianPassword": "password123",
+            "technicianPostalCode": "560123",
+            "technicianLocation": "1.3500,103.8500",
+            "technicianAddress": "10 Ang Mo Kio Ave 5",
+            "technicianStatus": "1",
+            "technicianTravelType": "rented_vehicle"
+        }
     )
-    print(f"[OK] Created: {technician2.technicianName} - {technician2.technicianEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {technician2.technicianName} - {technician2.technicianEmail}")
 
-    technician3 = Technicians.objects.create(
-        technicianName="Timothy Neam",
-        technicianEmail="timothy.tech@airserve.com",
+    technician3, created = Technicians.objects.get_or_create(
         technicianPhone="92222223",
-        technicianPassword="password123",
-        technicianPostalCode="640123",
-        technicianLocation="1.3400,103.8400",
-        technicianStatus="Available",
-        technicianTravelType="walk"
+        defaults={
+            "technicianName": "Timothy Neam",
+            "technicianEmail": "timothy.tech@airserve.com",
+            "technicianPassword": "password123",
+            "technicianPostalCode": "640123",
+            "technicianLocation": "1.3400,103.8400",
+            "technicianAddress": "5 Jurong West St 64",
+            "technicianStatus": "1",
+            "technicianTravelType": "company_vehicle"
+        }
     )
-    print(f"[OK] Created: {technician3.technicianName} - {technician3.technicianEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {technician3.technicianName} - {technician3.technicianEmail}")
 
     # Create Customers
     print("\n=== Creating Customers ===")
-    customer1 = Customers.objects.create(
-        customerName="Alice Tan",
+    customer1, created = Customers.objects.get_or_create(
         customerEmail="alice.tan@email.com",
-        customerPhone="93333331",
-        customerPassword="password123",
-        customerAddress="Block 123 Ang Mo Kio Avenue 3",
-        customerPostalCode="560123",
-        customerLocation="1.3500,103.8500"
+        defaults={
+            "customerName": "Alice Tan",
+            "customerPhone": "93333331",
+            "customerPassword": "password123",
+            "customerAddress": "Block 123 Ang Mo Kio Avenue 3",
+            "customerPostalCode": "560123",
+            "customerLocation": "1.3500,103.8500"
+        }
     )
-    print(f"[OK] Created: {customer1.customerName} - {customer1.customerEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {customer1.customerName} - {customer1.customerEmail}")
 
-    customer2 = Customers.objects.create(
-        customerName="Bob Lee",
+    customer2, created = Customers.objects.get_or_create(
         customerEmail="bob.lee@email.com",
-        customerPhone="93333332",
-        customerPassword="password123",
-        customerAddress="Block 456 Bedok North Street 1",
-        customerPostalCode="460456",
-        customerLocation="1.3300,103.9300"
+        defaults={
+            "customerName": "Bob Lee",
+            "customerPhone": "93333332",
+            "customerPassword": "password123",
+            "customerAddress": "Block 456 Bedok North Street 1",
+            "customerPostalCode": "460456",
+            "customerLocation": "1.3300,103.9300"
+        }
     )
-    print(f"[OK] Created: {customer2.customerName} - {customer2.customerEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {customer2.customerName} - {customer2.customerEmail}")
 
-    customer3 = Customers.objects.create(
-        customerName="Charlie Wong",
+    customer3, created = Customers.objects.get_or_create(
         customerEmail="charlie.wong@email.com",
-        customerPhone="93333333",
-        customerPassword="password123",
-        customerAddress="Block 789 Jurong West Street 65",
-        customerPostalCode="640789",
-        customerLocation="1.3400,103.7000"
+        defaults={
+            "customerName": "Charlie Wong",
+            "customerPhone": "93333333",
+            "customerPassword": "password123",
+            "customerAddress": "Block 789 Jurong West Street 65",
+            "customerPostalCode": "640789",
+            "customerLocation": "1.3400,103.7000"
+        }
     )
-    print(f"[OK] Created: {customer3.customerName} - {customer3.customerEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {customer3.customerName} - {customer3.customerEmail}")
 
-    customer4 = Customers.objects.create(
-        customerName="Diana Lim",
+    customer4, created = Customers.objects.get_or_create(
         customerEmail="diana.lim@email.com",
-        customerPhone="93333334",
-        customerPassword="password123",
-        customerAddress="Block 101 Tampines Street 11",
-        customerPostalCode="521101",
-        customerLocation="1.3550,103.9450"
+        defaults={
+            "customerName": "Diana Lim",
+            "customerPhone": "93333334",
+            "customerPassword": "password123",
+            "customerAddress": "Block 101 Tampines Street 11",
+            "customerPostalCode": "521101",
+            "customerLocation": "1.3550,103.9450"
+        }
     )
-    print(f"[OK] Created: {customer4.customerName} - {customer4.customerEmail}")
+    print(f"[OK] {'Created' if created else 'Already exists'}: {customer4.customerName} - {customer4.customerEmail}")
 
     # Create Aircon Catalog
     print("\n=== Creating Aircon Catalog ===")
@@ -131,11 +150,11 @@ def create_test_data():
 
     for brand, models in brands:
         for model in models:
-            aircon = AirconCatalogs.objects.create(
+            aircon, created = AirconCatalogs.objects.get_or_create(
                 airconBrand=brand,
                 airconModel=model
             )
-            print(f"[OK] Created: {brand} - {model}")
+            print(f"[OK] {'Created' if created else 'Already exists'}: {brand} - {model}")
 
     print("\n" + "="*60)
     print("[SUCCESS] Test data creation complete!")

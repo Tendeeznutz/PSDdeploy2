@@ -29,55 +29,128 @@ def get_search_range(travel_type) -> int:
     return 30000
 
 
-def get_nearby_technicians(customer_id, aircon_brand=None) -> list[Any]:
+def _get_technician_effective_location(technician, appointment_start_time):
+    """
+    Get the technician's effective location at the time of the appointment.
+    If the technician has a prior appointment on the same day, use that
+    appointment's customer location (where the technician will be).
+    Otherwise, use the technician's home/profile address.
+    :param technician: Technicians model instance
+    :param appointment_start_time: Unix timestamp of the new appointment (or None)
+    :return: location string "lat,lng"
+    """
+    if appointment_start_time is None:
+        return technician.technicianLocation
+
+    appointment_datetime = datetime.fromtimestamp(appointment_start_time)
+    appointment_date = appointment_datetime.date()
+
+    # Get start-of-day timestamp
+    day_start = datetime.combine(appointment_date, datetime.min.time())
+    day_start_ts = int(day_start.timestamp())
+
+    # Find the most recent appointment before the requested time on the same day
+    prior_appointment = Appointments.objects.filter(
+        technicianId=technician.id,
+        appointmentStartTime__gte=day_start_ts,
+        appointmentStartTime__lt=appointment_start_time,
+        appointmentStatus__in=["1", "2", "3"],  # Not cancelled
+    ).order_by("-appointmentStartTime").first()
+
+    if prior_appointment:
+        try:
+            prior_customer = Customers.objects.get(id=prior_appointment.customerId.id)
+            if prior_customer.customerLocation and prior_customer.customerLocation != "0,0":
+                return prior_customer.customerLocation
+        except Customers.DoesNotExist:
+            pass
+
+    # First appointment of the day or prior customer location unavailable
+    return technician.technicianLocation
+
+
+def get_nearby_technicians(customer_id, aircon_brand=None, appointment_start_time=None) -> list[Any]:
     """
     Get list of available technicians that can service the customer.
     Sorted by: specialists first (by distance), then non-specialists (by distance).
     Only considers active and available technicians.
+    Proximity is based on where the technician will be at the appointment time:
+    - If the technician has a prior appointment that day, uses that customer's location.
+    - Otherwise, uses the technician's profile/home address.
     :param customer_id: ID of the customer
     :param aircon_brand: AC brand requested (e.g., 'Daikin'). If provided, specialists are prioritized.
+    :param appointment_start_time: Unix timestamp of the requested appointment (for proximity calc)
     :return: list of available technicianIDs sorted by specialization priority then distance
     """
     nearby_technicians = []
     customer = Customers.objects.get(id=customer_id)
     customer_location = customer.customerLocation
 
+    logger.info(
+        "[DISPATCH] Finding technicians for customer %s (location: %s, brand: %s, time: %s)",
+        customer_id, customer_location, aircon_brand, appointment_start_time,
+    )
+
     if not customer_location or customer_location == "0,0":
+        logger.warning("[DISPATCH] Customer %s has no valid location: '%s'", customer_id, customer_location)
         return []
 
     customer_coords = tuple(customer_location.split(","))
 
-    for technician in Technicians.objects.filter(isActive=True, technicianStatus="1"):
-        technician_location = technician.technicianLocation
+    active_technicians = Technicians.objects.filter(isActive=True, technicianStatus="1")
+    logger.info("[DISPATCH] Found %d active technicians to evaluate", active_technicians.count())
+
+    for technician in active_technicians:
+        # Determine where the technician will be at the time of this appointment
+        technician_location = _get_technician_effective_location(
+            technician, appointment_start_time
+        )
         if not technician_location or technician_location == "0,0":
+            logger.info(
+                "[DISPATCH] Skipping %s — invalid location: '%s'",
+                technician.technicianName, technician_location,
+            )
             continue
 
         travel_type = technician.technicianTravelType
-        if geo_onemap.is_in_range(
+        in_range = geo_onemap.is_in_range(
             technician_location,
             customer_location,
             get_search_range(travel_type),
             travel_type,
-        ):
-            # Calculate straight-line distance for sorting (fast, no API call)
-            try:
-                tech_coords = tuple(technician_location.split(","))
-                dist_meters = geo_distance(tech_coords, customer_coords).meters
-            except Exception:
-                dist_meters = float("inf")
+        )
+        if not in_range:
+            logger.info(
+                "[DISPATCH] Skipping %s — out of range (tech: %s, cust: %s)",
+                technician.technicianName, technician_location, customer_location,
+            )
+            continue
 
-            # Check if technician specializes in the requested brand
-            is_specialist = False
-            if aircon_brand and technician.specializations:
-                is_specialist = aircon_brand in technician.specializations
+        # Calculate straight-line distance for sorting (fast, no API call)
+        try:
+            tech_coords = tuple(technician_location.split(","))
+            dist_meters = geo_distance(tech_coords, customer_coords).meters
+        except Exception:
+            dist_meters = float("inf")
 
-            nearby_technicians.append((str(technician.id), dist_meters, is_specialist))
+        # Check if technician specializes in the requested brand
+        is_specialist = False
+        if aircon_brand and technician.specializations:
+            is_specialist = aircon_brand in technician.specializations
+
+        logger.info(
+            "[DISPATCH] %s is in range (%.0fm away, specialist=%s)",
+            technician.technicianName, dist_meters, is_specialist,
+        )
+        nearby_technicians.append((str(technician.id), dist_meters, is_specialist))
 
     # Sort: specialists first (is_specialist=True sorts before False when negated), then by distance
     nearby_technicians.sort(key=lambda x: (not x[2], x[1]))
 
     if len(nearby_technicians) == 0:
-        logger.warning("No available technicians found for customer %s", customer_id)
+        logger.warning("[DISPATCH] No available technicians found for customer %s", customer_id)
+    else:
+        logger.info("[DISPATCH] %d technicians in range", len(nearby_technicians))
 
     # Return just the IDs, sorted by specialization priority then distance
     return [tech_id for tech_id, _, _ in nearby_technicians]
@@ -138,6 +211,12 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
     appointment_datetime = datetime.fromtimestamp(appointment_timestamp)
     appointment_date = appointment_datetime.date()
     day_name = appointment_datetime.strftime("%A").lower()
+    appointment_time = appointment_datetime.strftime("%H:%M")
+
+    logger.info(
+        "[AVAIL] Checking tech %s for date=%s (%s) time=%s",
+        technician_id, appointment_date, day_name, appointment_time,
+    )
 
     # Check for specific date override first
     specific_override = TechnicianAvailability.objects.filter(
@@ -145,16 +224,20 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
     ).first()
 
     if specific_override:
-        # If there's a specific date entry, use that availability
+        logger.info(
+            "[AVAIL] Found specific date record: available=%s, hours=%s-%s",
+            specific_override.isAvailable, specific_override.startTime, specific_override.endTime,
+        )
         if not specific_override.isAvailable:
+            logger.info("[AVAIL] -> Not available (marked unavailable)")
             return False
-        # Check if appointment time falls within the specific date's time range
-        appointment_time = appointment_datetime.strftime("%H:%M")
-        if (
-            appointment_time < specific_override.startTime
-            or appointment_time >= specific_override.endTime
-        ):
+        if appointment_time < specific_override.startTime or appointment_time >= specific_override.endTime:
+            logger.info(
+                "[AVAIL] -> Not available (time %s outside %s-%s)",
+                appointment_time, specific_override.startTime, specific_override.endTime,
+            )
             return False
+        logger.info("[AVAIL] -> Available via specific date")
         return True
 
     # Check regular weekly schedule
@@ -166,17 +249,31 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
     ).first()
 
     if not weekly_schedule:
-        # Technician doesn't work on this day
+        # If the technician has NO availability records at all, default to available
+        # (they haven't configured a schedule yet, so treat them as always available)
+        total_records = TechnicianAvailability.objects.filter(
+            technicianId=technician_id, specificDate__isnull=True
+        ).count()
+        if total_records == 0:
+            logger.info(
+                "[AVAIL] -> Available (no schedule configured, defaulting to available)"
+            )
+            return True
+
+        logger.info(
+            "[AVAIL] -> Not available (has weekly schedule but not for %s)",
+            day_name,
+        )
         return False
 
-    # Check if appointment time falls within working hours
-    appointment_time = appointment_datetime.strftime("%H:%M")
-    if (
-        appointment_time < weekly_schedule.startTime
-        or appointment_time >= weekly_schedule.endTime
-    ):
+    if appointment_time < weekly_schedule.startTime or appointment_time >= weekly_schedule.endTime:
+        logger.info(
+            "[AVAIL] -> Not available (time %s outside weekly %s-%s)",
+            appointment_time, weekly_schedule.startTime, weekly_schedule.endTime,
+        )
         return False
 
+    logger.info("[AVAIL] -> Available via weekly schedule")
     return True
 
 
@@ -227,7 +324,12 @@ def get_technician_to_assign(
     Picks the closest available technician for the given time slot.
     If current_technician_id is provided and still available, keeps the current assignment.
     """
+    logger.info(
+        "[ASSIGN] Assigning from %d nearby technicians for slot %s-%s",
+        len(nearby_technicians), appointment_start_time, appointment_end_time,
+    )
     if len(nearby_technicians) == 0:
+        logger.warning("[ASSIGN] No nearby technicians to assign")
         return None
 
     # If updating an existing appointment and current technician is still available, keep them

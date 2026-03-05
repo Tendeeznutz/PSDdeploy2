@@ -2,38 +2,17 @@ import {Link, useLocation, useNavigate} from 'react-router-dom';
 
 function Navbar() {
     const location = useLocation();
-    const hideOnRoutesCust = [
-        '/home',
-        '/scheduleAppointment',
-        '/profile',
-        '/appointmentDetail',
-        '/rescheduleAppointment',
-        '/ReportIssues',
-        '/technicianhome',
-        '/TechnicianHome',
-
-        '/TechnicianProfile',
-    ];
-    const hideOnRoutesCoord = [
-        '/CoordinatorHome',
-        '/RegisterTechnician',
-        '/CoordinatorAppointmentView',
-        '/CustomerEnquiry',
-        '/CoordinatorAppointmentUpdate'
-    ]
     const navigate = useNavigate();
 
-    if (localStorage.getItem('customers_id') || localStorage.getItem('technicians_phone')) {
-        if (!hideOnRoutesCust.includes(location.pathname)) {
-            return null;
-        }
-    } else if (localStorage.getItem('coordinators_email')) {
-        if (!hideOnRoutesCoord.includes(location.pathname)) {
-            return null;
-        }
-    }
+    const isCustomer = !!localStorage.getItem('customers_id');
+    const isTechnician = !!localStorage.getItem('technicians_phone');
+    const isCoordinator = !!localStorage.getItem('coordinators_email');
 
-    if (!hideOnRoutesCust.includes(location.pathname)) {
+    // Show navbar on any /customer/* or /technician/* route
+    const showForCustOrTech = (isCustomer || isTechnician) &&
+        (location.pathname.startsWith('/customer/') || location.pathname.startsWith('/technician/'));
+
+    if (!showForCustOrTech) {
         return null;
     }
 
@@ -57,73 +36,55 @@ function Navbar() {
 
     return (
         <header className="header">
-            {/* Navigation Bar */}
-            {localStorage.getItem('customers_id') || localStorage.getItem('technicians_phone') ? (
-                <nav className="bg-gray-800 text-white p-4 mb-4 rounded">
-                    <ul className="flex space-x-8 justify-center">
-                        <li>
-                            {localStorage.getItem('customers_id') ? (
-                                <Link to="/home" className="hover:text-blue-300">
-                                    Home
-                                </Link>
-                            ) : (
-                                <Link to="/TechnicianHome" className="hover:text-blue-300">
-                                    Home
-                                </Link>
-                            )}
-                        </li>
-                        {localStorage.getItem('customers_id') && (
-                            <li>
-                                <Link to="/scheduleAppointment" className="hover:text-blue-300">
-                                    Add Appointment
-                                </Link>
-                            </li>
-                        )}
-
-                        {/*<li>*/}
-                        {/*    <Link to="/TechnicianList" className="hover:text-blue-300">*/}
-                        {/*        Technician List*/}
-                        {/*    </Link>*/}
-                        {/*</li>*/}
-                        <li>
-                            {localStorage.getItem('customers_id') ? (
-                                    <Link to="/profile" className="hover:text-blue-300">
-                                        Profile
-                                    </Link>)
-                                : (
-                                    <Link to="/TechnicianProfile" className="hover:text-blue-300">
-                                        Profile
-                                    </Link>)}
-                        </li>
-                        <li>
-                            <button onClick={logout} className="hover:text-blue-300">
-                                Logout
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
-            ) : null}
-            {localStorage.getItem('coordinators_email') ? (
-                <nav className="bg-gray-800 text-white p-4 mb-4 rounded">
-                    <ul className="flex space-x-8 justify-center">
-                        <li>
-                            <Link to="/CoordinatorHome" className="hover:text-blue-300">
+            <nav className="bg-gray-800 text-white p-4 mb-4 rounded">
+                <ul className="flex space-x-8 justify-center">
+                    <li>
+                        {isCustomer ? (
+                            <Link to="/customer/home" className="hover:text-blue-300">
                                 Home
                             </Link>
-                        </li>
+                        ) : (
+                            <Link to="/technician/home" className="hover:text-blue-300">
+                                Home
+                            </Link>
+                        )}
+                    </li>
+                    {isCustomer && (
                         <li>
-                            <Link to="/RegisterTechnician" className="hover:text-blue-300">
-                                Register Technician
+                            <Link to="/customer/scheduleAppointment" className="hover:text-blue-300">
+                                Add Appointment
                             </Link>
                         </li>
-                        <li>
-                            <button onClick={logout} className="hover:text-blue-300">
-                                Logout
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
-            ) : null}
+                    )}
+                    <li>
+                        {isCustomer ? (
+                            <Link to="/customer/profile" className="hover:text-blue-300">
+                                Profile
+                            </Link>
+                        ) : (
+                            <Link to="/technician/profile" className="hover:text-blue-300">
+                                Profile
+                            </Link>
+                        )}
+                    </li>
+                    <li>
+                        {isCustomer ? (
+                            <Link to="/customer/mailbox" className="hover:text-blue-300">
+                                Mailbox
+                            </Link>
+                        ) : (
+                            <Link to="/technician/mailbox" className="hover:text-blue-300">
+                                Mailbox
+                            </Link>
+                        )}
+                    </li>
+                    <li>
+                        <button onClick={logout} className="hover:text-blue-300">
+                            Logout
+                        </button>
+                    </li>
+                </ul>
+            </nav>
         </header>
     )
 }

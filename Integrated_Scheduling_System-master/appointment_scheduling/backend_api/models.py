@@ -60,12 +60,17 @@ class Customers(TimeStampedModel):
 
 class CustomerAirconDevices(TimeStampedModel):
     AIRCON_TYPE_CHOICES = (
-        ('industrial', 'Industrial'),
-        ('split', 'Split'),
-        ('window', 'Window'),
-        ('centralized', 'Centralized'),
-        ('floor_mounted', 'Floor Mounted'),
-        ('portable', 'Portable'),
+        ('daikin', 'Daikin'),
+        ('mitsubishi', 'Mitsubishi'),
+        ('panasonic', 'Panasonic'),
+        ('lg', 'LG'),
+        ('samsung', 'Samsung'),
+        ('fujitsu', 'Fujitsu'),
+        ('sharp', 'Sharp'),
+        ('toshiba', 'Toshiba'),
+        ('hitachi', 'Hitachi'),
+        ('york', 'York'),
+        ('other', 'Other'),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, null=False)
@@ -76,7 +81,7 @@ class CustomerAirconDevices(TimeStampedModel):
         default=None, null=False
     )
     numberOfUnits = models.IntegerField(null=False, default=1)
-    airconType = models.CharField(max_length=20, choices=AIRCON_TYPE_CHOICES, null=False, default='split')
+    airconType = models.CharField(max_length=20, choices=AIRCON_TYPE_CHOICES, null=False, default='daikin')
     # Store as YYYY-MM format string (e.g., "2024-01")
     lastServiceMonth = models.CharField(max_length=7, null=True, blank=True, default=None)
     remarks = models.TextField(max_length=500, null=True, blank=True, default=None)
@@ -112,8 +117,8 @@ class Technicians(models.Model):
 
     TRAVEL_TYPE_CHOICES = (
         ('own_vehicle', 'Own Vehicle'),
+        ('rented_vehicle', 'Rented Vehicle'),
         ('company_vehicle', 'Company Vehicle'),
-        ('rental_van', 'Rental Van'),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)

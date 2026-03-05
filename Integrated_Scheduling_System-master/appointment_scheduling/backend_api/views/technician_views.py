@@ -503,3 +503,34 @@ AirServe Team"""
                 },
                 status=status.HTTP_200_OK,
             )
+
+    @action(detail=True, methods=["post"], url_path="toggle-status")
+    def toggle_status(self, request, pk=None):
+        """
+        Toggle technician's availability status (Available/Unavailable).
+        Only coordinators should use this endpoint.
+        """
+        technician = get_object_or_404(Technicians.objects.all(), pk=pk)
+
+        if technician.technicianStatus == "1":
+            technician.technicianStatus = "2"
+            technician.save()
+            return Response(
+                {
+                    "message": f"{technician.technicianName} is now Unavailable",
+                    "technicianName": technician.technicianName,
+                    "technicianStatus": "2",
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            technician.technicianStatus = "1"
+            technician.save()
+            return Response(
+                {
+                    "message": f"{technician.technicianName} is now Available",
+                    "technicianName": technician.technicianName,
+                    "technicianStatus": "1",
+                },
+                status=status.HTTP_200_OK,
+            )

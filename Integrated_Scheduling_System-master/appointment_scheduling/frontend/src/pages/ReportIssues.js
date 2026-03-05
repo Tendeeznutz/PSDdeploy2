@@ -12,9 +12,12 @@ export default function ReportIssues() {
         event.preventDefault();
 
         try {
-            await api.post('/api/issues', {
-                title: issueTitle,
-                description: issueDescription,
+            await api.post('/api/messages/', {
+                subject: issueTitle,
+                body: issueDescription,
+                senderType: 'customer',
+                senderId: localStorage.getItem('customers_id'),
+                recipientType: 'coordinator',
             });
             alert('Issue reported successfully');
         } catch (error) {

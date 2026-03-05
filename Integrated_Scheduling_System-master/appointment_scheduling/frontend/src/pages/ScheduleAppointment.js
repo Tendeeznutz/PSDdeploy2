@@ -12,12 +12,14 @@ const TRAVEL_FEE = 10; // $10 standard travel fee
 function ScheduleAppointment() {
     const customer_id = localStorage.getItem("customers_id");
     const [dateTime, setDateTime] = useState('');
+    const [timeSelected, setTimeSelected] = useState(false);
     const [selectedAircons, setSelectedAircons] = useState([]);
     const [paymentMethod, setPaymentMethod] = useState('cash');
     const [error, setError] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
     const [progress, setProgress] = useState(0);
     const [showProgress, setShowProgress] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
 
     const paymentMethods = [
@@ -62,12 +64,27 @@ function ScheduleAppointment() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        setShowProgress(true);
+
+        // Prevent double submission
+        if (isSubmitting) return;
 
         try {
             if (!dateTime || selectedAircons.length === 0) {
                 throw new Error('Please fill in all fields.');
             }
+
+            if (!timeSelected) {
+                throw new Error('Please select a time for your appointment.');
+            }
+
+            // Validate the selected time is within working hours (8 AM - 8 PM)
+            const selectedHour = dateTime.getHours();
+            if (selectedHour < 8 || selectedHour >= 20) {
+                throw new Error('Please select a time between 8:00 AM and 8:00 PM.');
+            }
+
+            setIsSubmitting(true);
+            setShowProgress(true);
 
             const singaporeDateTimeUnix = dateTime.getTime() / 1000;
 
@@ -80,20 +97,23 @@ function ScheduleAppointment() {
 
             if (response.status === 201) {
                 setProgress(100);
-                
+
                 setTimeout(() => {
-                    navigate('/home');
+                    navigate('/customer/home');
                 }, 1000);
             }
 
         }
         catch (error) {
+            setIsSubmitting(false);
             setShowProgress(false);
             console.error('Error scheduling appointment:', error.response);
-            if (error.message === "Please fill in all fields.")
+            if (error.message === 'Please fill in all fields.' ||
+                error.message === 'Please select a time for your appointment.' ||
+                error.message === 'Please select a time between 8:00 AM and 8:00 PM.')
             {
                 setError(error.message);
-            } else if (error.response.data.appointmentStartTime) {
+            } else if (error.response?.data?.appointmentStartTime) {
                 setError("Scheduled Date cannot be past or present.");
             } else if (error.status === 500) {
                 setError("An error have occured at the server. Please try again.");
@@ -120,14 +140,35 @@ function ScheduleAppointment() {
                             <DatePicker
                                 id="date-time"
                                 selected={dateTime}
-                                onChange={(date) => setDateTime(date)}
+                                onChange={(date) => {
+                                    if (date) {
+                                        // Check if the user clicked a time slot (hours/minutes changed from previous value)
+                                        if (dateTime && dateTime instanceof Date) {
+                                            const dateChanged = date.toDateString() !== dateTime.toDateString();
+                                            const timeChanged = date.getHours() !== dateTime.getHours() || date.getMinutes() !== dateTime.getMinutes();
+                                            if (timeChanged && !dateChanged) {
+                                                setTimeSelected(true);
+                                            }
+                                            // If date changed, reset time selection requirement
+                                            if (dateChanged) {
+                                                setTimeSelected(false);
+                                            }
+                                        }
+                                    }
+                                    setDateTime(date);
+                                }}
                                 showTimeSelect
                                 timeFormat="HH:mm"
                                 timeIntervals={30}
                                 timeCaption="time"
                                 dateFormat="MMM d, yyyy h:mm aa"
+                                minTime={new Date(new Date().setHours(8, 0, 0))}
+                                maxTime={new Date(new Date().setHours(20, 0, 0))}
                                 className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                             />
+                            {dateTime && !timeSelected && (
+                                <p className="mt-1 text-xs text-amber-600">Please select a time from the time picker.</p>
+                            )}
                         </div>
                         <fieldset className="mb-4">
                             <legend className="block mb-2 text-sm font-bold text-gray-700">Select Aircon(s)</legend>
@@ -191,16 +232,17 @@ function ScheduleAppointment() {
                         <div className="flex items-center justify-center">
                             {userAirconList.length > 0 ? (
                                 <button
-                                    className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700 focus:outline-none focus:shadow-outline"
+                                    className={`px-4 py-2 font-bold text-white rounded focus:outline-none focus:shadow-outline ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-700'}`}
                                     type="submit"
+                                    disabled={isSubmitting}
                                 >
-                                    Book Appointment
+                                    {isSubmitting ? 'Booking...' : 'Book Appointment'}
                                 </button>
                             ) : (
                                 <button
                                     className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700 focus:outline-none focus:shadow-outline"
                                     type="button"
-                                    onClick={() => navigate('/profile')}
+                                    onClick={() => navigate('/customer/profile')}
                                 >
                                     To  profile
                                 </button>

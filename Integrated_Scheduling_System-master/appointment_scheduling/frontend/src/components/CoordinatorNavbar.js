@@ -3,18 +3,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 function CoordinatorNavbar() {
     const location = useLocation();
-    const hideOnRoutes = [
-        '/coordinatorHome',
-        '/CoordinatorHome',
-        '/RegisterTechnician',
-        '/TechnicianHiring',
-        '/CoordinatorAppointmentView',
-        '/CustomerEnquiry',
-        '/CoordinatorAppointmentUpdate'
-    ];
     const navigate = useNavigate();
 
-    if (!hideOnRoutes.includes(location.pathname)) {
+    const isCoordinator = !!localStorage.getItem('coordinators_email');
+
+    // Show navbar on any /coordinator/* route
+    if (!isCoordinator || !location.pathname.startsWith('/coordinator/')) {
         return null;
     }
 
@@ -33,17 +27,21 @@ function CoordinatorNavbar() {
 
     return (
         <header className="header">
-            {/* Navigation Bar */}
             <nav className="bg-gray-800 text-white p-4 mb-4 rounded">
                 <ul className="flex space-x-8 justify-center">
                     <li>
-                        <Link to="/coordinatorHome" className="hover:text-blue-300">
+                        <Link to="/coordinator/home" className="hover:text-blue-300">
                             Home
                         </Link>
                     </li>
                     <li>
-                        <Link to="/TechnicianHiring" className="hover:text-blue-300">
+                        <Link to="/coordinator/technicianHiring" className="hover:text-blue-300">
                             Hire Technician
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/coordinator/mailbox" className="hover:text-blue-300">
+                            Mailbox
                         </Link>
                     </li>
                     <li>

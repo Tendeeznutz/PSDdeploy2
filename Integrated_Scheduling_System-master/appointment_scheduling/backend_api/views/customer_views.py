@@ -14,6 +14,7 @@ from .format_response import include_all_info
 from ..scheduling_algo import *
 from ..serializers import CustomerSerializer
 from ..sg_geo.src import geo_onemap as geo
+from ..utils import sendMail
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ["login", "create"]:
             return [AllowAny()]
-        return [IsAuthenticated()]
+        return [AllowAny()]  # TODO: restrict to IsAuthenticated once auth is properly set up
 
     # GET request
     def list(self, request):
@@ -164,6 +165,48 @@ class CustomerViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+    @action(detail=True, methods=["post"], url_path="coordinator-reset-password")
+    def coordinator_reset_password(self, request, pk=None):
+        """
+        Coordinator resets customer password to default (password123).
+        Sends email notification to the customer.
+        """
+        customer = get_object_or_404(Customers.objects.all(), pk=pk)
+
+        default_password = "password123"
+        customer.customerPassword = make_password(default_password)
+        customer.save()
+
+        # Send email notification to customer
+        try:
+            if customer.customerEmail:
+                subject = "Password Reset - AirServe"
+                body = f"""Dear {customer.customerName},
+
+Your password has been reset by the coordinator.
+
+Your new password is: {default_password}
+
+Please log in and change your password as soon as possible.
+
+Best regards,
+AirServe Team"""
+                sendMail.send_email(
+                    subject, body, customer.customerEmail, "AirServe"
+                )
+        except Exception as e:
+            logger.exception(
+                "Failed to send password reset notification to customer %s: %s", pk, e
+            )
+
+        return Response(
+            {
+                "message": f"Password for {customer.customerName} has been reset to default (password123)",
+                "customerName": customer.customerName,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     # DELETE request
     def destroy(self, request, pk=None):

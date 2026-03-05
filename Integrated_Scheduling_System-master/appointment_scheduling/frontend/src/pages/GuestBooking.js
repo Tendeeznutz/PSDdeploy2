@@ -310,8 +310,10 @@ const GuestBooking = () => {
               onChange={setSelectedTime}
               format="HH:mm"
               className="w-full"
-              placeholder="Select time"
+              placeholder="Select time (09:00 - 18:00)"
               minuteStep={30}
+              disabledHours={() => [0,1,2,3,4,5,6,7,8,19,20,21,22,23]}
+              hideDisabledOptions
             />
 
             <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">

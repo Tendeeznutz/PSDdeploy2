@@ -33,7 +33,7 @@ function ResetPassword() {
             const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
 
             try {
-                const response = await axios.get(`${baseUrl}/api/technician/profile/validate-reset-token/?token=${token}`);
+                const response = await axios.get(`${baseUrl}/api/technicians/validate-reset-token/?token=${token}`);
                 if (response.data.valid) {
                     setTokenValid(true);
                     setTechnicianName(response.data.technicianName || '');
@@ -98,7 +98,7 @@ function ResetPassword() {
         const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
 
         try {
-            const response = await axios.post(`${baseUrl}/api/technician/profile/reset-password/`, {
+            const response = await axios.post(`${baseUrl}/api/technicians/reset-password/`, {
                 token: token,
                 newPassword: newPassword
             });

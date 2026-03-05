@@ -51,6 +51,9 @@ def extract_aircon_brand(aircon_to_service):
         # Try catalog first
         if device.airconCatalogId:
             return device.airconCatalogId.airconBrand
+        # Use airconType field (e.g., 'daikin' -> 'Daikin')
+        if device.airconType and device.airconType != 'other':
+            return device.get_airconType_display()
         # Parse from airconName (format: "Brand - Model (Booking ...)")
         if device.airconName and " - " in device.airconName:
             return device.airconName.split(" - ")[0].strip()
@@ -356,7 +359,9 @@ AirServe Team
     def create(self, request, *args, **kwargs):
         aircon_brand = extract_aircon_brand(request.data.get("airconToService", []))
         nearby_technicians = get_nearby_technicians(
-            request.data["customerId"], aircon_brand=aircon_brand
+            request.data["customerId"],
+            aircon_brand=aircon_brand,
+            appointment_start_time=request.data["appointmentStartTime"],
         )
         request.data["appointmentEndTime"] = self.get_appointment_end_time(
             request.data["appointmentStartTime"], request.data["airconToService"]
@@ -496,8 +501,14 @@ AirServe Team
         if not manual_technician_assignment:
             aircon_ids = request.data.get("airconToService", item.airconToService or [])
             aircon_brand = extract_aircon_brand(aircon_ids)
+            # Use the new or existing start time for proximity calculation
+            effective_start_time = request.data.get(
+                "appointmentStartTime", item.appointmentStartTime
+            )
             nearby_technicians = get_nearby_technicians(
-                item.customerId.id, aircon_brand=aircon_brand
+                item.customerId.id,
+                aircon_brand=aircon_brand,
+                appointment_start_time=effective_start_time,
             )
 
             if nearby_technicians is None:
@@ -922,7 +933,9 @@ AirServe Team
 
             # Get nearby technicians and find available slot (prioritize specialists for this brand)
             nearby_technicians = get_nearby_technicians(
-                customer.id, aircon_brand=aircon_brand
+                customer.id,
+                aircon_brand=aircon_brand,
+                appointment_start_time=appointment_time,
             )
             appointment_end_time = appointment_time + (
                 3600 * number_of_units

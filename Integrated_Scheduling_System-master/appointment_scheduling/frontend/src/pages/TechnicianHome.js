@@ -300,7 +300,7 @@ function TechnicianHome() {
                     <Button
                         type="primary"
                         icon={<MailOutlined />}
-                        onClick={() => navigate('/mailbox')}
+                        onClick={() => navigate('/technician/mailbox')}
                         size="large"
                     >
                         Mailbox

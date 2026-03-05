@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, TimePicker, message, Spin, Badge } from 'antd';
+import { Modal, Button, TimePicker, message, Spin } from 'antd';
 import { CalendarOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { Calendar } from 'antd';
 import api from "../axiosConfig";
@@ -70,22 +70,45 @@ const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
         setSelectedDates(newSelectedDates);
     };
 
-    const dateCellRender = (date) => {
+    const fullCellRender = (date) => {
         const dateString = date.format('YYYY-MM-DD');
         const isSelected = selectedDates.has(dateString);
         const isPast = date.isBefore(dayjs(), 'day');
+        const isCurrentMonth = date.month() === currentMonth.month();
 
         return (
             <div
-                onClick={() => !isPast && handleDateSelect(date)}
-                className={`
-                    w-full h-full flex items-center justify-center cursor-pointer
-                    ${isSelected ? 'bg-blue-500 text-white rounded-full' : ''}
-                    ${isPast ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 rounded-full'}
-                `}
-                style={{ minHeight: '30px' }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isPast && isCurrentMonth) handleDateSelect(date);
+                }}
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: isPast || !isCurrentMonth ? 'not-allowed' : 'pointer',
+                    opacity: isPast || !isCurrentMonth ? 0.4 : 1,
+                    padding: '4px 0',
+                }}
             >
-                <span>{date.date()}</span>
+                <div
+                    style={{
+                        width: 28,
+                        height: 28,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '50%',
+                        backgroundColor: isSelected ? '#3b82f6' : 'transparent',
+                        color: isSelected ? '#fff' : 'inherit',
+                        fontWeight: isSelected ? 'bold' : 'normal',
+                        transition: 'background-color 0.2s, color 0.2s',
+                    }}
+                >
+                    {date.date()}
+                </div>
             </div>
         );
     };
@@ -210,8 +233,7 @@ const TechnicianAvailabilityModal = ({ visible, onClose, technicianId }) => {
                     <Calendar
                         fullscreen={false}
                         value={currentMonth}
-                        onSelect={handleDateSelect}
-                        dateCellRender={dateCellRender}
+                        fullCellRender={fullCellRender}
                         onPanelChange={handleMonthChange}
                         headerRender={({ value, onChange }) => {
                             const month = value.month();

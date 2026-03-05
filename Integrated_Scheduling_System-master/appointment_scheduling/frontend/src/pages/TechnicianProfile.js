@@ -14,11 +14,14 @@ function TechnicianProfile() {
         if (!travelType) return 'Not Set';
         const travelTypes = {
             'own_vehicle': 'Own Vehicle',
+            'rented_vehicle': 'Rented Vehicle',
             'company_vehicle': 'Company Vehicle',
-            'rental_van': 'Rental Van',
         };
         return travelTypes[travelType] || travelType;
     };
+
+    // Valid travel type values
+    const VALID_TRAVEL_TYPES = ['own_vehicle', 'rented_vehicle', 'company_vehicle'];
 
     const [techniciandetails, setTechniciandetails] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
@@ -42,15 +45,20 @@ function TechnicianProfile() {
     useEffect(() => {
         api.get(`/api/technicians/?technicianId=` + localStorage.getItem("technicians_id"))
             .then(response => {
-                setTechniciandetails(response.data[0]);
+                const data = response.data[0];
+                setTechniciandetails(data);
+                // Sanitize travel type - if old/invalid value, set to null
+                const loadedTravelType = VALID_TRAVEL_TYPES.includes(data.technicianTravelType)
+                    ? data.technicianTravelType
+                    : null;
                 setEditedDetails({
-                    technicianName: response.data[0].technicianName,
-                    technicianPhone: response.data[0].technicianPhone,
-                    technicianEmail: response.data[0].technicianEmail || '',
-                    technicianAddress: response.data[0].technicianAddress,
-                    technicianPostalCode: response.data[0].technicianPostalCode,
-                    technicianTravelType: response.data[0].technicianTravelType,
-                    specializations: response.data[0].specializations || [],
+                    technicianName: data.technicianName,
+                    technicianPhone: data.technicianPhone,
+                    technicianEmail: data.technicianEmail || '',
+                    technicianAddress: data.technicianAddress,
+                    technicianPostalCode: data.technicianPostalCode,
+                    technicianTravelType: loadedTravelType,
+                    specializations: data.specializations || [],
                     technicianPassword: '',
                     technicianPasswordConfirm: ''
                 });
@@ -100,7 +108,7 @@ function TechnicianProfile() {
                 technicianEmail: editedDetails.technicianEmail || null,
                 technicianAddress: editedDetails.technicianAddress,
                 technicianPostalCode: editedDetails.technicianPostalCode,
-                technicianTravelType: editedDetails.technicianTravelType,
+                technicianTravelType: editedDetails.technicianTravelType || null,
                 specializations: editedDetails.specializations || [],
             };
 
@@ -121,7 +129,14 @@ function TechnicianProfile() {
             }
         } catch (error) {
             console.error('Error updating profile:', error);
-            if (error.message) {
+            if (error.response?.data) {
+                // Show specific field validation errors from backend
+                const errors = error.response.data;
+                const errorMessages = Object.entries(errors)
+                    .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                    .join('; ');
+                setErrorMessage(errorMessages || `Request failed with status code ${error.response.status}`);
+            } else if (error.message) {
                 setErrorMessage(error.message);
             } else {
                 setErrorMessage('Failed to update profile. Please try again.');
@@ -236,8 +251,8 @@ function TechnicianProfile() {
                                     >
                                         <option value="">-- Select Travel Type --</option>
                                         <option value="own_vehicle">Own Vehicle</option>
+                                        <option value="rented_vehicle">Rented Vehicle</option>
                                         <option value="company_vehicle">Company Vehicle</option>
-                                        <option value="rental_van">Rental Van</option>
                                     </select>
                                 </div>
                                 <div className="mb-4">

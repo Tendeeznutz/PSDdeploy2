@@ -15,11 +15,11 @@ function Home() {
     const [unreadCount, setUnreadCount] = useState(0);
 
     const goToReportIssues = () => {
-        navigate('/ReportIssues');
+        navigate('/customer/ReportIssues');
     }
 
     const goToMailbox = () => {
-        navigate('/Mailbox');
+        navigate('/customer/mailbox');
     }
 
     const handleCancelAppointment = async (appointmentId, appointmentStartTime) => {

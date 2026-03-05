@@ -39,7 +39,7 @@ function Profile() {
     // for the add aircon form submission
     const [airconName, setAirconName] = useState('');
     const [numberOfUnits, setNumberOfUnits] = useState(1);
-    const [airconType, setAirconType] = useState('split');
+    const [airconType, setAirconType] = useState('daikin');
     const [lastServiceMonth, setLastServiceMonth] = useState(null);
     const [remarks, setRemarks] = useState('');
 
@@ -71,7 +71,7 @@ function Profile() {
         if (isModalOpen) {
             setAirconName("");
             setNumberOfUnits(1);
-            setAirconType('split');
+            setAirconType('daikin');
             setLastServiceMonth(null);
             setRemarks("");
             setModalError("");
@@ -113,7 +113,7 @@ function Profile() {
             id: aircon.id,
             airconName: aircon.airconName || '',
             numberOfUnits: aircon.numberOfUnits || 1,
-            airconType: aircon.airconType || 'split',
+            airconType: aircon.airconType || 'daikin',
             lastServiceMonth: aircon.lastServiceMonth ? dayjs(aircon.lastServiceMonth, 'YYYY-MM') : null,
             remarks: aircon.remarks || ''
         });
@@ -549,7 +549,7 @@ function Profile() {
                                                     </div>
                                                     <div className="mb-4">
                                                         <label className="block mb-2 text-sm font-bold text-gray-700">
-                                                            Aircon Type <span className="text-red-500">*</span>
+                                                            Aircon Brand <span className="text-red-500">*</span>
                                                         </label>
                                                         <select
                                                             onChange={(e) => setAirconType(e.target.value)}
@@ -557,12 +557,17 @@ function Profile() {
                                                             className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                                             required
                                                         >
-                                                            <option value="split">Split</option>
-                                                            <option value="window">Window</option>
-                                                            <option value="centralized">Centralized</option>
-                                                            <option value="floor_mounted">Floor Mounted</option>
-                                                            <option value="portable">Portable</option>
-                                                            <option value="industrial">Industrial</option>
+                                                            <option value="daikin">Daikin</option>
+                                                            <option value="mitsubishi">Mitsubishi</option>
+                                                            <option value="panasonic">Panasonic</option>
+                                                            <option value="lg">LG</option>
+                                                            <option value="samsung">Samsung</option>
+                                                            <option value="fujitsu">Fujitsu</option>
+                                                            <option value="sharp">Sharp</option>
+                                                            <option value="toshiba">Toshiba</option>
+                                                            <option value="hitachi">Hitachi</option>
+                                                            <option value="york">York</option>
+                                                            <option value="other">Other</option>
                                                         </select>
                                                     </div>
                                                     <div className="mb-4">
@@ -671,7 +676,7 @@ function Profile() {
                                                     </div>
                                                     <div className="mb-4">
                                                         <label className="block mb-2 text-sm font-bold text-gray-700">
-                                                            Aircon Type <span className="text-red-500">*</span>
+                                                            Aircon Brand <span className="text-red-500">*</span>
                                                         </label>
                                                         <select
                                                             onChange={(e) => setEditingAircon({...editingAircon, airconType: e.target.value})}
@@ -679,12 +684,17 @@ function Profile() {
                                                             className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                                             required
                                                         >
-                                                            <option value="split">Split</option>
-                                                            <option value="window">Window</option>
-                                                            <option value="centralized">Centralized</option>
-                                                            <option value="floor_mounted">Floor Mounted</option>
-                                                            <option value="portable">Portable</option>
-                                                            <option value="industrial">Industrial</option>
+                                                            <option value="daikin">Daikin</option>
+                                                            <option value="mitsubishi">Mitsubishi</option>
+                                                            <option value="panasonic">Panasonic</option>
+                                                            <option value="lg">LG</option>
+                                                            <option value="samsung">Samsung</option>
+                                                            <option value="fujitsu">Fujitsu</option>
+                                                            <option value="sharp">Sharp</option>
+                                                            <option value="toshiba">Toshiba</option>
+                                                            <option value="hitachi">Hitachi</option>
+                                                            <option value="york">York</option>
+                                                            <option value="other">Other</option>
                                                         </select>
                                                     </div>
                                                     <div className="mb-4">

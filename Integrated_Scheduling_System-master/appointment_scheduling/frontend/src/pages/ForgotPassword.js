@@ -18,7 +18,7 @@ function ForgotPassword() {
         setLoading(true);
 
         try {
-            const response = await api.post(`/api/technician/profile/forgot-password/`, {
+            const response = await api.post(`/api/technicians/forgot-password/`, {
                 phone: phone
             });
 

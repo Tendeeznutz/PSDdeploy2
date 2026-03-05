@@ -22,7 +22,7 @@ function RescheduleCoordinator() {
     useEffect(() => {
         const fetchAirconData = async () => {
             try {
-                const response = await api.get(`/api/customers/aircons/?customerId=` + custId);
+                const response = await api.get(`/api/customeraircondevices/?customerId=` + custId);
                 setAirconData(response.data);
             } catch (error) {
                 console.error('Error fetching aircon data:', error);

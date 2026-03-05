@@ -93,7 +93,7 @@ def include_all_info(data, request=None):
                 updates["display"]["airconToService"].append(aircon.airconName)
                 updates["display"]["airconType"].append(aircon.get_airconType_display())
 
-                # Handle legacy catalog data (optional field now)
+                # Get brand/model from catalog if available, otherwise use airconType
                 if aircon.airconCatalogId:
                     aircon_catalog = AirconCatalogs.objects.get(
                         id=aircon.airconCatalogId.id
@@ -101,8 +101,9 @@ def include_all_info(data, request=None):
                     updates["display"]["airconBrand"].append(aircon_catalog.airconBrand)
                     updates["display"]["airconModel"].append(aircon_catalog.airconModel)
                 else:
-                    updates["display"]["airconBrand"].append(None)
-                    updates["display"]["airconModel"].append(None)
+                    # Use airconType as brand (e.g., 'daikin' -> 'Daikin')
+                    updates["display"]["airconBrand"].append(aircon.get_airconType_display())
+                    updates["display"]["airconModel"].append("")
             except CustomerAirconDevices.DoesNotExist:
                 # Handle deleted aircon devices (e.g., for cancelled appointments)
                 updates["display"]["airconToService"].append("[Removed]")
@@ -128,7 +129,7 @@ def include_all_info(data, request=None):
                 customer_aircon_device.get_airconType_display()
             )
 
-            # Handle legacy catalog data (optional field now)
+            # Get brand/model from catalog if available, otherwise use airconType
             if customer_aircon_device.airconCatalogId:
                 aircon_catalog = AirconCatalogs.objects.get(
                     id=customer_aircon_device.airconCatalogId.id
@@ -136,8 +137,8 @@ def include_all_info(data, request=None):
                 updates["display"]["airconBrand"].append(aircon_catalog.airconBrand)
                 updates["display"]["airconModel"].append(aircon_catalog.airconModel)
             else:
-                updates["display"]["airconBrand"].append(None)
-                updates["display"]["airconModel"].append(None)
+                updates["display"]["airconBrand"].append(customer_aircon_device.get_airconType_display())
+                updates["display"]["airconModel"].append("")
 
     data.update(updates)
     return data

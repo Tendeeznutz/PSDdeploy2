@@ -43,7 +43,8 @@ function Login() {
         event.preventDefault();
         setErrorMessage('');
 
-        const endpoint = `/api/${selectedRole}/profile/login/`;
+        const roleToEndpoint = { customer: 'customers', technician: 'technicians', coordinator: 'coordinators' };
+        const endpoint = `/api/${roleToEndpoint[selectedRole]}/login/`;
 
         try {
             // Backend expects 'email' and 'password' keys for all roles (technician uses phone in 'email' field)

@@ -5,7 +5,7 @@ import api from "../axiosConfig";
 import {Button, Modal, message} from 'antd';
 import DeleteAppointmentPopup from "../components/DeleteAppointmentPopup";
 import { ListItemIcon, MenuItem, Box } from '@mui/material';
-import { Delete, PageviewRounded, Send, Update, LockReset, PersonOff, PersonAdd } from '@mui/icons-material';
+import { Delete, PageviewRounded, Send, Update, LockReset, PersonOff, PersonAdd, ToggleOn, ToggleOff } from '@mui/icons-material';
 import { MailOutlined } from '@ant-design/icons';
 
 function CoordinatorHome() {
@@ -29,6 +29,9 @@ function CoordinatorHome() {
     const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
     const [resetPasswordTechnician, setResetPasswordTechnician] = useState(null);
     const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+    const [showCustomerResetPasswordModal, setShowCustomerResetPasswordModal] = useState(false);
+    const [resetPasswordCustomer, setResetPasswordCustomer] = useState(null);
+    const [resetPasswordCustomerLoading, setResetPasswordCustomerLoading] = useState(false);
     const [showToggleActiveModal, setShowToggleActiveModal] = useState(false);
     const [toggleActiveTechnician, setToggleActiveTechnician] = useState(null);
     const [toggleActiveLoading, setToggleActiveLoading] = useState(false);
@@ -172,7 +175,7 @@ function CoordinatorHome() {
         setResetPasswordLoading(true);
         try {
             const response = await api.post(
-                `/api/technician/profile/${resetPasswordTechnician.id}/coordinator-reset-password/`
+                `/api/technicians/${resetPasswordTechnician.id}/coordinator-reset-password/`
             );
             message.success(`Password for ${response.data.technicianName} has been reset to default (password123)`);
             setShowResetPasswordModal(false);
@@ -182,6 +185,35 @@ function CoordinatorHome() {
             message.error('Failed to reset password. Please try again.');
         } finally {
             setResetPasswordLoading(false);
+        }
+    };
+
+    const handleOpenCustomerResetPasswordModal = (customer) => {
+        setResetPasswordCustomer(customer);
+        setShowCustomerResetPasswordModal(true);
+    };
+
+    const handleCancelCustomerResetPassword = () => {
+        setShowCustomerResetPasswordModal(false);
+        setResetPasswordCustomer(null);
+    };
+
+    const handleConfirmCustomerResetPassword = async () => {
+        if (!resetPasswordCustomer) return;
+
+        setResetPasswordCustomerLoading(true);
+        try {
+            const response = await api.post(
+                `/api/customers/${resetPasswordCustomer.id}/coordinator-reset-password/`
+            );
+            message.success(`Password for ${response.data.customerName} has been reset to default (password123). Email notification sent.`);
+            setShowCustomerResetPasswordModal(false);
+            setResetPasswordCustomer(null);
+        } catch (error) {
+            console.error('Error resetting customer password:', error);
+            message.error('Failed to reset customer password. Please try again.');
+        } finally {
+            setResetPasswordCustomerLoading(false);
         }
     };
 
@@ -203,7 +235,7 @@ function CoordinatorHome() {
         setToggleActiveLoading(true);
         try {
             const response = await api.post(
-                `/api/technician/profile/${toggleActiveTechnician.id}/toggle-active-status/`,
+                `/api/technicians/${toggleActiveTechnician.id}/toggle-active-status/`,
                 { reason: deactivationReason }
             );
 
@@ -214,7 +246,7 @@ function CoordinatorHome() {
             }
 
             // Refresh technicians list
-            const techResponse = await api.get(`/api/coordinator/technicians/`);
+            const techResponse = await api.get(`/api/technicians/`);
             setTechnicians(techResponse.data);
 
             setShowToggleActiveModal(false);
@@ -225,6 +257,21 @@ function CoordinatorHome() {
             message.error('Failed to update technician status. Please try again.');
         } finally {
             setToggleActiveLoading(false);
+        }
+    };
+
+    const handleToggleStatus = async (technician) => {
+        try {
+            const response = await api.post(
+                `/api/technicians/${technician.id}/toggle-status/`
+            );
+            const newStatus = response.data.technicianStatus === '1' ? 'Available' : 'Unavailable';
+            message.success(`${response.data.technicianName} is now ${newStatus}`);
+            const techResponse = await api.get(`/api/technicians/`);
+            setTechnicians(techResponse.data);
+        } catch (error) {
+            console.error('Error toggling status:', error);
+            message.error('Failed to update technician status.');
         }
     };
 
@@ -309,9 +356,16 @@ function CoordinatorHome() {
                     accessorKey: 'display.airconBrand',
                     header: 'Aircon Model/Brand',
                     size: 150,
-                    Cell: ({ row }) => (
-                        row.original.display.airconBrand + " " +  row.original.display.airconModel
-                    )
+                    Cell: ({ row }) => {
+                        const brands = row.original.display?.airconBrand || [];
+                        const models = row.original.display?.airconModel || [];
+                        const parts = brands.map((b, i) => {
+                            const brand = b || '';
+                            const model = models[i] || '';
+                            return [brand, model].filter(Boolean).join(' ') || 'N/A';
+                        });
+                        return parts.join(', ') || 'N/A';
+                    }
                 },
                 {
                     accessorKey: 'customerFeedback',
@@ -371,6 +425,7 @@ function CoordinatorHome() {
         {
             id: 'technician',
             header: 'Technicians',
+            muiTableHeadCellProps: { align: 'center' },
             columns: [
                 {
                     accessorKey: 'technicianName',
@@ -397,7 +452,20 @@ function CoordinatorHome() {
                     header: 'Status',
                     size: 150,
                     Cell: ({ row }) => (
-                        row.original.technicianStatus === '1' ? 'Available' : 'Unavailable'
+                        <Box
+                            component="span"
+                            sx={(theme) => ({
+                                backgroundColor: row.original.technicianStatus === '1'
+                                    ? theme.palette.success.main
+                                    : theme.palette.warning.main,
+                                borderRadius: '0.25rem',
+                                color: '#fff',
+                                p: '0.25rem 0.5rem',
+                                fontWeight: 'bold',
+                            })}
+                        >
+                            {row.original.technicianStatus === '1' ? 'Available' : 'Unavailable'}
+                        </Box>
                     )
                 },
                 {
@@ -407,8 +475,8 @@ function CoordinatorHome() {
                     Cell: ({ row }) => {
                         const travelTypes = {
                             'own_vehicle': 'Own Vehicle',
+                            'rented_vehicle': 'Rented Vehicle',
                             'company_vehicle': 'Company Vehicle',
-                            'rental_van': 'Rental Van',
                         };
                         const travelType = row.original.technicianTravelType;
                         if (!travelType) return <span style={{ color: '#999', fontStyle: 'italic' }}>Not Set</span>;
@@ -514,6 +582,19 @@ function CoordinatorHome() {
             <MenuItem
                 key={1}
                 onClick={() => {
+                    handleToggleStatus(row.original);
+                    closeMenu();
+                }}
+                sx={{ m: 0 }}
+            >
+                <ListItemIcon>
+                    {row.original.technicianStatus === '1' ? <ToggleOff /> : <ToggleOn />}
+                </ListItemIcon>
+                {row.original.technicianStatus === '1' ? 'Set Unavailable' : 'Set Available'}
+            </MenuItem>,
+            <MenuItem
+                key={2}
+                onClick={() => {
                     handleOpenToggleActiveModal(row.original);
                     closeMenu();
                 }}
@@ -536,7 +617,23 @@ function CoordinatorHome() {
             columnPinning: {
                 right: ['mrt-row-actions']
             }
-        }
+        },
+        enableRowActions: true,
+        renderRowActionMenuItems: ({ closeMenu, row }) => [
+            <MenuItem
+                key={0}
+                onClick={() => {
+                    handleOpenCustomerResetPasswordModal(row.original);
+                    closeMenu();
+                }}
+                sx={{ m: 0 }}
+            >
+                <ListItemIcon>
+                    <LockReset />
+                </ListItemIcon>
+                Reset Password
+            </MenuItem>,
+        ]
     });
 
     const apptTable = useMaterialReactTable({
@@ -554,7 +651,7 @@ function CoordinatorHome() {
             <MenuItem
             key={0}
             onClick={() => {
-                window.location.href='/CoordinatorAppointmentView?id=' + row.original.id
+                window.location.href='/coordinator/appointmentView?id=' + row.original.id
                 closeMenu();
             }}
             sx={{ m: 0 }}
@@ -567,7 +664,7 @@ function CoordinatorHome() {
             <MenuItem
             key={1}
             onClick={() => {
-                window.location.href='/CustomerEnquiry?id=' + row.original.customerId + "&name=" + row.original.display.customerName
+                window.location.href='/coordinator/customerEnquiry?id=' + row.original.customerId + "&name=" + row.original.display.customerName
                 closeMenu();
             }}
             sx={{ m: 0 }}
@@ -580,7 +677,7 @@ function CoordinatorHome() {
             <MenuItem
             key={2}
             onClick={() => {
-                window.location.href='/CoordinatorAppointmentUpdate?id=' + row.original.id
+                window.location.href='/coordinator/appointmentUpdate?id=' + row.original.id
                 closeMenu();
             }}
             sx={{ m: 0 }}
@@ -614,7 +711,7 @@ function CoordinatorHome() {
                 <Button
                     type="primary"
                     icon={<MailOutlined />}
-                    onClick={() => navigate('/mailbox')}
+                    onClick={() => navigate('/coordinator/mailbox')}
                     size="large"
                 >
                     Mailbox
@@ -716,6 +813,31 @@ function CoordinatorHome() {
                             </div>
                         </>
                     )}
+                </div>
+            </Modal>
+
+            {/* Customer Password Reset Confirmation Modal */}
+            <Modal
+                title="Reset Customer Password"
+                open={showCustomerResetPasswordModal}
+                onOk={handleConfirmCustomerResetPassword}
+                onCancel={handleCancelCustomerResetPassword}
+                okText="Reset Password"
+                okButtonProps={{ danger: true, loading: resetPasswordCustomerLoading }}
+                cancelButtonProps={{ disabled: resetPasswordCustomerLoading }}
+            >
+                <div className="py-4">
+                    <p className="text-gray-700 mb-4">
+                        Are you sure you want to reset the password for <strong>{resetPasswordCustomer?.customerName}</strong>?
+                    </p>
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                        <p className="text-sm text-yellow-700">
+                            The password will be reset to: <strong>password123</strong>
+                        </p>
+                        <p className="text-sm text-yellow-600 mt-1">
+                            An email notification will be sent to {resetPasswordCustomer?.customerEmail}.
+                        </p>
+                    </div>
                 </div>
             </Modal>
         </div>

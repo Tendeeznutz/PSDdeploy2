@@ -7,7 +7,7 @@ import api from "../../axiosConfig";
 const { TextArea } = Input;
 const { Option } = Select;
 
-const COORDINATOR_API = `/api/coordinator/hiring-applications`;
+const COORDINATOR_API = `/api/hiring-applications`;
 const PUBLIC_API = `/api/hiring-applications`;
 
 function PersonalDetailsForm({ applicationData, updateApplicationData, moveToNextTab, isSelfApply = false }) {

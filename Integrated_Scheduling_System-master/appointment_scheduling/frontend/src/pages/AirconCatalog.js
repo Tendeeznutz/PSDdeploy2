@@ -38,7 +38,7 @@ const AirconCatalogPage = () => {
         try {
             const newAircon = { airconBrand, airconModel };
 
-            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/airconcatalogs/`, {
+            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/aircon-catalogs/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -60,7 +60,7 @@ const AirconCatalogPage = () => {
 
     const handleDeleteAircon = async (id) => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/airconcatalogs/${id}/`, {
+            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/aircon-catalogs/${id}/`, {
                 method: 'DELETE',
             });
 
@@ -88,7 +88,7 @@ const AirconCatalogPage = () => {
                 const formData = new FormData();
                 formData.append('csvFile', csvFile);
 
-                const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/airconcatalogs/bulkCreate/`, {
+                const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/aircon-catalogs/bulkCreate/`, {
                     method: 'POST',
                     body: formData,
                 });
@@ -109,7 +109,7 @@ const AirconCatalogPage = () => {
 
     const fetchAircons = async () => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/airconcatalogs/`);
+            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/aircon-catalogs/`);
             if (response.ok) {
                 let data = await response.json();
                 // Apply the search filter to the entire dataset

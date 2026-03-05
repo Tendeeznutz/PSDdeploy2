@@ -36,7 +36,7 @@ function CoordinatorApprovalForm({ applicationData, onComplete }) {
             };
 
             const response = await api.post(
-                `/api/coordinator/hiring-applications/${applicationData.id}/coordinator-approve/`,
+                `/api/hiring-applications/${applicationData.id}/coordinator-approve/`,
                 approvalData
             );
 
@@ -75,7 +75,7 @@ function CoordinatorApprovalForm({ applicationData, onComplete }) {
             };
 
             await api.post(
-                `/api/coordinator/hiring-applications/${applicationData.id}/coordinator-reject/`,
+                `/api/hiring-applications/${applicationData.id}/coordinator-reject/`,
                 rejectionData
             );
 

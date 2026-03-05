@@ -247,17 +247,8 @@ function Mailbox() {
     };
 
     const handleBackToHome = () => {
-        // Navigate to the appropriate home page based on user type
         if (userInfo) {
-            if (userInfo.userType === 'customer') {
-                navigate('/home');
-            } else if (userInfo.userType === 'technician') {
-                navigate('/TechnicianHome');
-            } else if (userInfo.userType === 'coordinator') {
-                navigate('/coordinatorHome');
-            } else {
-                navigate('/');
-            }
+            navigate(`/${userInfo.userType}/home`);
         } else {
             navigate('/');
         }

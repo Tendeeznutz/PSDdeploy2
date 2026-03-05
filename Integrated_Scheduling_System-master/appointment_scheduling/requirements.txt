@@ -9,7 +9,7 @@ whitenoise==6.6.0
 python-dotenv==1.0.0
 
 # Image uploads (ImageField)
-Pillow==10.0.0
+Pillow>=10.0.0
 
 # Geo/scheduling utilities
 geopy>=2.3.0
@@ -19,4 +19,4 @@ schedule>=1.2.0
 
 # Production
 gunicorn==21.2.0
-psycopg2-binary==2.9.9
+psycopg2-binary>=2.9.9
