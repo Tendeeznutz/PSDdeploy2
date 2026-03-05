@@ -69,7 +69,7 @@ root.render(
             <Route path='/coordinator/mailbox' element={<Mailbox/>}/>
             <Route path='/coordinator/rescheduleDetail' element={<RescheduleCoordinator/>}/>
 
-            <Route path='/CustomerEnquiry' element={<CustomerEnquiry/>}/>
+            <Route path='/CustomerEnquiry' element={<Navigate to="/coordinator/customerEnquiry" replace />}/>
             <Route path='/TechnicianList' element={<TechnicianList/>}/>
             <Route path='/guest-booking' element={<GuestBooking/>}/>
             <Route path='/error' element={<Error404/>}/>
