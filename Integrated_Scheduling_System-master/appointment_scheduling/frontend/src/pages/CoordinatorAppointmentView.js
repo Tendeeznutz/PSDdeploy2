@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
-import { Button } from "antd";
+import { Button, Rate } from "antd";
 
 function CoordinatorAppointmentView() {
     const [appointment, setAppointment] = useState([]);
@@ -10,6 +10,7 @@ function CoordinatorAppointmentView() {
     const [customerName, setCustomerName] = useState('');
     const [technicianName, setTechnicianName] = useState('');
     const [appointmentStatus, setAppointmentStatus] = useState('');
+    const [ratings, setRatings] = useState([]);
     const apptId = new URLSearchParams(window.location.search).get('id');
     const navigate = useNavigate();
 
@@ -19,6 +20,15 @@ function CoordinatorAppointmentView() {
             try {
                 const response = await api.get(`/api/appointments/${apptId}/`);
                 setAppointment(response.data);
+                // Fetch individual ratings for completed appointments
+                if (response.data.appointmentStatus === '3') {
+                    try {
+                        const ratingsResponse = await api.get(`/api/appointments/${apptId}/ratings/`);
+                        setRatings(ratingsResponse.data);
+                    } catch (err) {
+                        console.error('Error fetching ratings:', err);
+                    }
+                }
             } catch (error) {
                 console.error('Error fetching appointment data:', error);
             } finally {
@@ -130,6 +140,28 @@ function CoordinatorAppointmentView() {
                             disabled
                         />
                     </div>
+                    {/* Individual Ratings (only for completed appointments) */}
+                    {appointment.appointmentStatus === '3' && ratings.length > 0 && (
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                            <label className="block mb-2 text-sm font-bold text-gray-700">Ratings</label>
+                            {ratings.map((r) => (
+                                <div key={r.id} className="flex items-center gap-3 mb-1">
+                                    <span className="text-sm text-gray-600 w-40">
+                                        {r.ratedBy === 'customer' ? 'Customer rated technician:' : 'Technician rated customer:'}
+                                    </span>
+                                    <Rate disabled value={r.rating} style={{ fontSize: 16 }} />
+                                    <span className="text-xs text-gray-400">
+                                        {new Date(r.created_at).toLocaleDateString()}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {appointment.appointmentStatus === '3' && ratings.length === 0 && (
+                        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
+                            <label className="block text-sm text-gray-500">No ratings submitted yet for this appointment.</label>
+                        </div>
+                    )}
                     <Button href={'/CoordinatorHome'}>Back</Button>
                 </form>
             </div>

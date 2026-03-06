@@ -843,6 +843,58 @@ AirServe Team
             )
             return Response({"error": "Failed to retrieve penalty status"}, status=500)
 
+    @action(detail=False, methods=["get"], url_path="unrated-completed")
+    def unrated_completed(self, request):
+        """
+        Return completed appointments that the requesting user has not yet rated.
+        Query params: customerId OR technicianId
+        """
+        customer_id = request.query_params.get("customerId")
+        technician_id = request.query_params.get("technicianId")
+
+        if customer_id:
+            completed = Appointments.objects.filter(
+                customerId=customer_id,
+                appointmentStatus="3",
+                technicianId__isnull=False,
+            ).exclude(ratings__ratedBy="customer")
+        elif technician_id:
+            completed = Appointments.objects.filter(
+                technicianId=technician_id,
+                appointmentStatus="3",
+            ).exclude(ratings__ratedBy="technician")
+        else:
+            return Response(
+                {"error": "customerId or technicianId is required"}, status=400
+            )
+
+        serializer = AppointmentSerializer(completed, many=True)
+        serialized_data = [dict(item) for item in serializer.data]
+        modified_data = [include_all_info(data, request) for data in serialized_data]
+        return Response(modified_data, status=200)
+
+    @action(detail=True, methods=["get"], url_path="ratings")
+    def get_ratings(self, request, pk=None):
+        """
+        Get individual ratings for a specific appointment.
+        Used by coordinators to view per-appointment rating details.
+        """
+        appointment = get_object_or_404(Appointments, pk=pk)
+        ratings = AppointmentRating.objects.filter(appointment=appointment)
+
+        result = []
+        for r in ratings:
+            result.append(
+                {
+                    "id": str(r.id),
+                    "ratedBy": r.ratedBy,
+                    "rating": r.rating,
+                    "created_at": r.created_at.isoformat(),
+                }
+            )
+
+        return Response(result, status=200)
+
     @action(detail=False, methods=["post"], url_path="guest-booking")
     def guest_booking(self, request):
         """

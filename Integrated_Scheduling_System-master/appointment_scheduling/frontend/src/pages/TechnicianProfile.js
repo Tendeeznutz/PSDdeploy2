@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {Link, useNavigate} from 'react-router-dom';
 import api from "../axiosConfig";
+import { Rate } from 'antd';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -178,6 +179,13 @@ function TechnicianProfile() {
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Status: {techniciandetails.technicianStatus === "1" ? "Available" : "Unavailable"}
                                 </label>
+                                <div className="block mb-2 text-lg font-bold text-gray-700">
+                                    Rating:{' '}
+                                    <Rate disabled allowHalf value={parseFloat(techniciandetails.technicianRating) || 0} style={{ fontSize: 20 }} />
+                                    <span className="text-sm font-normal text-gray-500 ml-2">
+                                        ({parseFloat(techniciandetails.technicianRating || 0).toFixed(2)} / 5 from {techniciandetails.technicianRatingCount || 0} review{techniciandetails.technicianRatingCount !== 1 ? 's' : ''})
+                                    </span>
+                                </div>
                             </div>
                             <div className="flex items-center justify-center gap-2">
                                 <button

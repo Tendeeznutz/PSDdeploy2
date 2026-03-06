@@ -494,6 +494,21 @@ function CoordinatorHome() {
                     }
                 },
                 {
+                    accessorKey: 'technicianRating',
+                    header: 'Rating',
+                    size: 120,
+                    Cell: ({ row }) => {
+                        const rating = parseFloat(row.original.technicianRating) || 0;
+                        const count = row.original.technicianRatingCount || 0;
+                        return (
+                            <span title={`${rating.toFixed(2)} / 5 from ${count} reviews`}>
+                                {'★'.repeat(Math.round(rating))}{'☆'.repeat(5 - Math.round(rating))}
+                                <span style={{ color: '#999', fontSize: '0.8em', marginLeft: 4 }}>({count})</span>
+                            </span>
+                        );
+                    }
+                },
+                {
                     accessorKey: 'isActive',
                     header: 'Employment Status',
                     size: 150,
@@ -548,6 +563,21 @@ function CoordinatorHome() {
                     accessorKey: 'customerEmail',
                     header: 'Email',
                     size: 150
+                },
+                {
+                    accessorKey: 'customerRating',
+                    header: 'Rating',
+                    size: 120,
+                    Cell: ({ row }) => {
+                        const rating = parseFloat(row.original.customerRating) || 0;
+                        const count = row.original.ratingCount || 0;
+                        return (
+                            <span title={`${rating.toFixed(2)} / 5 from ${count} reviews`}>
+                                {'★'.repeat(Math.round(rating))}{'☆'.repeat(5 - Math.round(rating))}
+                                <span style={{ color: '#999', fontSize: '0.8em', marginLeft: 4 }}>({count})</span>
+                            </span>
+                        );
+                    }
                 },
             ]
         }

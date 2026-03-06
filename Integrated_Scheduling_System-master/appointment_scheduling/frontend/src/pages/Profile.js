@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
-import { Button, Popconfirm, Progress, DatePicker } from 'antd';
+import { Button, Popconfirm, Progress, DatePicker, Rate } from 'antd';
 import dayjs from 'dayjs';
 
 function Profile() {
@@ -364,6 +364,13 @@ function Profile() {
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Address: {userObject.customerAddress} {userObject.customerPostalCode}
                                 </label>
+                                <div className="block mb-2 text-lg font-bold text-gray-700">
+                                    Rating:{' '}
+                                    <Rate disabled allowHalf value={parseFloat(userObject.customerRating) || 0} style={{ fontSize: 20 }} />
+                                    <span className="text-sm font-normal text-gray-500 ml-2">
+                                        ({parseFloat(userObject.customerRating || 0).toFixed(2)} / 5 from {userObject.ratingCount || 0} review{userObject.ratingCount !== 1 ? 's' : ''})
+                                    </span>
+                                </div>
                                 <label className="block mb-2 text-lg font-bold text-gray-700">
                                     Aircon:
                                 </label>
