@@ -174,6 +174,11 @@ function TechnicianHome() {
                     )
                 },
                 {
+                    accessorKey: 'display.customerName',
+                    header: 'Customer Name',
+                    size: 150,
+                },
+                {
                     accessorKey: 'customerId',
                     header: 'Address',
                     size: 200,
