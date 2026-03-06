@@ -7,6 +7,7 @@ import { EventAvailable, PageviewRounded, PunchClock, LocationOn } from '@mui/ic
 import { Button } from 'antd';
 import { MailOutlined, CalendarOutlined } from '@ant-design/icons';
 import TechnicianAvailabilityModal from '../components/TechnicianAvailabilityModal';
+import RatingPopup from '../components/RatingPopup';
 
 // ...
 
@@ -390,6 +391,15 @@ function TechnicianHome() {
                     </tbody>
                 </table>
             </div> */}
+            <RatingPopup
+                userType="technician"
+                userId={localStorage.getItem('technicians_id')}
+                onComplete={() => {
+                    api.get(`/api/appointments/?technicianId=${localStorage.getItem('technicians_id')}`)
+                        .then(response => setAppointments(response.data))
+                        .catch(() => {});
+                }}
+            />
         </div>
     );
 }

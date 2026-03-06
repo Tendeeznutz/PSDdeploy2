@@ -7,6 +7,7 @@ import { MaterialReactTable, useMaterialReactTable } from 'material-react-table'
 import { PageviewRounded, CancelOutlined } from '@mui/icons-material';
 import { MailOutlined } from '@ant-design/icons';
 import { Badge, Modal, message } from 'antd';
+import RatingPopup from '../components/RatingPopup';
 
 function Home() {
     const customer_id = localStorage.getItem("customers_id");
@@ -263,6 +264,15 @@ function Home() {
             </div>
             <h1 className="text-2xl font-semibold mb-4">Upcoming Appointments</h1>
             <MaterialReactTable table={apptTable}/>
+            <RatingPopup
+                userType="customer"
+                userId={customer_id}
+                onComplete={() => {
+                    api.get(`/api/appointments/?customerId=${customer_id}`)
+                        .then(response => setAppointmentList(response.data))
+                        .catch(() => {});
+                }}
+            />
         </div>
     );
 }
