@@ -1,0 +1,35 @@
+# ==============================================================
+# Gunicorn systemd Service for AirServe
+# Server: ay2526-tp-j.coding36.net
+# ==============================================================
+# USAGE:
+#   1. Copy this file: sudo cp airserve.service /etc/systemd/system/
+#   2. Reload daemon:  sudo systemctl daemon-reload
+#   3. Enable on boot: sudo systemctl enable airserve
+#   4. Start:          sudo systemctl start airserve
+#   5. Check status:   sudo systemctl status airserve
+#   6. View logs:      sudo journalctl -u airserve -f
+# ==============================================================
+
+[Unit]
+Description=AirServe Gunicorn Django Server
+After=network.target
+
+[Service]
+User=ay2526-tp-j
+Group=www-data
+WorkingDirectory=/home/ay2526-tp-j/app/appointment_scheduling
+Environment="PATH=/home/ay2526-tp-j/app/appointment_scheduling/.venv/bin"
+EnvironmentFile=/home/ay2526-tp-j/app/appointment_scheduling/.env
+ExecStart=/home/ay2526-tp-j/app/appointment_scheduling/.venv/bin/gunicorn \
+    --workers 3 \
+    --bind 127.0.0.1:8000 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile - \
+    appointment_scheduling.wsgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

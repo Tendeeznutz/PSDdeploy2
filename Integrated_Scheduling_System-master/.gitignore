@@ -1,3 +1,24 @@
 **/venv/
+**/.venv/
 **/__pycache__/
 **/*.sqlite3
+
+# Environment files with secrets (never commit these)
+.env
+appointment_scheduling/.env
+appointment_scheduling/env
+
+# Keep the .env.server template (it has no real secrets)
+!.env.server
+!frontend/.env
+!frontend/.env.production
+
+# Static files collected for production
+**/staticfiles/
+
+# Media uploads
+**/media/
+
+# OS files
+.DS_Store
+Thumbs.db
