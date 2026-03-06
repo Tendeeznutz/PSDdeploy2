@@ -3,12 +3,13 @@
 **/__pycache__/
 **/*.sqlite3
 
-# Environment files with secrets (never commit these)
-.env
-appointment_scheduling/.env
+# Environment files with secrets
+# NOTE: On server-push branch, .env IS tracked intentionally
+# because the server has no file editor access.
+# On main branch, .env should NOT be committed.
 appointment_scheduling/env
 
-# Keep the .env.server template (it has no real secrets)
+# Keep templates and frontend env files
 !.env.server
 !frontend/.env
 !frontend/.env.production
