@@ -1,0 +1,308 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Work+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --foreground-rgb: 17, 19, 24;
+  --background-start-rgb: 247, 243, 238;
+  --background-end-rgb: 255, 255, 255;
+  --surface-ink: 17, 19, 24;
+  --surface-sand: 247, 243, 238;
+  --surface-cream: 255, 255, 255;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: radial-gradient(circle at top, rgba(240, 232, 220, 0.8), transparent 55%),
+    linear-gradient(180deg, rgb(var(--background-start-rgb)) 0%, rgb(var(--background-end-rgb)) 100%);
+  font-family: 'Work Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+/* Step content transitions */
+.step-content {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Smooth scroll animations - AKIS Studio inspired */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Fade-in animation for scroll-triggered elements */
+[data-animate] {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-animate].animate-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger animation for child elements */
+[data-animate-stagger] > * {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-animate-stagger] > *.animate-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Smooth fade-in from left */
+[data-animate="fade-left"] {
+  opacity: 0;
+  transform: translateX(-30px);
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-animate="fade-left"].animate-in {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Smooth fade-in from right */
+[data-animate="fade-right"] {
+  opacity: 0;
+  transform: translateX(30px);
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-animate="fade-right"].animate-in {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Scale animation */
+[data-animate="scale"] {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-animate="scale"].animate-in {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Smooth parallax effect */
+.parallax-section {
+  will-change: transform;
+}
+
+/* Smooth hover transitions */
+a, button {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth section transitions */
+section {
+  scroll-margin-top: 80px;
+}
+
+/* Smooth page transitions */
+.page-transition {
+  animation: fadeIn 0.6s ease-out;
+}
+
+/* Smooth hover effects */
+.hover-lift {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Smooth button interactions */
+button, a {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth card animations */
+.card-enter {
+  animation: cardEnter 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+/* Ensure content is visible by default - override GSAP if it fails */
+.hero-content > * {
+  opacity: 1 !important;
+}
+
+.service-card-item {
+  opacity: 1 !important;
+}
+
+.testimonial-item {
+  opacity: 1 !important;
+}
+
+/* Smooth fade-in animations - CSS fallback */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hero animations - CSS fallback if GSAP doesn't load */
+.hero-title {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.hero-subtitle {
+  animation: fadeInUp 0.8s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.hero-stats {
+  animation: fadeInUp 0.8s ease-out 0.4s forwards;
+  opacity: 0;
+}
+
+.hero-cta {
+  animation: fadeInUp 0.8s ease-out 0.6s forwards;
+  opacity: 0;
+}
+
+/* Service card hover effects */
+.service-card-item {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.service-card-item:hover {
+  transform: translateY(-4px);
+}
+
+/* Testimonial animations */
+.testimonial-item {
+  animation: slideInUp 0.6s ease-out forwards;
+}
+
+.testimonial-item:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.testimonial-item:nth-child(2) {
+  animation-delay: 0.15s;
+  opacity: 0;
+}
+
+.testimonial-item:nth-child(3) {
+  animation-delay: 0.3s;
+  opacity: 0;
+}
