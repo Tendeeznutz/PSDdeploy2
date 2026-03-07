@@ -8,6 +8,7 @@ export interface Customer {
   customerAddress: string;
   customerPostalCode: string;
   customerLocation?: string;
+  created_at?: string;
 }
 
 export interface CustomerAirconDevice {
@@ -17,15 +18,15 @@ export interface CustomerAirconDevice {
   numberOfUnits: number;
   airconType: 'industrial' | 'split' | 'window' | 'centralized' | 'floor_mounted' | 'portable';
   lastServiceMonth?: string;
-  remarks?: string;
+  remarks?: string | null;
 }
 
 export interface Technician {
   id: string;
   technicianName: string;
   technicianPhone: string;
-  technicianAddress: string;
-  technicianPostalCode: string;
+  technicianAddress?: string;
+  technicianPostalCode?: string;
   technicianLocation?: string;
   technicianStatus: '1' | '2'; // Available | Unavailable
 }
@@ -43,13 +44,13 @@ export interface Appointment {
   airconToService: string[]; // Array of CustomerAirconDevice IDs
   appointmentStatus: AppointmentStatus;
   paymentMethod: PaymentMethod;
-  customerFeedback?: string;
-  cancellationReason?: string;
+  customerFeedback?: string | null;
+  cancellationReason?: string | null;
   cancelledBy?: string;
   cancelledAt?: string;
   // Extended fields from format_response
   customer?: Customer;
-  technician?: Technician;
+  technician?: Technician | null;
   airconDevices?: CustomerAirconDevice[];
 }
 
@@ -72,7 +73,6 @@ export interface AddOn {
 export interface TimeSlot {
   time: string;
   label: string;
-  available: boolean;
 }
 
 export interface BookingFormData {
@@ -80,23 +80,22 @@ export interface BookingFormData {
   serviceType: string;
   airconDevices: string[]; // Selected device IDs
   addOns: string[];
-  
+
   // Step 2: Address & Details
   address: string;
   postalCode: string;
-  propertyType?: string;
   notes?: string;
-  
+
   // Step 3: Schedule
   date: Date | null;
   timeSlot: string;
-  
+
   // Step 4: Contact
   name: string;
   email: string;
   phone: string;
   isLoggedIn: boolean;
-  
+
   // Step 5: Payment
   paymentMethod: PaymentMethod;
 }

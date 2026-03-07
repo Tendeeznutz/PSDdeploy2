@@ -1,16 +1,11 @@
 import { create } from 'zustand';
-import type { Customer, Appointment } from './types';
+import type { Customer } from './types';
 
 interface AuthState {
   customer: Customer | null;
   isAuthenticated: boolean;
   login: (customer: Customer) => void;
   logout: () => void;
-}
-
-interface BookingState {
-  currentBooking: Partial<Appointment> | null;
-  setCurrentBooking: (booking: Partial<Appointment> | null) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -28,9 +23,4 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     set({ customer: null, isAuthenticated: false });
   },
-}));
-
-export const useBookingStore = create<BookingState>((set) => ({
-  currentBooking: null,
-  setCurrentBooking: (booking) => set({ currentBooking: booking }),
 }));
