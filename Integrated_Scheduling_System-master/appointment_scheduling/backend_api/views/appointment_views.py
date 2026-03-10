@@ -28,6 +28,7 @@ from ..utils import sendMail
 from ..utils.notifications import (
     send_appointment_confirmation,
     send_appointment_cancellation,
+    send_penalty_notification_telegram,
 )
 from ..penalty_utils import (
     check_and_apply_penalty,
@@ -680,6 +681,9 @@ AirServe Team
                             isRead=False,
                             relatedAppointment=updated_appointment,
                         )
+
+                        # Send penalty notice via Telegram
+                        send_penalty_notification_telegram(customer, penalty_result)
                 except Exception as e:
                     logger.exception(
                         "Failed to process cancellation notification: %s", e

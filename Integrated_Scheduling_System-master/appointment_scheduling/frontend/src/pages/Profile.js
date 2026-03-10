@@ -43,6 +43,11 @@ function Profile() {
     const [lastServiceMonth, setLastServiceMonth] = useState(null);
     const [remarks, setRemarks] = useState('');
 
+    // Telegram linking state
+    const [telegramLinked, setTelegramLinked] = useState(false);
+    const [telegramDeepLink, setTelegramDeepLink] = useState('');
+    const [telegramLoading, setTelegramLoading] = useState(false);
+
     const fetchUserData = async () => {
         try {
             if (!customer_id) {
@@ -64,6 +69,56 @@ function Profile() {
             console.error('Error fetching user aircon data:', error)
         }
     }
+
+    // ---- Telegram linking functions ----
+    const fetchTelegramStatus = async () => {
+        try {
+            const response = await api.get(`/api/telegram/status/?userType=customer&userId=${customer_id}`);
+            setTelegramLinked(response.data.linked);
+        } catch (error) {
+            console.error('Error fetching Telegram status:', error);
+        }
+    };
+
+    const handleConnectTelegram = async () => {
+        setTelegramLoading(true);
+        try {
+            const response = await api.post('/api/telegram/generate-link/', {
+                userType: 'customer',
+                userId: customer_id,
+            });
+            setTelegramDeepLink(response.data.deepLink);
+            // Poll for link completion every 3 seconds for up to 10 minutes
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusResp = await api.get(`/api/telegram/status/?userType=customer&userId=${customer_id}`);
+                    if (statusResp.data.linked) {
+                        setTelegramLinked(true);
+                        setTelegramDeepLink('');
+                        clearInterval(pollInterval);
+                    }
+                } catch (err) {
+                    console.error('Polling error:', err);
+                }
+            }, 3000);
+            setTimeout(() => clearInterval(pollInterval), 600000);
+        } catch (error) {
+            console.error('Error generating Telegram link:', error);
+        }
+        setTelegramLoading(false);
+    };
+
+    const handleUnlinkTelegram = async () => {
+        try {
+            await api.post('/api/telegram/unlink/', {
+                userType: 'customer',
+                userId: customer_id,
+            });
+            setTelegramLinked(false);
+        } catch (error) {
+            console.error('Error unlinking Telegram:', error);
+        }
+    };
 
     /* if modal is toggled close, form inputs should be cleared */
     const toggleModal = () => {
@@ -338,6 +393,7 @@ function Profile() {
             });
 
             fetchUserAirconData().then(userAircondata => setUserAirconList(userAircondata));
+            fetchTelegramStatus();
         }
     }, []);
 
@@ -417,6 +473,59 @@ function Profile() {
                             >
                                 Edit Profile
                             </button>
+
+                            {/* Telegram Notifications Section */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <label className="block mb-2 text-sm font-bold text-gray-700">
+                                    Telegram Notifications
+                                </label>
+                                {telegramLinked ? (
+                                    <div className="flex items-center justify-between bg-green-50 p-3 rounded border border-green-200">
+                                        <span className="text-green-700 text-sm font-medium">
+                                            ✅ Connected — You'll receive notifications on Telegram
+                                        </span>
+                                        <Popconfirm
+                                            title="Unlink Telegram?"
+                                            description="You will stop receiving Telegram notifications."
+                                            onConfirm={handleUnlinkTelegram}
+                                            okText="Unlink"
+                                            okButtonProps={{ danger: true }}
+                                        >
+                                            <button
+                                                type="button"
+                                                className="text-red-500 hover:text-red-700 text-xs underline ml-3"
+                                            >
+                                                Unlink
+                                            </button>
+                                        </Popconfirm>
+                                    </div>
+                                ) : telegramDeepLink ? (
+                                    <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                                        <p className="text-sm text-gray-600 mb-2">
+                                            Click below to open Telegram and link your account:
+                                        </p>
+                                        <a
+                                            href={telegramDeepLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded text-xs"
+                                        >
+                                            Open in Telegram
+                                        </a>
+                                        <p className="text-xs text-gray-400 mt-2">Link expires in 10 minutes. Waiting for connection...</p>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleConnectTelegram}
+                                        disabled={telegramLoading}
+                                        className="w-full bg-sky-500 hover:bg-sky-700 text-white font-bold py-2 px-4 border border-sky-700 rounded text-xs"
+                                    >
+                                        {telegramLoading ? 'Generating link...' : 'Connect Telegram'}
+                                    </button>
+                                )}
+                            </div>
+
                             {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
                         </div>
                         ) : (

@@ -1,9 +1,15 @@
 """
 Notification utilities for appointment confirmations and cancellations.
+Sends both email and Telegram notifications (if the user has linked Telegram).
 """
 
+import logging
 from datetime import datetime
+
 from .sendMail import send_email
+from .telegram_bot import send_telegram_message
+
+logger = logging.getLogger(__name__)
 
 
 def format_timestamp_to_readable(timestamp):
@@ -20,9 +26,22 @@ def format_timestamp_to_readable(timestamp):
     return dt.strftime("%A, %d %B %Y at %I:%M %p")
 
 
+def _send_telegram_if_linked(user_obj, message_text):
+    """
+    Send a Telegram notification if the user has a linked Telegram account.
+    Silently skips if not linked. Logs errors but never raises.
+    """
+    chat_id = getattr(user_obj, "telegramChatId", None)
+    if chat_id:
+        try:
+            send_telegram_message(chat_id, message_text)
+        except Exception as e:
+            logger.exception("Failed to send Telegram notification: %s", e)
+
+
 def send_appointment_confirmation(appointment, customer, technician=None):
     """
-    Send appointment confirmation email to customer and technician.
+    Send appointment confirmation email and Telegram message to customer and technician.
 
     Args:
         appointment: Appointment object
@@ -94,6 +113,21 @@ The AirServe Team
         alias_name="AirServe Appointments",
     )
 
+    # Telegram notification to customer
+    tech_info = (
+        f"Technician: {technician.technicianName} ({technician.technicianPhone})"
+        if technician
+        else "Technician: Pending assignment"
+    )
+    _send_telegram_if_linked(
+        customer,
+        f"📋 <b>Appointment {status}</b>\n\n"
+        f"🕐 {start_time}\n"
+        f"🔧 {num_aircons} aircon unit(s)\n"
+        f"👤 {tech_info}\n"
+        f"📍 {customer.customerAddress}, S{customer.customerPostalCode}",
+    )
+
     # Email to Technician (if assigned)
     technician_email_sent = True  # Default to True if no technician
     if technician:
@@ -134,6 +168,17 @@ The AirServe Team
                 alias_name="AirServe Scheduling",
             )
 
+        # Telegram notification to technician
+        _send_telegram_if_linked(
+            technician,
+            f"🔧 <b>New Assignment</b>\n\n"
+            f"🕐 {start_time}\n"
+            f"🔧 {num_aircons} aircon unit(s)\n"
+            f"👤 Customer: {customer.customerName}\n"
+            f"📞 {customer.customerPhone}\n"
+            f"📍 {customer.customerAddress}, S{customer.customerPostalCode}",
+        )
+
     return customer_email_sent and technician_email_sent
 
 
@@ -141,7 +186,7 @@ def send_appointment_cancellation(
     appointment, customer, technician, cancelled_by, cancellation_reason
 ):
     """
-    Send appointment cancellation email to customer and technician.
+    Send appointment cancellation email and Telegram message to customer and technician.
 
     Args:
         appointment: Appointment object
@@ -213,6 +258,15 @@ The AirServe Team
         alias_name="AirServe Appointments",
     )
 
+    # Telegram notification to customer
+    _send_telegram_if_linked(
+        customer,
+        f"❌ <b>Appointment Cancelled</b>\n\n"
+        f"🕐 Was scheduled: {start_time}\n"
+        f"📝 Cancelled by: {cancelled_by_text}\n"
+        f"💬 Reason: {cancellation_reason}",
+    )
+
     # Email to Technician (if assigned and cancellation wasn't by technician)
     technician_email_sent = True  # Default to True
     if technician and cancelled_by != "technician":
@@ -251,4 +305,49 @@ The AirServe Team
                 alias_name="AirServe Scheduling",
             )
 
+        # Telegram notification to technician
+        _send_telegram_if_linked(
+            technician,
+            f"❌ <b>Appointment Cancelled</b>\n\n"
+            f"🕐 Was scheduled: {start_time}\n"
+            f"👤 Customer: {customer.customerName}\n"
+            f"📝 Cancelled by: {cancelled_by_text}\n"
+            f"💬 Reason: {cancellation_reason}",
+        )
+
     return customer_email_sent and technician_email_sent
+
+
+def send_penalty_notification_telegram(customer, penalty_result):
+    """Send penalty notice via Telegram if customer has linked account."""
+    _send_telegram_if_linked(
+        customer,
+        f"⚠️ <b>Cancellation Penalty Notice</b>\n\n"
+        f"Penalty fee: ${penalty_result['penalty_amount']}\n"
+        f"Total pending: ${penalty_result['total_pending_penalty']}\n"
+        f"Cancellations this month: {penalty_result['cancellation_count']}",
+    )
+
+
+def send_new_message_telegram(recipient_type, recipient_id, sender_name, subject):
+    """
+    Notify user via Telegram when they receive a new in-app message.
+    Imports models locally to avoid circular imports.
+    """
+    from ..models import Customers, Technicians
+
+    if recipient_type == "customer":
+        user = Customers.objects.filter(id=recipient_id).first()
+    elif recipient_type == "technician":
+        user = Technicians.objects.filter(id=recipient_id).first()
+    else:
+        return
+
+    if user:
+        _send_telegram_if_linked(
+            user,
+            f"💬 <b>New Message</b>\n\n"
+            f"From: {sender_name}\n"
+            f"Subject: {subject}\n\n"
+            f"Log in to AirServe to read the full message.",
+        )
