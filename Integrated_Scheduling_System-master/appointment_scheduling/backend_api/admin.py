@@ -12,6 +12,7 @@ from .models import (
     TechnicianAvailability,
     AppointmentRating,
     TechnicianPasswordResetToken,
+    TelegramLinkToken,
 )
 
 
@@ -35,6 +36,7 @@ class CustomersAdmin(admin.ModelAdmin):
         "customerEmail",
         "customerPhone",
         "customerPostalCode",
+        "telegramChatId",
     )
     search_fields = ("customerName", "customerEmail", "customerPhone")
 
@@ -47,6 +49,7 @@ class TechniciansAdmin(admin.ModelAdmin):
         "technicianPhone",
         "technicianStatus",
         "isActive",
+        "telegramChatId",
     )
     list_filter = ("technicianStatus", "isActive")
     search_fields = ("technicianName", "technicianEmail", "technicianPhone")
@@ -130,3 +133,12 @@ admin.site.register(TechnicianHiringApplication, TechnicianHiringApplicationAdmi
 admin.site.register(TechnicianAvailability, TechnicianAvailabilityAdmin)
 admin.site.register(AppointmentRating, AppointmentRatingAdmin)
 admin.site.register(TechnicianPasswordResetToken, TechnicianPasswordResetTokenAdmin)
+
+
+class TelegramLinkTokenAdmin(admin.ModelAdmin):
+    list_display = ("token", "userType", "userId", "expiresAt", "isUsed", "created_at")
+    list_filter = ("userType", "isUsed")
+    search_fields = ("token", "userId")
+
+
+admin.site.register(TelegramLinkToken, TelegramLinkTokenAdmin)

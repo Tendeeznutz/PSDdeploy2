@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from ..models import Messages, Coordinators, Appointments
 from ..serializers import MessageSerializer
+from ..utils.notifications import send_new_message_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                         body=body,
                     )
                     messages_created.append(coordinator_message)
+                    # Coordinators don't have Telegram (no telegramChatId field),
+                    # but the function handles this gracefully.
             except Exception as e:
                 logger.exception("Failed to create coordinator message: %s", e)
 
@@ -140,6 +143,14 @@ class MessageViewSet(viewsets.ModelViewSet):
                         relatedAppointment=appointment,
                     )
                     messages_created.append(technician_message)
+
+                    # Notify technician via Telegram
+                    send_new_message_telegram(
+                        "technician",
+                        appointment.technicianId.id,
+                        sender_name,
+                        subject,
+                    )
             except Exception as e:
                 logger.exception("Failed to create technician message: %s", e)
 
@@ -159,7 +170,16 @@ class MessageViewSet(viewsets.ModelViewSet):
         # For non-customer messages, use standard creation
         serializer = MessageSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            message = serializer.save()
+
+            # Notify recipient via Telegram
+            send_new_message_telegram(
+                message.recipientType,
+                message.recipientId,
+                message.senderName,
+                message.subject,
+            )
+
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 

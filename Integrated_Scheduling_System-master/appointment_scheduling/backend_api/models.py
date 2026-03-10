@@ -48,6 +48,7 @@ class Customers(TimeStampedModel):
     pendingPenaltyFee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text='Accumulated penalty fees for excessive cancellations')
     customerRating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00, help_text='Average rating from technicians (1-5), default 5')
     ratingCount = models.IntegerField(default=0, help_text='Number of ratings received from technicians')
+    telegramChatId = models.BigIntegerField(null=True, blank=True, default=None, help_text='Telegram chat ID for notifications')
 
     class Meta:
         indexes = [
@@ -135,6 +136,7 @@ class Technicians(models.Model):
     technicianRating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00, help_text='Average rating from customers (1-5), default 5')
     technicianRatingCount = models.IntegerField(default=0, help_text='Number of ratings received from customers')
     isActive = models.BooleanField(default=True, help_text='Whether technician is currently employed/active')
+    telegramChatId = models.BigIntegerField(null=True, blank=True, default=None, help_text='Telegram chat ID for notifications')
     deactivatedAt = models.DateTimeField(null=True, blank=True, help_text='When the technician was deactivated')
     deactivationReason = models.TextField(null=True, blank=True, help_text='Reason for deactivation')
 
@@ -541,3 +543,27 @@ class TechnicianPasswordResetToken(TimeStampedModel):
 
     def __str__(self):
         return f'Password reset token for {self.technician.technicianName}'
+
+
+class TelegramLinkToken(TimeStampedModel):
+    """
+    One-time token for linking a Telegram account to a Customer or Technician.
+    Flow: user generates token in web UI -> opens Telegram bot with /start <token> ->
+    bot sends token to webhook -> webhook matches and saves telegramChatId.
+    Tokens expire after 10 minutes.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    token = models.CharField(max_length=64, unique=True, null=False)
+    userType = models.CharField(max_length=20, null=False, help_text='customer or technician')
+    userId = models.UUIDField(null=False, help_text='ID of the customer or technician')
+    expiresAt = models.DateTimeField(null=False, help_text='Token expiration time (10 min)')
+    isUsed = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            Index(fields=['token']),
+            Index(fields=['userId', 'userType']),
+        ]
+
+    def __str__(self):
+        return f'TelegramLink token for {self.userType} {self.userId}'
