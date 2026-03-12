@@ -10,6 +10,7 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'appointment_scheduling.settings')
 django.setup()
 
+from django.contrib.auth.hashers import make_password
 from backend_api.models import Customers, Technicians, Coordinators, AirconCatalogs
 
 def create_test_data():
@@ -22,7 +23,7 @@ def create_test_data():
         defaults={
             "coordinatorName": "Admin Coordinator",
             "coordinatorPhone": "91111111",
-            "coordinatorPassword": "password123"
+            "coordinatorPassword": make_password("password123")
         }
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {coordinator1.coordinatorName} - {coordinator1.coordinatorEmail}")
@@ -32,7 +33,7 @@ def create_test_data():
         defaults={
             "coordinatorName": "John Admin",
             "coordinatorPhone": "91111112",
-            "coordinatorPassword": "password123"
+            "coordinatorPassword": make_password("password123")
         }
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {coordinator2.coordinatorName} - {coordinator2.coordinatorEmail}")
@@ -44,7 +45,7 @@ def create_test_data():
         defaults={
             "technicianName": "Benjamin Loh",
             "technicianEmail": "benjamin.tech@airserve.com",
-            "technicianPassword": "password123",
+            "technicianPassword": make_password("password123"),
             "technicianPostalCode": "520123",
             "technicianLocation": "1.3521,103.8198",
             "technicianAddress": "1 Punggol Coast Road",
@@ -59,7 +60,7 @@ def create_test_data():
         defaults={
             "technicianName": "Wang Richie",
             "technicianEmail": "richie.tech@airserve.com",
-            "technicianPassword": "password123",
+            "technicianPassword": make_password("password123"),
             "technicianPostalCode": "560123",
             "technicianLocation": "1.3500,103.8500",
             "technicianAddress": "10 Ang Mo Kio Ave 5",
@@ -74,7 +75,7 @@ def create_test_data():
         defaults={
             "technicianName": "Timothy Neam",
             "technicianEmail": "timothy.tech@airserve.com",
-            "technicianPassword": "password123",
+            "technicianPassword": make_password("password123"),
             "technicianPostalCode": "640123",
             "technicianLocation": "1.3400,103.8400",
             "technicianAddress": "5 Jurong West St 64",
@@ -91,7 +92,7 @@ def create_test_data():
         defaults={
             "customerName": "Alice Tan",
             "customerPhone": "93333331",
-            "customerPassword": "password123",
+            "customerPassword": make_password("password123"),
             "customerAddress": "Block 123 Ang Mo Kio Avenue 3",
             "customerPostalCode": "560123",
             "customerLocation": "1.3500,103.8500"
@@ -104,7 +105,7 @@ def create_test_data():
         defaults={
             "customerName": "Bob Lee",
             "customerPhone": "93333332",
-            "customerPassword": "password123",
+            "customerPassword": make_password("password123"),
             "customerAddress": "Block 456 Bedok North Street 1",
             "customerPostalCode": "460456",
             "customerLocation": "1.3300,103.9300"
@@ -117,7 +118,7 @@ def create_test_data():
         defaults={
             "customerName": "Charlie Wong",
             "customerPhone": "93333333",
-            "customerPassword": "password123",
+            "customerPassword": make_password("password123"),
             "customerAddress": "Block 789 Jurong West Street 65",
             "customerPostalCode": "640789",
             "customerLocation": "1.3400,103.7000"
@@ -130,7 +131,7 @@ def create_test_data():
         defaults={
             "customerName": "Diana Lim",
             "customerPhone": "93333334",
-            "customerPassword": "password123",
+            "customerPassword": make_password("password123"),
             "customerAddress": "Block 101 Tampines Street 11",
             "customerPostalCode": "521101",
             "customerLocation": "1.3550,103.9450"
