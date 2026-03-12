@@ -18,22 +18,9 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from backend_api.views.telegram_views import (
-    telegram_webhook,
-    generate_link_token,
-    check_telegram_status,
-    unlink_telegram,
-)
-
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include("backend_api.urls")),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("user/", include("django.contrib.auth.urls")),
-
-    # Telegram bot webhook and account linking API
-    path('api/telegram/webhook/', telegram_webhook, name='telegram-webhook'),
-    path('api/telegram/generate-link/', generate_link_token, name='telegram-generate-link'),
-    path('api/telegram/status/', check_telegram_status, name='telegram-status'),
-    path('api/telegram/unlink/', unlink_telegram, name='telegram-unlink'),
 ]

@@ -7,7 +7,6 @@ import logging
 from datetime import datetime
 
 from .sendMail import send_email
-from .telegram_bot import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +26,8 @@ def format_timestamp_to_readable(timestamp):
 
 
 def _send_telegram_if_linked(user_obj, message_text):
-    """
-    Send a Telegram notification if the user has a linked Telegram account.
-    Silently skips if not linked. Logs errors but never raises.
-    """
-    chat_id = getattr(user_obj, "telegramChatId", None)
-    if chat_id:
-        try:
-            send_telegram_message(chat_id, message_text)
-        except Exception as e:
-            logger.exception("Failed to send Telegram notification: %s", e)
+    """Telegram notifications disabled for cloud deployment."""
+    return
 
 
 def send_appointment_confirmation(appointment, customer, technician=None):

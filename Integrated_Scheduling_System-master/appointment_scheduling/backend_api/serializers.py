@@ -270,20 +270,7 @@ class TechnicianHiringApplicationSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # NRIC photos and driving license are compulsory for new applications (create)
-        if not self.instance:
-            if not attrs.get("nricPhotoFront"):
-                raise serializers.ValidationError(
-                    {"nricPhotoFront": "NRIC front photo is required."}
-                )
-            if not attrs.get("nricPhotoBack"):
-                raise serializers.ValidationError(
-                    {"nricPhotoBack": "NRIC back photo is required."}
-                )
-            if not attrs.get("drivingLicense"):
-                raise serializers.ValidationError(
-                    {"drivingLicense": "Driving license is required."}
-                )
+        # File uploads disabled for cloud deployment - fields are optional
         return attrs
 
 
