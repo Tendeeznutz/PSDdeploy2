@@ -18,7 +18,7 @@ def create_test_data():
 
     # Create Coordinators
     print("\n=== Creating Coordinators ===")
-    coordinator1, created = Coordinators.objects.get_or_create(
+    coordinator1, created = Coordinators.objects.update_or_create(
         coordinatorEmail="admin@airserve.com",
         defaults={
             "coordinatorName": "Admin Coordinator",
@@ -28,7 +28,7 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {coordinator1.coordinatorName} - {coordinator1.coordinatorEmail}")
 
-    coordinator2, created = Coordinators.objects.get_or_create(
+    coordinator2, created = Coordinators.objects.update_or_create(
         coordinatorEmail="john.admin@airserve.com",
         defaults={
             "coordinatorName": "John Admin",
@@ -40,7 +40,7 @@ def create_test_data():
 
     # Create Technicians
     print("\n=== Creating Technicians ===")
-    technician1, created = Technicians.objects.get_or_create(
+    technician1, created = Technicians.objects.update_or_create(
         technicianPhone="92222221",
         defaults={
             "technicianName": "Benjamin Loh",
@@ -55,7 +55,7 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {technician1.technicianName} - {technician1.technicianEmail}")
 
-    technician2, created = Technicians.objects.get_or_create(
+    technician2, created = Technicians.objects.update_or_create(
         technicianPhone="92222222",
         defaults={
             "technicianName": "Wang Richie",
@@ -70,7 +70,7 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {technician2.technicianName} - {technician2.technicianEmail}")
 
-    technician3, created = Technicians.objects.get_or_create(
+    technician3, created = Technicians.objects.update_or_create(
         technicianPhone="92222223",
         defaults={
             "technicianName": "Timothy Neam",
@@ -87,7 +87,7 @@ def create_test_data():
 
     # Create Customers
     print("\n=== Creating Customers ===")
-    customer1, created = Customers.objects.get_or_create(
+    customer1, created = Customers.objects.update_or_create(
         customerEmail="alice.tan@email.com",
         defaults={
             "customerName": "Alice Tan",
@@ -100,7 +100,7 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {customer1.customerName} - {customer1.customerEmail}")
 
-    customer2, created = Customers.objects.get_or_create(
+    customer2, created = Customers.objects.update_or_create(
         customerEmail="bob.lee@email.com",
         defaults={
             "customerName": "Bob Lee",
@@ -113,7 +113,7 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {customer2.customerName} - {customer2.customerEmail}")
 
-    customer3, created = Customers.objects.get_or_create(
+    customer3, created = Customers.objects.update_or_create(
         customerEmail="charlie.wong@email.com",
         defaults={
             "customerName": "Charlie Wong",
@@ -126,7 +126,7 @@ def create_test_data():
     )
     print(f"[OK] {'Created' if created else 'Already exists'}: {customer3.customerName} - {customer3.customerEmail}")
 
-    customer4, created = Customers.objects.get_or_create(
+    customer4, created = Customers.objects.update_or_create(
         customerEmail="diana.lim@email.com",
         defaults={
             "customerName": "Diana Lim",
@@ -151,7 +151,7 @@ def create_test_data():
 
     for brand, models in brands:
         for model in models:
-            aircon, created = AirconCatalogs.objects.get_or_create(
+            aircon, created = AirconCatalogs.objects.update_or_create(
                 airconBrand=brand,
                 airconModel=model
             )
