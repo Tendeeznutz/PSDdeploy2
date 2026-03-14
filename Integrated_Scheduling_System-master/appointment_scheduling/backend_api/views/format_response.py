@@ -57,6 +57,7 @@ def include_all_info(data, request=None):
             updates["display"]["customerName"] = customer.customerName
             updates["display"]["customerPhone"] = customer.customerPhone
             updates["display"]["customerEmail"] = customer.customerEmail
+            updates["display"]["customerAddress"] = customer.customerAddress
             updates["display"]["customerPostalCode"] = customer.customerPostalCode
             if not is_customer_context:
                 updates["display"]["customerRating"] = float(customer.customerRating)
