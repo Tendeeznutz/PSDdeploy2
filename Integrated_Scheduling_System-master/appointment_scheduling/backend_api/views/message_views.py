@@ -18,6 +18,25 @@ class MessageViewSet(viewsets.ModelViewSet):
     queryset = Messages.objects.all()
     serializer_class = MessageSerializer
 
+    def _get_token_user_id(self, request):
+        """Extract user_id from the JWT token on the request."""
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("user_id")
+        return None
+
+    def _get_role(self, request):
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("role")
+        return None
+
+    def _check_message_ownership(self, request, queried_id):
+        """Return True if the caller owns queried_id or is a coordinator."""
+        role = self._get_role(request)
+        if role == "coordinator":
+            return True
+        token_user_id = self._get_token_user_id(request)
+        return token_user_id and str(queried_id) == str(token_user_id)
+
     def list(self, request, *args, **kwargs):
         """
         Get messages for a specific user (filtered by recipient or sender)
@@ -27,18 +46,24 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         # Filter by recipient
         if "recipientId" in query_params and "recipientType" in query_params:
+            if not self._check_message_ownership(request, query_params["recipientId"]):
+                return Response({"error": "You can only view your own messages."}, status=403)
             messages = Messages.objects.filter(
                 recipientId=query_params["recipientId"],
                 recipientType=query_params["recipientType"],
             )
         # Filter by sender
         elif "senderId" in query_params and "senderType" in query_params:
+            if not self._check_message_ownership(request, query_params["senderId"]):
+                return Response({"error": "You can only view your own messages."}, status=403)
             messages = Messages.objects.filter(
                 senderId=query_params["senderId"], senderType=query_params["senderType"]
             )
         # Get both sent and received messages for a user
         elif "userId" in query_params and "userType" in query_params:
             user_id = query_params["userId"]
+            if not self._check_message_ownership(request, user_id):
+                return Response({"error": "You can only view your own messages."}, status=403)
             user_type = query_params["userType"]
             messages = Messages.objects.filter(
                 models.Q(recipientId=user_id, recipientType=user_type)
@@ -49,6 +74,8 @@ class MessageViewSet(viewsets.ModelViewSet):
             recipient_id = query_params.get("recipientId")
             recipient_type = query_params.get("recipientType")
             if recipient_id and recipient_type:
+                if not self._check_message_ownership(request, recipient_id):
+                    return Response({"error": "You can only view your own messages."}, status=403)
                 messages = Messages.objects.filter(
                     recipientId=recipient_id, recipientType=recipient_type, isRead=False
                 )
@@ -60,16 +87,13 @@ class MessageViewSet(viewsets.ModelViewSet):
                     status=400,
                 )
         else:
+            # Only coordinators can list all messages
+            if self._get_role(request) != "coordinator":
+                return Response({"error": "Not authorized to list all messages."}, status=403)
             messages = Messages.objects.all()
 
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data, status=200)
-
-    def _get_token_user_id(self, request):
-        """Extract user_id from the JWT token on the request."""
-        if hasattr(request, "auth") and request.auth:
-            return request.auth.get("user_id")
-        return None
 
     def create(self, request, *args, **kwargs):
         """
@@ -201,14 +225,19 @@ class MessageViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["patch"], url_path="mark-read")
     def mark_read(self, request, pk=None):
         """
-        Mark a message as read
+        Mark a message as read — only the recipient can mark their messages as read
         """
-        message = get_object_or_404(Messages, pk=pk)
-        message.isRead = True
-        message.readAt = timezone.now()
-        message.save()
+        msg = get_object_or_404(Messages, pk=pk)
+        if not self._check_message_ownership(request, msg.recipientId):
+            return Response(
+                {"error": "You can only mark your own messages as read."},
+                status=403,
+            )
+        msg.isRead = True
+        msg.readAt = timezone.now()
+        msg.save()
 
-        serializer = MessageSerializer(message)
+        serializer = MessageSerializer(msg)
         return Response(serializer.data, status=200)
 
     @action(detail=False, methods=["get"], url_path="inbox")
@@ -223,6 +252,9 @@ class MessageViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "recipientId and recipientType are required"}, status=400
             )
+
+        if not self._check_message_ownership(request, recipient_id):
+            return Response({"error": "You can only view your own inbox."}, status=403)
 
         messages = Messages.objects.filter(
             recipientId=recipient_id, recipientType=recipient_type
@@ -244,6 +276,9 @@ class MessageViewSet(viewsets.ModelViewSet):
                 {"error": "senderId and senderType are required"}, status=400
             )
 
+        if not self._check_message_ownership(request, sender_id):
+            return Response({"error": "You can only view your own sent messages."}, status=403)
+
         messages = Messages.objects.filter(
             senderId=sender_id, senderType=sender_type
         ).order_by("-created_at")
@@ -263,6 +298,9 @@ class MessageViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "recipientId and recipientType are required"}, status=400
             )
+
+        if not self._check_message_ownership(request, recipient_id):
+            return Response({"error": "You can only view your own unread count."}, status=403)
 
         count = Messages.objects.filter(
             recipientId=recipient_id, recipientType=recipient_type, isRead=False

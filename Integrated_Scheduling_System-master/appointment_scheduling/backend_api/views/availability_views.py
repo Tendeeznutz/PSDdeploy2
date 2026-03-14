@@ -13,11 +13,44 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
     queryset = TechnicianAvailability.objects.all()
     serializer_class = TechnicianAvailabilitySerializer
 
+    def _get_role_and_user_id(self, request):
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("role"), request.auth.get("user_id")
+        return None, None
+
+    def _assert_technician_owner_or_coordinator(self, request, technician_id):
+        """Ensure the caller owns this technician record or is a coordinator."""
+        role, user_id = self._get_role_and_user_id(request)
+        if role == "coordinator":
+            return
+        if role != "technician" or str(technician_id) != str(user_id):
+            return Response(
+                {"error": "You can only manage your own availability."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
     def list(self, request):
         """Get availability records, optionally filtered by technician"""
+        role, user_id = self._get_role_and_user_id(request)
         technician_id = request.query_params.get('technicianId')
         specific_date = request.query_params.get('specificDate')
         day_of_week = request.query_params.get('dayOfWeek')
+
+        # Technicians can only view their own availability
+        if role == "technician":
+            if not technician_id:
+                technician_id = str(user_id)
+            elif str(technician_id) != str(user_id):
+                return Response(
+                    {"error": "You can only view your own availability."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif role != "coordinator":
+            return Response(
+                {"error": "Only technicians and coordinators can view availability."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         queryset = TechnicianAvailability.objects.all()
 
@@ -36,11 +69,18 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, pk):
         """Get a specific availability record"""
         item = get_object_or_404(TechnicianAvailability.objects.all(), pk=pk)
+        denied = self._assert_technician_owner_or_coordinator(request, item.technicianId_id)
+        if denied:
+            return denied
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
     def create(self, request):
         """Create a new availability record"""
+        technician_id = request.data.get('technicianId')
+        denied = self._assert_technician_owner_or_coordinator(request, technician_id)
+        if denied:
+            return denied
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -50,6 +90,9 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
     def update(self, request, pk):
         """Full update of availability record"""
         item = get_object_or_404(TechnicianAvailability.objects.all(), pk=pk)
+        denied = self._assert_technician_owner_or_coordinator(request, item.technicianId_id)
+        if denied:
+            return denied
         serializer = self.serializer_class(item, data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -59,6 +102,9 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, pk):
         """Partial update of availability record"""
         item = get_object_or_404(TechnicianAvailability.objects.all(), pk=pk)
+        denied = self._assert_technician_owner_or_coordinator(request, item.technicianId_id)
+        if denied:
+            return denied
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -68,6 +114,9 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
     def destroy(self, request, pk):
         """Delete an availability record"""
         item = get_object_or_404(TechnicianAvailability.objects.all(), pk=pk)
+        denied = self._assert_technician_owner_or_coordinator(request, item.technicianId_id)
+        if denied:
+            return denied
 
         # Check if deleting this would violate minimum working days
         technician_id = item.technicianId
@@ -112,6 +161,10 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
                 {"error": "technicianId is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        denied = self._assert_technician_owner_or_coordinator(request, technician_id)
+        if denied:
+            return denied
 
         if not schedules or len(schedules) < 5:
             return Response(
@@ -181,6 +234,10 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        denied = self._assert_technician_owner_or_coordinator(request, technician_id)
+        if denied:
+            return denied
+
         # Validate technician exists
         try:
             technician = Technicians.objects.get(id=technician_id)
@@ -242,6 +299,10 @@ class TechnicianAvailabilityViewSet(viewsets.ModelViewSet):
                 {"error": "technicianId is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        denied = self._assert_technician_owner_or_coordinator(request, technician_id)
+        if denied:
+            return denied
 
         # Validate technician exists
         try:

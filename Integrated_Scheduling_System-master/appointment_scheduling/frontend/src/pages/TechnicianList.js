@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import api from "../axiosConfig";
 
 function TechnicianList() {
-    const [technicians, setAppointments] = useState([]);
+    const [technicians, setTechnicians] = useState([]);
+
+    useEffect(() => {
+        api.get('/api/technicians/')
+            .then(response => setTechnicians(response.data))
+            .catch(error => console.error('Error fetching technicians:', error));
+    }, []);
 
     return (
         <div className="container mx-auto p-4">
@@ -17,11 +23,8 @@ function TechnicianList() {
                         <th className="w-1/5 px-4 py-2">Name</th>
                         <th className="w-1/5 px-4 py-2">Phone</th>
                         <th className="w-1/5 px-4 py-2">Status</th>
-                        <th className="w-1/5 px-4 py-2">Supported Aircon</th>
                         <th className="w-1/5 px-4 py-2">Address</th>
                         <th className="w-1/5 px-4 py-2">Postal Code</th>
-                        <th className="w-1/5 px-4 py-2">Action</th>
-                        {/* Add more table headings based on appointment details */}
                     </tr>
                     </thead>
                     <tbody>
@@ -30,15 +33,8 @@ function TechnicianList() {
                             <td className="px-4 py-2">{technician.technicianName}</td>
                             <td className="px-4 py-2">{technician.technicianPhone}</td>
                             <td className="px-4 py-2">{technician.technicianStatus}</td>
-                            <td className="px-4 py-2">{technician.technicianSupportedAircon.join(', ')}</td>
                             <td className="px-4 py-2">{technician.technicianAddress}</td>
                             <td className="px-4 py-2">{technician.technicianPostalCode}</td>
-                            <td className="px-4 py-2">
-                                <Link to={`/appointmentDetail?id=${technician.id}`} className="text-blue-500 hover:text-blue-600">
-                                    View
-                                </Link>
-                            </td>
-                            {/* Add more data cells based on appointment details */}
                         </tr>
                     ))}
                     </tbody>

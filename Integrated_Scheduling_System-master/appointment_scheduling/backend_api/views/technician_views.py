@@ -3,6 +3,7 @@ import secrets
 import re
 from datetime import datetime, timedelta
 from django.contrib.auth.hashers import make_password, check_password
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -42,8 +43,19 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def _get_role(self, request):
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("role")
+        return None
+
     # GET request of all techicians data
     def list(self, request):
+        role = self._get_role(request)
+        if role not in ("coordinator", "technician"):
+            return Response(
+                {"error": "Not authorized to list technicians."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if request.query_params.get("technicianName") is not None:
             queryset = Technicians.objects.filter(
                 technicianName__icontains=request.query_params.get("technicianName")
@@ -87,8 +99,14 @@ class TechnicianViewSet(viewsets.ModelViewSet):
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
-    # POST request to create technician
+    # POST request to create technician — coordinators only
     def create(self, request):
+        role = self._get_role(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can create technician accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.serializer_class(data=request.data)
         password = request.data.get("technicianPassword")
         if serializer.is_valid():
@@ -106,8 +124,15 @@ class TechnicianViewSet(viewsets.ModelViewSet):
     def update(self, request, pk):
         return Response(status=405)
 
-    # PATCH request
+    # PATCH request — technicians can only update own profile; coordinators can update any
     def partial_update(self, request, pk):
+        role = self._get_role(request)
+        token_user_id = request.auth.get("user_id") if request.auth else None
+        if role != "coordinator" and str(pk) != token_user_id:
+            return Response(
+                {"error": "You can only update your own profile."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
@@ -184,8 +209,14 @@ class TechnicianViewSet(viewsets.ModelViewSet):
                 {"detail": "Login failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    # DELETE request to delete technician
+    # DELETE request — coordinators only
     def destroy(self, request, pk):
+        role = self._get_role(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can delete technician accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
@@ -203,24 +234,23 @@ class TechnicianViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Use neutral responses to prevent user enumeration
+        neutral_message = "If a technician account is associated with this phone number, a reset link has been sent."
+
         try:
             technician = Technicians.objects.get(technicianPhone=phone)
         except Technicians.DoesNotExist:
             return Response(
-                {"error": "No technician found with this phone number"},
-                status=status.HTTP_404_NOT_FOUND,
+                {"message": neutral_message},
+                status=status.HTTP_200_OK,
             )
 
-        # Find the associated hiring application to get email
-        try:
-            application = TechnicianHiringApplication.objects.get(
-                createdTechnician=technician
-            )
-            email = application.applicantEmail
-        except TechnicianHiringApplication.DoesNotExist:
+        # Use the technician's email directly
+        email = technician.technicianEmail
+        if not email:
             return Response(
-                {"error": "No email associated with this technician account"},
-                status=status.HTTP_404_NOT_FOUND,
+                {"message": neutral_message},
+                status=status.HTTP_200_OK,
             )
 
         # Invalidate any existing tokens
@@ -244,7 +274,7 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             frontend_base = getattr(
                 settings, "FRONTEND_BASE_URL", "http://localhost:3000"
             )
-            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}"
+            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}&userType=technician"
 
             subject = "Password Reset Request - AirServe"
             body = f"""Dear {technician.technicianName},
@@ -338,12 +368,6 @@ AirServe Team"""
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not re.match(r"^[a-zA-Z0-9]+$", new_password):
-            return Response(
-                {"error": "Password must contain only alphanumeric characters"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         digit_count = sum(1 for c in new_password if c.isdigit())
         if digit_count < 3:
             return Response(
@@ -365,14 +389,21 @@ AirServe Team"""
                     {"error": "Token has expired"}, status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Update password
-            technician = Technicians.objects.get(id=reset_token.userId)
-            technician.technicianPassword = make_password(new_password)
-            technician.save()
+            # Update password and mark token as used atomically
+            with transaction.atomic():
+                locked_token = PasswordResetToken.objects.select_for_update().get(pk=reset_token.pk)
+                if locked_token.isUsed:
+                    return Response(
+                        {"error": "Token has already been used"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            # Mark token as used
-            reset_token.isUsed = True
-            reset_token.save()
+                technician = Technicians.objects.get(id=locked_token.userId)
+                technician.technicianPassword = make_password(new_password)
+                technician.save()
+
+                locked_token.isUsed = True
+                locked_token.save()
 
             return Response(
                 {"message": "Password has been reset successfully"},
@@ -389,18 +420,25 @@ AirServe Team"""
         """
         Coordinator resets technician password to a secure random temporary password.
         """
+        role = self._get_role(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can reset technician passwords."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
 
         default_password = secrets.token_urlsafe(12)
-        technician.technicianPassword = make_password(default_password)
-        technician.save()
 
-        # Optionally send email notification
+        with transaction.atomic():
+            locked_tech = Technicians.objects.select_for_update().get(pk=pk)
+            locked_tech.technicianPassword = make_password(default_password)
+            locked_tech.save()
+
+        # Send email notification using technician's email directly
         try:
-            application = TechnicianHiringApplication.objects.filter(
-                createdTechnician=technician
-            ).first()
-            if application and application.applicantEmail:
+            email = technician.technicianEmail
+            if email:
                 subject = "Password Reset - AirServe"
                 body = f"""Dear {technician.technicianName},
 
@@ -412,9 +450,7 @@ Please log in and change your password.
 
 Best regards,
 AirServe Team"""
-                sendMail.send_email(
-                    subject, body, application.applicantEmail, "AirServe"
-                )
+                sendMail.send_email(subject, body, email, "AirServe")
         except Exception as e:
             logger.exception(
                 "Failed to send password reset notification to technician %s: %s", pk, e
@@ -434,6 +470,12 @@ AirServe Team"""
         Toggle technician's active/inactive status (for firing/rehiring).
         Expects: { reason: "optional reason for deactivation" }
         """
+        role = self._get_role(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can change technician active status."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
         reason = request.data.get("reason", "")
 
@@ -522,6 +564,12 @@ AirServe Team"""
         Toggle technician's availability status (Available/Unavailable).
         Only coordinators should use this endpoint.
         """
+        role = self._get_role(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can toggle technician availability."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
 
         if technician.technicianStatus == "1":

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../axiosConfig';
 import { Input, Button, Typography, Select, Option, Textarea } from '@material-tailwind/react';
 import { DatePicker, TimePicker, message, Radio, InputNumber } from 'antd';
 import dayjs from 'dayjs';
@@ -104,8 +104,8 @@ const GuestBooking = () => {
         paymentMethod: bookingData.paymentMethod,
       };
 
-      const response = await axios.post(
-        `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/guest-booking/`,
+      const response = await api.post(
+        '/api/appointments/guest-booking/',
         payload
       );
 
@@ -310,9 +310,9 @@ const GuestBooking = () => {
               onChange={setSelectedTime}
               format="HH:mm"
               className="w-full"
-              placeholder="Select time (09:00 - 18:00)"
+              placeholder="Select time (08:00 - 20:00)"
               minuteStep={30}
-              disabledHours={() => [0,1,2,3,4,5,6,7,8,19,20,21,22,23]}
+              disabledHours={() => [0,1,2,3,4,5,6,7,20,21,22,23]}
               hideDisabledOptions
             />
 

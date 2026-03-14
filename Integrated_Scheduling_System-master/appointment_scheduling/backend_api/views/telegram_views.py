@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Customers, Technicians, TelegramLinkToken
@@ -40,9 +40,12 @@ def telegram_webhook(request):
     This endpoint is NOT behind JWT auth — it's called by Telegram servers.
     We verify authenticity via the X-Telegram-Bot-Api-Secret-Token header.
     """
-    # Verify webhook secret
+    # Verify webhook secret — fail-safe: reject if secret is not configured
     received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if WEBHOOK_SECRET and received_secret != WEBHOOK_SECRET:
+    if not WEBHOOK_SECRET:
+        logger.error("TELEGRAM_WEBHOOK_SECRET is not configured. Rejecting webhook request.")
+        return JsonResponse({"ok": False, "error": "Webhook secret not configured"}, status=403)
+    if received_secret != WEBHOOK_SECRET:
         return JsonResponse({"ok": False}, status=403)
 
     try:
@@ -170,7 +173,7 @@ def _handle_unlink(chat_id):
 # ============================================================
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def generate_link_token(request):
     """
     Generate a one-time token for Telegram account linking.
@@ -183,6 +186,12 @@ def generate_link_token(request):
 
     if user_type not in ("customer", "technician") or not user_id:
         return Response({"error": "userType and userId required"}, status=400)
+
+    # Verify caller owns this account (coordinators can act on behalf)
+    token_role = request.auth.get("role") if request.auth else None
+    token_user_id = request.auth.get("user_id") if request.auth else None
+    if token_role != "coordinator" and str(user_id) != str(token_user_id):
+        return Response({"error": "You can only generate a token for your own account."}, status=403)
 
     # Verify user exists
     if user_type == "customer":
@@ -221,7 +230,7 @@ def generate_link_token(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def check_telegram_status(request):
     """
     Check if a user has linked their Telegram account.
@@ -231,6 +240,12 @@ def check_telegram_status(request):
     """
     user_type = request.query_params.get("userType")
     user_id = request.query_params.get("userId")
+
+    # Verify caller owns this account (coordinators can act on behalf)
+    token_role = request.auth.get("role") if request.auth else None
+    token_user_id = request.auth.get("user_id") if request.auth else None
+    if token_role != "coordinator" and str(user_id) != str(token_user_id):
+        return Response({"error": "You can only check your own Telegram status."}, status=403)
 
     if user_type == "customer":
         customer = Customers.objects.filter(id=user_id).first()
@@ -245,7 +260,7 @@ def check_telegram_status(request):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def unlink_telegram(request):
     """
     Unlink Telegram from a user account.
@@ -254,6 +269,12 @@ def unlink_telegram(request):
     """
     user_type = request.data.get("userType")
     user_id = request.data.get("userId")
+
+    # Verify caller owns this account (coordinators can act on behalf)
+    token_role = request.auth.get("role") if request.auth else None
+    token_user_id = request.auth.get("user_id") if request.auth else None
+    if token_role != "coordinator" and str(user_id) != str(token_user_id):
+        return Response({"error": "You can only unlink your own account."}, status=403)
 
     if user_type == "customer":
         customer = Customers.objects.filter(id=user_id).first()

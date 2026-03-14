@@ -1,26 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
 import { Button } from "antd";
 
 function CoordinatorAppointmentView() {
-    const [appointment, setAppointment] = useState([]);
+    const [appointment, setAppointment] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [airconData, setAirconData] = useState([]);
-    const [customerName, setCustomerName] = useState('');
-    const [technicianName, setTechnicianName] = useState('');
-    const [appointmentStatus, setAppointmentStatus] = useState('');
+    const [error, setError] = useState('');
     const apptId = new URLSearchParams(window.location.search).get('id');
     const navigate = useNavigate();
-
 
     useEffect(() => {
         const fetchAppointments = async () => {
             try {
                 const response = await api.get(`/api/appointments/${apptId}/`);
                 setAppointment(response.data);
-            } catch (error) {
-                console.error('Error fetching appointment data:', error);
+            } catch (err) {
+                console.error('Error fetching appointment data:', err);
+                setError('Failed to load appointment details.');
             } finally {
                 setLoading(false);
             }
@@ -30,13 +27,18 @@ function CoordinatorAppointmentView() {
     }, []);
 
     function formatUnixTimestamp(unixTimestamp) {
-        // Create a new Date object
         const date = new Date(unixTimestamp*1000);
-        // Format the date as a string
         return date.toLocaleString();
     }
 
     const renderLoading = () => <p>Loading...</p>;
+
+    const renderError = () => (
+        <div className="text-center">
+            <p className="text-red-600">{error}</p>
+            <Button onClick={() => navigate('/coordinator/home')} className="mt-4">Back</Button>
+        </div>
+    );
 
     const renderAppointmentDetails = () => (
         <div className="flex p-5 items-center justify-center">
@@ -50,7 +52,7 @@ function CoordinatorAppointmentView() {
                             </label>
                             <input
                                 type="text"
-                                value={appointment.display['customerName']}
+                                value={appointment.display?.customerName || ''}
                                 className="w-full p-2 text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                 disabled
                             />
@@ -62,7 +64,7 @@ function CoordinatorAppointmentView() {
                             </label>
                             <input
                                 type="text"
-                                value={appointment.display['technicianName']}
+                                value={appointment.display?.technicianName || ''}
                                 className="w-full p-2 text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                 disabled
                             />
@@ -77,7 +79,7 @@ function CoordinatorAppointmentView() {
                             </label>
                             <input
                                 type="text"
-                                value={appointment.display['appointmentStatus']}
+                                value={appointment.display?.appointmentStatus || ''}
                                 className="w-full p-2 leading-tight text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                                 disabled
                             />
@@ -99,7 +101,7 @@ function CoordinatorAppointmentView() {
                     {/*/!* Render selected aircon section *!/*/}
                     <fieldset className="mb-4">
                         <legend className="block mb-2 text-sm font-bold text-gray-700">Aircons to service</legend>
-                        {appointment.display['airconBrand'].map((aircon, index) => (
+                        {(appointment.display?.airconBrand || []).map((aircon, index) => (
                             <div key={index} className="mb-2 text-gray-900 text-sm">
                                 <input
                                     type="checkbox"
@@ -110,7 +112,7 @@ function CoordinatorAppointmentView() {
                                     disabled
                                 />
                                 <label htmlFor={aircon} className="text-sm text-gray-700">
-                                    {aircon} [{appointment.display['airconBrand'][index]} | {appointment.display['airconModel'][index]}]
+                                    {aircon} [{appointment.display?.airconBrand?.[index]} | {appointment.display?.airconModel?.[index]}]
                                 </label>
                             </div>
                         ))}
@@ -126,11 +128,11 @@ function CoordinatorAppointmentView() {
                             id="feedback"
                             type="text"
                             placeholder="Feedback"
-                            value={appointment.customerFeedback}
+                            value={appointment.customerFeedback || ''}
                             disabled
                         />
                     </div>
-                    <Button href={'/CoordinatorHome'}>Back</Button>
+                    <Button onClick={() => navigate('/coordinator/home')}>Back</Button>
                 </form>
             </div>
         </div>
@@ -139,7 +141,7 @@ function CoordinatorAppointmentView() {
     return (
         <div className="w-full h-full bg-gray-100">
             <div className="flex p-5 items-center justify-center">
-                {loading ? renderLoading() : renderAppointmentDetails()}
+                {loading ? renderLoading() : error ? renderError() : renderAppointmentDetails()}
             </div>
         </div>
     );

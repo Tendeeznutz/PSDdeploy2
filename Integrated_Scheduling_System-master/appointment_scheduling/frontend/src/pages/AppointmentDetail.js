@@ -111,7 +111,7 @@ function AppointmentDetails() {
                 setProgress(100);
 
                 setTimeout(() => {
-                    navigate('/home');
+                    navigate('/customer/home');
                 }, 1000);
             }
 
@@ -155,7 +155,7 @@ function AppointmentDetails() {
             if (response.status === 204) {
                 setProgress(100);
                 setTimeout(() => {
-                    navigate('/home');
+                    navigate('/customer/home');
                 }, 1000);
             }
         } catch (error) {
@@ -190,7 +190,7 @@ function AppointmentDetails() {
             if (response.status === 200) {
                 setProgress(100);
                 setTimeout(() => {
-                    navigate('/TechnicianHome');
+                    navigate('/technician/home');
                 }, 1000);
             }
         } catch (error) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Row, Col } from 'antd';
+import api from '../axiosConfig';
 
 const AirconCatalogPage = () => {
     const [aircons, setAircons] = useState([]);
@@ -37,21 +38,12 @@ const AirconCatalogPage = () => {
     const handleAddAircon = async () => {
         try {
             const newAircon = { airconBrand, airconModel };
+            const response = await api.post('/api/aircon-catalogs/', newAircon);
 
-            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/aircon-catalogs/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newAircon),
-            });
-
-            if (response.ok) {
+            if (response.status === 201) {
                 console.log('Aircon entry added successfully');
                 resetForm();
                 await fetchAircons();
-            } else {
-                console.error('Failed to add aircon entry');
             }
         } catch (error) {
             console.error('Error adding aircon entry:', error);
@@ -60,15 +52,11 @@ const AirconCatalogPage = () => {
 
     const handleDeleteAircon = async (id) => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/aircon-catalogs/${id}/`, {
-                method: 'DELETE',
-            });
+            const response = await api.delete(`/api/aircon-catalogs/${id}/`);
 
-            if (response.ok) {
+            if (response.status === 204) {
                 console.log('Aircon entry deleted successfully');
                 await fetchAircons();
-            } else {
-                console.error('Failed to delete aircon entry');
             }
         } catch (error) {
             console.error('Error deleting aircon entry:', error);
@@ -88,16 +76,13 @@ const AirconCatalogPage = () => {
                 const formData = new FormData();
                 formData.append('csvFile', csvFile);
 
-                const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/aircon-catalogs/bulkCreate/`, {
-                    method: 'POST',
-                    body: formData,
+                const response = await api.post('/api/aircon-catalogs/bulkCreate/', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
                 });
 
-                if (response.ok) {
+                if (response.status === 201 || response.status === 200) {
                     console.log('Bulk upload successful');
                     await fetchAircons();
-                } else {
-                    console.error('Failed to perform bulk upload');
                 }
             } else {
                 console.error('No CSV file selected for bulk upload');
@@ -109,20 +94,16 @@ const AirconCatalogPage = () => {
 
     const fetchAircons = async () => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/aircon-catalogs/`);
-            if (response.ok) {
-                let data = await response.json();
-                // Apply the search filter to the entire dataset
-                if (searchQuery) {
-                    data = data.filter(aircon =>
-                        aircon.airconBrand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        aircon.airconModel.toLowerCase().includes(searchQuery.toLowerCase())
-                    );
-                }
-                setAircons(data);
-            } else {
-                console.error('Failed to fetch aircons');
+            const response = await api.get('/api/aircon-catalogs/');
+            let data = response.data;
+            // Apply the search filter to the entire dataset
+            if (searchQuery) {
+                data = data.filter(aircon =>
+                    aircon.airconBrand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    aircon.airconModel.toLowerCase().includes(searchQuery.toLowerCase())
+                );
             }
+            setAircons(data);
         } catch (error) {
             console.error('Error fetching aircons:', error);
         }
@@ -269,4 +250,3 @@ const AirconCatalogPage = () => {
 };
 
 export default AirconCatalogPage;
-

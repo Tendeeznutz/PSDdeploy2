@@ -18,22 +18,29 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [isSubmitDisabled, setIsSubmitDisabled] = useState(true);
   const navigate = useNavigate();
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isSubmitDisabled = !customerObject.customerName ||
+      !customerObject.customerAddress ||
+      !customerObject.customerPostalCode ||
+      !customerObject.customerPhone ||
+      !customerObject.customerEmail ||
+      !customerObject.customerPassword ||
+      !confirmPassword ||
+      !emailRegex.test(customerObject.customerEmail) ||
+      customerObject.customerPassword !== confirmPassword;
 
   const handleEmailChange = (e) => {
     const newEmail = e.target.value;
     setCustomerObject({ ...customerObject, customerEmail: newEmail });
 
     // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(newEmail)) {
-        setEmailError('Please enter a valid email address');
-        setIsSubmitDisabled(true);
-      } else {
-        setEmailError('');
-        setIsSubmitDisabled(false);
-      }
+    if (!emailRegex.test(newEmail)) {
+      setEmailError('Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
   };
 
   const handleSubmit = async (event) => {
