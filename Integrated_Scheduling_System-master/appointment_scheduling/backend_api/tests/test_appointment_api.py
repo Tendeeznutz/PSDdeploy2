@@ -7,10 +7,12 @@ from rest_framework.test import APIClient, APITestCase
 from backend_api.models import (
     Appointments,
     AppointmentRating,
+    Coordinators,
     CustomerAirconDevices,
     Customers,
     Technicians,
 )
+from backend_api.tests.helpers import auth_client_as
 
 
 @patch('backend_api.views.appointment_views.geo_onemap.get_location_from_postal', return_value='1.3521,103.8198')
@@ -57,17 +59,8 @@ class AppointmentAPITests(APITestCase):
             technicianStatus='1',
         )
 
-    def _get_token(self):
-        response = self.client.post(
-            '/api/customers/login/',
-            {'email': 'testcustomer@example.com', 'password': 'pass1234'},
-            format='json',
-        )
-        return response.data['access']
-
     def _auth(self):
-        token = self._get_token()
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        auth_client_as(self.client, self.customer, "customer")
 
     def _future_start(self, offset=86400):
         return int(time.time()) + offset
@@ -123,9 +116,13 @@ class AppointmentAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(str(response.data['id']), str(appt.id))
 
-    # 5. Partial update status (not cancellation)
+    # 5. Partial update status (coordinator can update any)
     def test_partial_update_status(self, *mocks):
-        self._auth()
+        coord = Coordinators.objects.create(
+            coordinatorName="Admin", coordinatorEmail="admin@test.com",
+            coordinatorPhone="80000001", coordinatorPassword=make_password("pass"),
+        )
+        auth_client_as(self.client, coord, "coordinator")
         appt = self._make_appointment(status='1')
         response = self.client.patch(
             f'{self.base_url}{appt.id}/',
@@ -164,9 +161,13 @@ class AppointmentAPITests(APITestCase):
         appt.refresh_from_db()
         self.assertEqual(appt.appointmentStatus, '4')
 
-    # 8. Delete appointment returns 204
+    # 8. Delete appointment (coordinator only) returns 204
     def test_delete_appointment(self, *mocks):
-        self._auth()
+        coord = Coordinators.objects.create(
+            coordinatorName="Admin2", coordinatorEmail="admin2@test.com",
+            coordinatorPhone="80000002", coordinatorPassword=make_password("pass"),
+        )
+        auth_client_as(self.client, coord, "coordinator")
         appt = self._make_appointment()
         response = self.client.delete(f'{self.base_url}{appt.id}/')
         self.assertEqual(response.status_code, 204)
@@ -196,10 +197,10 @@ class AppointmentAPITests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('completed', str(response.data))
 
-    # 11. Rate customer on completed appointment
+    # 11. Rate customer on completed appointment (technician rates customer)
     def test_rate_customer(self, *mocks):
-        self._auth()
         appt = self._make_appointment(status='3', with_technician=True)
+        auth_client_as(self.client, self.technician, "technician")
         response = self.client.post(
             f'{self.base_url}{appt.id}/rate-customer/',
             {'technicianId': str(self.technician.id), 'rating': 5},

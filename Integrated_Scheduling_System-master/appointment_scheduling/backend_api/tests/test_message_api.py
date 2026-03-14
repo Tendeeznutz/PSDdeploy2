@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase, APIClient
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 from backend_api.models import Appointments, Coordinators, Customers, Messages, Technicians
+from backend_api.tests.helpers import auth_client_as
 
 
 class MessageAPITests(APITestCase):
@@ -15,6 +16,14 @@ class MessageAPITests(APITestCase):
         UserRateThrottle.THROTTLE_RATES = {'user': '1000/minute'}
         self.client = APIClient()
         self.base_url = '/api/messages/'
+
+        # Create a coordinator for admin-level access
+        self.coordinator = Coordinators.objects.create(
+            coordinatorName='Test Coordinator',
+            coordinatorEmail='coord@example.com',
+            coordinatorPhone='80000001',
+            coordinatorPassword=make_password('pass1234'),
+        )
 
         # Create and authenticate a customer for all tests
         self.customer = Customers.objects.create(
@@ -26,13 +35,8 @@ class MessageAPITests(APITestCase):
             customerPassword=make_password('pass1234'),
             customerLocation='1.3521,103.8198',
         )
-        with patch('backend_api.views.customer_views.geo.get_location_from_postal', return_value='1.3521,103.8198'):
-            resp = self.client.post('/api/customers/login/', {
-                'email': 'testcustomer@example.com',
-                'password': 'pass1234',
-            }, format='json')
-        token = resp.data['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        # Default auth as coordinator (can access all messages)
+        auth_client_as(self.client, self.coordinator, "coordinator")
 
         # Shared UUIDs for ORM-created messages
         self.sender_id = uuid.uuid4()
@@ -41,24 +45,24 @@ class MessageAPITests(APITestCase):
         # Create a message used in list/inbox/sent/unread/mark-read tests
         self.msg = Messages.objects.create(
             senderType='coordinator',
-            senderId=self.sender_id,
-            senderName='Coord One',
-            recipientType='technician',
-            recipientId=self.recipient_id,
-            recipientName='Tech One',
+            senderId=self.coordinator.id,
+            senderName='Test Coordinator',
+            recipientType='customer',
+            recipientId=self.customer.id,
+            recipientName='Test Customer',
             subject='Test Subject',
             body='Test body content',
         )
 
-    # 1. Create non-customer message
+    # 1. Create non-customer message (senderId must match auth user)
     def test_create_message(self):
         payload = {
             'senderType': 'coordinator',
-            'senderId': str(uuid.uuid4()),
-            'senderName': 'Coord Alice',
-            'recipientType': 'technician',
-            'recipientId': str(uuid.uuid4()),
-            'recipientName': 'Tech Bob',
+            'senderId': str(self.coordinator.id),
+            'senderName': 'Test Coordinator',
+            'recipientType': 'customer',
+            'recipientId': str(self.customer.id),
+            'recipientName': 'Test Customer',
             'subject': 'Hello',
             'body': 'Hello from coordinator.',
         }
@@ -69,6 +73,7 @@ class MessageAPITests(APITestCase):
     # 2. Create customer message (fan-out to coordinator + technician)
     @patch('backend_api.views.technician_views.geo.get_location_from_postal', return_value='1.3521,103.8198')
     def test_create_customer_message(self, mock_tech_geo):
+        auth_client_as(self.client, self.customer, "customer")
         coordinator = Coordinators.objects.create(
             coordinatorName='Coord Fan',
             coordinatorEmail='coordfan@example.com',
@@ -111,8 +116,8 @@ class MessageAPITests(APITestCase):
     # 4. List filtered by recipient
     def test_list_filter_by_recipient(self):
         response = self.client.get(self.base_url, {
-            'recipientId': str(self.recipient_id),
-            'recipientType': 'technician',
+            'recipientId': str(self.customer.id),
+            'recipientType': 'customer',
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
@@ -121,17 +126,17 @@ class MessageAPITests(APITestCase):
     # 5. Inbox endpoint
     def test_inbox(self):
         response = self.client.get(f'{self.base_url}inbox/', {
-            'recipientId': str(self.recipient_id),
-            'recipientType': 'technician',
+            'recipientId': str(self.customer.id),
+            'recipientType': 'customer',
         })
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['recipientType'], 'technician')
+        self.assertEqual(response.data[0]['recipientType'], 'customer')
 
     # 6. Sent endpoint
     def test_sent(self):
         response = self.client.get(f'{self.base_url}sent/', {
-            'senderId': str(self.sender_id),
+            'senderId': str(self.coordinator.id),
             'senderType': 'coordinator',
         })
         self.assertEqual(response.status_code, 200)
@@ -149,8 +154,8 @@ class MessageAPITests(APITestCase):
     # 8. Unread count
     def test_unread_count(self):
         response = self.client.get(f'{self.base_url}unread-count/', {
-            'recipientId': str(self.recipient_id),
-            'recipientType': 'technician',
+            'recipientId': str(self.customer.id),
+            'recipientType': 'customer',
         })
         self.assertEqual(response.status_code, 200)
         self.assertIn('unreadCount', response.data)

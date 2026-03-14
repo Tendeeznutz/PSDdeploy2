@@ -5,6 +5,7 @@ from rest_framework.test import APIClient, APITestCase
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 from backend_api.models import Customers, Technicians, TechnicianAvailability
+from backend_api.tests.helpers import auth_client_as
 
 WORK_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"]
 
@@ -33,8 +34,8 @@ class TechnicianAvailabilityAPITests(APITestCase):
             technicianLocation="1.3521,103.8198",
         )
 
-        # Auth via customer login
-        self.customer = Customers.objects.create(
+        # Auth as coordinator
+        self.coordinator = Customers.objects.create(
             customerName="Auth Customer",
             customerPostalCode="123456",
             customerAddress="1 Auth Street",
@@ -43,19 +44,7 @@ class TechnicianAvailabilityAPITests(APITestCase):
             customerPassword=make_password("pass1234"),
             customerLocation="1.3521,103.8198",
         )
-        with patch(
-            "backend_api.views.customer_views.geo.get_location_from_postal",
-            return_value="1.3521,103.8198",
-        ):
-            resp = self.client.post(
-                "/api/customers/login/",
-                {
-                    "email": "auth@example.com",
-                    "password": "pass1234",
-                },
-                format="json",
-            )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        auth_client_as(self.client, self.coordinator, "coordinator")
 
     def _seed_five_days(self, technician=None):
         """Create availability for mon–fri directly in DB (bypasses serializer)."""

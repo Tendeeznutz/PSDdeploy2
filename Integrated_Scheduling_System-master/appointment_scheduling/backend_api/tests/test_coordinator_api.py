@@ -2,7 +2,10 @@ from django.contrib.auth.hashers import make_password, check_password
 from rest_framework.test import APITestCase, APIClient
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
+from backend_api.views.coordinator_views import LoginRateThrottle
+
 from ..models import Coordinators
+from backend_api.tests.helpers import auth_client_as, get_token_for_user
 
 
 BASE_URL = '/api/coordinators/'
@@ -20,18 +23,17 @@ def make_coordinator(**kwargs):
 
 
 def get_auth_header(client, coordinator):
-    resp = client.post(
-        f'{BASE_URL}login/',
-        {'email': coordinator.coordinatorEmail, 'password': 'password123'},
-        format='json',
-    )
-    return {'HTTP_AUTHORIZATION': f'Bearer {resp.data["access"]}'}
+    token = get_token_for_user(coordinator, 'coordinator')
+    return {'HTTP_AUTHORIZATION': f'Bearer {token}'}
 
 
 class CoordinatorAPITests(APITestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         AnonRateThrottle.THROTTLE_RATES = {'anon': '1000/minute'}
         UserRateThrottle.THROTTLE_RATES = {'user': '1000/minute'}
+        LoginRateThrottle.THROTTLE_RATES = {'anon': '1000/minute'}
         self.client = APIClient()
         self.coordinator = make_coordinator()
         self.auth = get_auth_header(self.client, self.coordinator)
@@ -57,8 +59,7 @@ class CoordinatorAPITests(APITestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('access', resp.data)
-        self.assertIn('refresh', resp.data)
+        self.assertIn('coordinator_id', resp.data)
         self.assertEqual(resp.data['coordinatorEmail'], self.coordinator.coordinatorEmail)
         self.assertEqual(resp.data['role'], 'coordinator')
 

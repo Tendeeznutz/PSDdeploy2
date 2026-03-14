@@ -3,7 +3,8 @@ from unittest.mock import patch
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework.test import APIClient, APITestCase
 
-from backend_api.models import Customers
+from backend_api.models import Coordinators, Customers
+from backend_api.tests.helpers import auth_client_as
 
 
 @patch('backend_api.views.customer_views.geo.get_location_from_postal', return_value='1.3521,103.8198')
@@ -12,6 +13,10 @@ class CustomerAPITests(APITestCase):
         from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
         AnonRateThrottle.THROTTLE_RATES = {'anon': '1000/minute'}
         UserRateThrottle.THROTTLE_RATES = {'user': '1000/minute'}
+        from django.core.cache import cache
+        cache.clear()
+        from backend_api.views.customer_views import LoginRateThrottle as CustLoginThrottle
+        CustLoginThrottle.rate = '1000/minute'
         self.client = APIClient()
         self.base_url = '/api/customers/'
 
@@ -36,16 +41,19 @@ class CustomerAPITests(APITestCase):
         )
         return customer, password
 
-    def _get_token(self, email, password):
-        response = self.client.post(
-            f'{self.base_url}login/',
-            {'email': email, 'password': password},
-            format='json',
+    def _create_coordinator(self):
+        return Coordinators.objects.create(
+            coordinatorName='Coord Admin',
+            coordinatorEmail='coord@example.com',
+            coordinatorPhone='99990000',
+            coordinatorPassword=make_password('coordpass'),
         )
-        return response.data['access']
 
-    def _auth_client(self, token):
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+    def _auth_as_customer(self, customer):
+        auth_client_as(self.client, customer, 'customer')
+
+    def _auth_as_coordinator(self, coordinator):
+        auth_client_as(self.client, coordinator, 'coordinator')
 
     # 1. Register with valid data
     def test_register_customer(self, mock_geo):
@@ -74,7 +82,7 @@ class CustomerAPITests(APITestCase):
         response = self.client.post(self.base_url, payload, format='json')
         self.assertEqual(response.status_code, 400)
 
-    # 5. Login success returns 200 with tokens
+    # 5. Login success returns 200 with tokens in cookies
     def test_login_success(self, mock_geo):
         customer, password = self._create_customer()
         response = self.client.post(
@@ -83,9 +91,9 @@ class CustomerAPITests(APITestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn('access', response.data)
-        self.assertIn('refresh', response.data)
         self.assertEqual(response.data['role'], 'customer')
+        self.assertIn('access_token', response.cookies)
+        self.assertIn('refresh_token', response.cookies)
 
     # 6. Wrong password returns 401
     def test_login_wrong_password(self, mock_geo):
@@ -113,38 +121,36 @@ class CustomerAPITests(APITestCase):
         response = self.client.post(f'{self.base_url}login/', {'email': 'x@x.com'}, format='json')
         self.assertEqual(response.status_code, 400)
 
-    # 9. List customers (authenticated)
+    # 9. List customers (authenticated as coordinator)
     def test_list_customers(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        self._create_customer()
+        coordinator = self._create_coordinator()
+        self._auth_as_coordinator(coordinator)
         response = self.client.get(self.base_url)
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.data, list)
 
-    # 10. Filter by email
+    # 10. Filter by email (authenticated as coordinator)
     def test_list_filter_by_email(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        customer, _ = self._create_customer()
+        coordinator = self._create_coordinator()
+        self._auth_as_coordinator(coordinator)
         response = self.client.get(self.base_url, {'customerEmail': customer.customerEmail})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(any(c['customerEmail'] == customer.customerEmail for c in response.data))
 
-    # 11. Retrieve customer
+    # 11. Retrieve customer (own profile)
     def test_retrieve_customer(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        customer, _ = self._create_customer()
+        self._auth_as_customer(customer)
         response = self.client.get(f'{self.base_url}{customer.id}/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['customerEmail'], customer.customerEmail)
 
-    # 12. Partial update (PATCH)
+    # 12. Partial update (PATCH) own profile
     def test_partial_update(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        customer, _ = self._create_customer()
+        self._auth_as_customer(customer)
         response = self.client.patch(
             f'{self.base_url}{customer.id}/',
             {'customerName': 'Updated Name'},
@@ -155,9 +161,8 @@ class CustomerAPITests(APITestCase):
 
     # 13. PATCH with password hashes it
     def test_update_password_hashed(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        customer, _ = self._create_customer()
+        self._auth_as_customer(customer)
         new_password = 'newpass9999'
         self.client.patch(
             f'{self.base_url}{customer.id}/',
@@ -169,9 +174,8 @@ class CustomerAPITests(APITestCase):
 
     # 14. PUT returns 405
     def test_put_not_allowed(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        customer, _ = self._create_customer()
+        self._auth_as_customer(customer)
         response = self.client.put(
             f'{self.base_url}{customer.id}/',
             {'customerName': 'Should Fail'},
@@ -179,11 +183,11 @@ class CustomerAPITests(APITestCase):
         )
         self.assertEqual(response.status_code, 405)
 
-    # 15. DELETE returns 204
+    # 15. DELETE returns 204 (coordinator role required)
     def test_delete_customer(self, mock_geo):
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        customer, _ = self._create_customer()
+        coordinator = self._create_coordinator()
+        self._auth_as_coordinator(coordinator)
         response = self.client.delete(f'{self.base_url}{customer.id}/')
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Customers.objects.filter(id=customer.id).exists())
@@ -195,14 +199,15 @@ class CustomerAPITests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertNotIn('customerPassword', response.data)
 
-        # Check list response
-        customer, password = self._create_customer()
-        token = self._get_token(customer.customerEmail, password)
-        self._auth_client(token)
+        # Check list response (as coordinator)
+        customer, _ = self._create_customer()
+        coordinator = self._create_coordinator()
+        self._auth_as_coordinator(coordinator)
         list_response = self.client.get(self.base_url)
         for item in list_response.data:
             self.assertNotIn('customerPassword', item)
 
-        # Check retrieve response
+        # Check retrieve response (as the customer, own profile)
+        self._auth_as_customer(customer)
         retrieve_response = self.client.get(f'{self.base_url}{customer.id}/')
         self.assertNotIn('customerPassword', retrieve_response.data)
