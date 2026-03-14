@@ -36,7 +36,14 @@ def validate_file_upload(file, allowed_types, max_size=MAX_FILE_SIZE):
 class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointments
-        fields = "__all__"
+        fields = [
+            "id", "customerId", "technicianId",
+            "appointmentStartTime", "appointmentEndTime",
+            "airconToService", "customerFeedback",
+            "appointmentStatus", "paymentMethod",
+            "cancellationReason", "cancelledBy", "cancelledAt",
+            "created_at", "updated_at",
+        ]
 
     def validate_appointmentStartTime(self, value):
         # Only validate future date for NEW appointments or when appointmentStartTime is being changed
@@ -216,7 +223,7 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Messages
         fields = "__all__"
-        read_only_fields = ["created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at", "isRead", "readAt"]
 
 
 class TechnicianHiringApplicationSerializer(serializers.ModelSerializer):

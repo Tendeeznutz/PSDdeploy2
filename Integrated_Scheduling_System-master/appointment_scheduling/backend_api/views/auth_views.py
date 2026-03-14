@@ -27,17 +27,12 @@ class CookieTokenRefreshView(APIView):
     """
     Read the refresh token from the HTTP-only cookie, rotate it,
     and set the new access + refresh cookies on the response.
-
-    Also accepts refresh token in the request body for backwards
-    compatibility with clients that haven't migrated yet.
     """
 
     permission_classes = [AllowAny]
 
     def post(self, request):
-        raw_refresh = request.COOKIES.get(REFRESH_COOKIE) or request.data.get(
-            "refresh"
-        )
+        raw_refresh = request.COOKIES.get(REFRESH_COOKIE)
         if not raw_refresh:
             return Response(
                 {"detail": "Refresh token not found."},
@@ -47,9 +42,6 @@ class CookieTokenRefreshView(APIView):
         try:
             old_token = RefreshToken(raw_refresh)
             # Rotate: blacklist old, issue new pair
-            new_access = str(old_token.access_token)
-
-            # If rotation is enabled in settings, issue a new refresh too
             old_token.blacklist()
             new_refresh_token = RefreshToken()
             # Copy claims from old token
@@ -84,9 +76,7 @@ class CookieLogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        raw_refresh = request.COOKIES.get(REFRESH_COOKIE) or request.data.get(
-            "refresh"
-        )
+        raw_refresh = request.COOKIES.get(REFRESH_COOKIE)
         if raw_refresh:
             try:
                 token = RefreshToken(raw_refresh)

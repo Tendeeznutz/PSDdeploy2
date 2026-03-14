@@ -177,7 +177,7 @@ function CoordinatorHome() {
             const response = await api.post(
                 `/api/technicians/${resetPasswordTechnician.id}/coordinator-reset-password/`
             );
-            message.success(`Password for ${response.data.technicianName} has been reset to default (password123)`);
+            message.success(`Password reset email sent to ${response.data.technicianName}.`);
             setShowResetPasswordModal(false);
             setResetPasswordTechnician(null);
         } catch (error) {
@@ -206,7 +206,7 @@ function CoordinatorHome() {
             const response = await api.post(
                 `/api/customers/${resetPasswordCustomer.id}/coordinator-reset-password/`
             );
-            message.success(`Password for ${response.data.customerName} has been reset to default (password123). Email notification sent.`);
+            message.success(`Password reset link sent to ${response.data.customerName}'s email.`);
             setShowCustomerResetPasswordModal(false);
             setResetPasswordCustomer(null);
         } catch (error) {
@@ -651,7 +651,7 @@ function CoordinatorHome() {
             <MenuItem
             key={0}
             onClick={() => {
-                window.location.href='/coordinator/appointmentView?id=' + row.original.id
+                navigate('/coordinator/appointmentView?id=' + row.original.id)
                 closeMenu();
             }}
             sx={{ m: 0 }}
@@ -664,7 +664,7 @@ function CoordinatorHome() {
             <MenuItem
             key={1}
             onClick={() => {
-                window.location.href='/coordinator/customerEnquiry?id=' + row.original.customerId + "&name=" + row.original.display.customerName
+                navigate('/coordinator/customerEnquiry?id=' + row.original.customerId + "&name=" + encodeURIComponent(row.original.display.customerName))
                 closeMenu();
             }}
             sx={{ m: 0 }}
@@ -677,7 +677,7 @@ function CoordinatorHome() {
             <MenuItem
             key={2}
             onClick={() => {
-                window.location.href='/coordinator/appointmentUpdate?id=' + row.original.id
+                navigate('/coordinator/appointmentUpdate?id=' + row.original.id)
                 closeMenu();
             }}
             sx={{ m: 0 }}
@@ -748,10 +748,10 @@ function CoordinatorHome() {
                     </p>
                     <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
                         <p className="text-sm text-yellow-700">
-                            The password will be reset to the default: <strong>password123</strong>
+                            A password reset email will be sent to the technician.
                         </p>
                         <p className="text-sm text-yellow-600 mt-1">
-                            An email notification will be sent to the technician.
+                            They will need to click the link in the email to set a new password.
                         </p>
                     </div>
                 </div>
@@ -832,10 +832,10 @@ function CoordinatorHome() {
                     </p>
                     <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
                         <p className="text-sm text-yellow-700">
-                            The password will be reset to: <strong>password123</strong>
+                            A password reset link will be sent to {resetPasswordCustomer?.customerEmail}.
                         </p>
                         <p className="text-sm text-yellow-600 mt-1">
-                            An email notification will be sent to {resetPasswordCustomer?.customerEmail}.
+                            They will need to click the link in the email to set a new password.
                         </p>
                     </div>
                 </div>

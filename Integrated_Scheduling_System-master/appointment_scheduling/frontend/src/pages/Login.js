@@ -23,7 +23,7 @@ function Login() {
     // Sync selectedRole when URL changes (e.g. direct link to /login/customer)
     React.useEffect(() => {
         if (roleFromPath !== selectedRole) setSelectedRole(roleFromPath);
-    }, [roleFromPath]);
+    }, [roleFromPath, selectedRole]);
 
     const handleRoleSelect = (roleId) => {
         setEmailOrPhone('');

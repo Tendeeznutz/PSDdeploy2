@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { Progress } from 'antd';
+import { Spin } from 'antd';
 
 // Pricing constants
 const SERVICE_COST_PER_AIRCON = 50; // $50 per aircon serviced
@@ -17,7 +17,6 @@ function ScheduleAppointment() {
     const [paymentMethod, setPaymentMethod] = useState('cash');
     const [error, setError] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
-    const [progress, setProgress] = useState(0);
     const [showProgress, setShowProgress] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
@@ -47,7 +46,7 @@ function ScheduleAppointment() {
     };
 
     useEffect(() => {
-        fetchUserAirconData().then((response) => { setUserAirconList(response) });
+        fetchUserAirconData().then((response) => { setUserAirconList(response || []) });
     }, []);
 
     const handleAirconChange = (airconName) => {
@@ -96,11 +95,7 @@ function ScheduleAppointment() {
             });
 
             if (response.status === 201) {
-                setProgress(100);
-
-                setTimeout(() => {
-                    navigate('/customer/home');
-                }, 1000);
+                navigate('/customer/home');
             }
 
         }
@@ -251,7 +246,7 @@ function ScheduleAppointment() {
                         </div>
                         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
                     </form>
-                    {showProgress && <Progress className="mt-3" percent={progress} type="line" />}
+                    {showProgress && <div className="mt-3 text-center"><Spin tip="Scheduling your appointment..." /></div>}
                 </div>
             </div>
         </div>

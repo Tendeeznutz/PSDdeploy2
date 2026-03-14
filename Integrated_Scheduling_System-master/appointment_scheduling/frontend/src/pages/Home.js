@@ -77,13 +77,9 @@ function Home() {
         }
     };
     
-    const getAllAppointments = () => {
-        try {
-            const allAppointmentResponse = api.get(`/api/appointments/?customerId=${customer_id}`);
-            return allAppointmentResponse;
-        } catch (error) {
-            console.error(error.message);
-        }
+    const getAllAppointments = async () => {
+        const allAppointmentResponse = await api.get(`/api/appointments/?customerId=${customer_id}`);
+        return allAppointmentResponse;
     }
 
     // Function to convert Unix timestamp to formatted date string
@@ -108,7 +104,7 @@ function Home() {
         if (!customer_id) {
             navigate('/error');
         } else {
-            getAllAppointments().then((response) => { setAppointmentList(response.data) });
+            getAllAppointments().then((response) => { setAppointmentList(response.data) }).catch((error) => { console.error('Failed to fetch appointments:', error.message) });
             fetchUnreadCount();
         }
     }, []);

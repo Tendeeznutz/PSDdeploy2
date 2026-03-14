@@ -4,6 +4,7 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth.hashers import make_password, check_password
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -243,7 +244,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             frontend_base = getattr(
                 settings, "FRONTEND_BASE_URL", "http://localhost:3000"
             )
-            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}"
+            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}&userType=customer"
 
             subject = "Password Reset - AirServe"
             body = f"""Dear {customer.customerName},
@@ -315,7 +316,7 @@ AirServe Team"""
             frontend_base = getattr(
                 settings, "FRONTEND_BASE_URL", "http://localhost:3000"
             )
-            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}"
+            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}&userType=customer"
 
             subject = "Password Reset Request - AirServe"
             body = f"""Dear {customer.customerName},
@@ -407,12 +408,6 @@ AirServe Team"""
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not re.match(r"^[a-zA-Z0-9]+$", new_password):
-            return Response(
-                {"error": "Password must contain only alphanumeric characters"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         digit_count = sum(1 for c in new_password if c.isdigit())
         if digit_count < 3:
             return Response(
@@ -434,14 +429,21 @@ AirServe Team"""
                     {"error": "Token has expired"}, status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Update password
-            customer = Customers.objects.get(id=reset_token.userId)
-            customer.customerPassword = make_password(new_password)
-            customer.save()
+            # Update password and mark token as used atomically
+            with transaction.atomic():
+                locked_token = PasswordResetToken.objects.select_for_update().get(pk=reset_token.pk)
+                if locked_token.isUsed:
+                    return Response(
+                        {"error": "Token has already been used"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            # Mark token as used
-            reset_token.isUsed = True
-            reset_token.save()
+                customer = Customers.objects.get(id=locked_token.userId)
+                customer.customerPassword = make_password(new_password)
+                customer.save()
+
+                locked_token.isUsed = True
+                locked_token.save()
 
             return Response(
                 {"message": "Password has been reset successfully"},

@@ -1,6 +1,7 @@
 import logging
 
 from django.contrib.auth.hashers import make_password, check_password
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework import viewsets
@@ -30,40 +31,65 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    # GET request of all coordinators data
+    def _get_role(self, request):
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("role")
+        return None
+
+    # GET request — coordinators only
     def list(self, request):
+        if self._get_role(request) != "coordinator":
+            return Response(
+                {"error": "Only coordinators can list coordinator accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         queryset = Coordinators.objects.all()
-        # serialize queryset
         serializer = self.serializer_class(queryset, many=True)
-        # return response
         return Response(serializer.data)
 
-    # GET request of a coordinator's data
+    # GET request — coordinators only
     def retrieve(self, request, pk):
+        if self._get_role(request) != "coordinator":
+            return Response(
+                {"error": "Only coordinators can view coordinator accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
-    # POST request to create coordinator
+    # POST request — coordinators only
     def create(self, request):
-        # deserialize request data
+        if self._get_role(request) != "coordinator":
+            return Response(
+                {"error": "Only coordinators can create coordinator accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.serializer_class(data=request.data)
         password = request.data.get("coordinatorPassword")
         if serializer.is_valid():
-            # save data to database
             serializer.validated_data["coordinatorPassword"] = make_password(password)
             serializer.save()
-            # return success response
             return Response(serializer.data, status=201)
-        # return error response
         return Response(serializer.errors, status=400)
 
-    # PUT request to update coordinator data
+    # PUT request
     def update(self, request, pk):
         return Response(status=405)
 
-    # PATCH request
+    # PATCH request — coordinators can only update their own account
     def partial_update(self, request, pk):
+        if self._get_role(request) != "coordinator":
+            return Response(
+                {"error": "Only coordinators can update coordinator accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user_id = request.auth.get("user_id") if request.auth else None
+        if str(pk) != str(user_id):
+            return Response(
+                {"error": "You can only update your own coordinator account."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
@@ -76,10 +102,27 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
-    # DELETE request to delete coordinator
+    # DELETE request — coordinators can only delete their own account, cannot delete the last one
     def destroy(self, request, pk):
-        item = get_object_or_404(Coordinators.objects.all(), pk=pk)
-        item.delete()
+        if self._get_role(request) != "coordinator":
+            return Response(
+                {"error": "Only coordinators can delete coordinator accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user_id = request.auth.get("user_id") if request.auth else None
+        if str(pk) != str(user_id):
+            return Response(
+                {"error": "You can only delete your own coordinator account."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        with transaction.atomic():
+            if Coordinators.objects.select_for_update().count() <= 1:
+                return Response(
+                    {"error": "Cannot delete the last coordinator account."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            item = get_object_or_404(Coordinators.objects.all(), pk=pk)
+            item.delete()
         return Response(status=204)
 
     @action(detail=False, methods=["post"], url_path="login")

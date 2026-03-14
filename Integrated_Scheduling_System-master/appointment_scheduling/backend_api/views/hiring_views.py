@@ -27,8 +27,25 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def _get_role(self, request):
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("role")
+        return None
+
+    def _require_coordinator(self, request):
+        if self._get_role(request) != "coordinator":
+            return Response(
+                {"error": "Only coordinators can perform this action."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
     def list(self, request):
-        """Get all hiring applications with optional filtering"""
+        """Get all hiring applications — coordinator only"""
+        denied = self._require_coordinator(request)
+        if denied:
+            return denied
+
         queryset = TechnicianHiringApplication.objects.all()
 
         # Filter by application status
@@ -51,7 +68,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, pk):
-        """Get a specific hiring application"""
+        """Get a specific hiring application — coordinator only"""
+        denied = self._require_coordinator(request)
+        if denied:
+            return denied
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -70,7 +90,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def partial_update(self, request, pk):
-        """Update a hiring application"""
+        """Update a hiring application — coordinator only"""
+        denied = self._require_coordinator(request)
+        if denied:
+            return denied
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -83,7 +106,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def destroy(self, request, pk):
-        """Delete a hiring application"""
+        """Delete a hiring application — coordinator only"""
+        denied = self._require_coordinator(request)
+        if denied:
+            return denied
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -137,6 +163,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         """
         Stage 3: Coordinator approves application and creates technician account
         """
+        denied = self._require_coordinator(request)
+        if denied:
+            return denied
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -210,7 +239,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="coordinator-reject")
     def coordinator_reject(self, request, pk=None):
-        """Coordinator rejects application"""
+        """Coordinator rejects application — coordinator only"""
+        denied = self._require_coordinator(request)
+        if denied:
+            return denied
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )

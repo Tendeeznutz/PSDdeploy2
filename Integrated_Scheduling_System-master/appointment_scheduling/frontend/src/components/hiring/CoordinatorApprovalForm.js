@@ -40,8 +40,7 @@ function CoordinatorApprovalForm({ applicationData, onComplete }) {
                 approvalData
             );
 
-            message.success('Application approved! Technician account created successfully.');
-            message.info(`Temporary password: ${response.data.temporaryPassword}`);
+            message.success('Application approved! Technician account created. The temporary password has been sent to the technician\'s email.');
 
             setTimeout(() => {
                 if (onComplete) onComplete();

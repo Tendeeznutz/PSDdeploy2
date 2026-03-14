@@ -96,11 +96,11 @@ function InactivityTimer() {
         const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 
         // Throttle reset to avoid excessive calls
-        let lastReset = Date.now();
+        const lastResetRef = { current: Date.now() };
         const throttledReset = () => {
             const now = Date.now();
-            if (now - lastReset > 1000) { // Only reset every 1 second max
-                lastReset = now;
+            if (now - lastResetRef.current > 1000) { // Only reset every 1 second max
+                lastResetRef.current = now;
                 resetTimer();
             }
         };

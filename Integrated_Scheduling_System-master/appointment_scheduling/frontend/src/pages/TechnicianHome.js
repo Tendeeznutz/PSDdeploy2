@@ -56,33 +56,16 @@ function TechnicianHome() {
         });
     }
 
-    // const CheckIn = (appointmentId) => {
-    //     console.log("Check in for appointment: " + appointmentId);
-    //     axios.put(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/${appointmentId}/`, {
-    //         appointmentStatus: "2"
-    //     })
-    //         .then(response => {
-    //             console.log(response);
-    //         })
-    //         .catch(error => {
-    //             console.error('There was an error!', error);
-    //         });
-    //     window.location.reload();
-
-    // }
-
     const CompleteJob = (appointmentId) => {
         api.put(`/api/appointments/${appointmentId}/`, {
             appointmentStatus: "3"
         })
-            .then(response => {
-                console.log(response);
+            .then(() => {
+                window.location.reload();
             })
             .catch(error => {
                 console.error('There was an error!', error);
             });
-        window.location.reload();
-
     }
 
     function displayApptStatus(apptStatus) {
@@ -235,7 +218,7 @@ function TechnicianHome() {
                 <MenuItem
                 key={0}
                 onClick={() => {
-                    window.location.href='/technician/appointmentDetail?id=' + row.original.id
+                    navigate('/technician/appointmentDetail?id=' + row.original.id)
                     closeMenu();
                 }}
                 sx={{ m: 0 }}
@@ -314,82 +297,6 @@ function TechnicianHome() {
                 onClose={() => setAvailabilityModalVisible(false)}
                 technicianId={localStorage.getItem('technicians_id')}
             />
-            {/* <div className="overflow-x-auto">
-                <table className="min-w-full bg-white">
-                    <thead className="bg-gray-800 text-white">
-                    <tr>
-                        <th className="w-1/5 px-4 py-2">Appointment Date/Time</th>
-                        <th className="w-1/5 px-4 py-2">Aircon to be serviced</th>
-                        <th className="w-1/5 px-4 py-2">Address</th>
-                        <th className="w-1/5 px-4 py-2">Status</th>
-                        <th className="w-1/5 px-4 py-2">Status</th>
-                        <th className="w-1/5 px-4 py-2" colSpan={2}>Actions</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {appointments.map((appointment, index) => {
-                        console.log("boom" + appointment.id)
-                        // Show the row only if the appointment date is in the future
-                        // if (appointmentDate > currentDate) {
-                        return (
-                            <tr key={appointment.id} className="text-center border-b">
-                                <td className="px-4 py-2">{formatUnixTimestamp(appointment.appointmentStartTime)}</td>
-                                <td>
-                                    {appointment.display.airconBrand.map((brand, index) => (
-                                        <div key={index} className="px-4 py-2">
-                                            {brand},{appointment.display.airconModel[index]}
-                                        </div>
-                                    ))}
-                                </td>
-                                <td className="px-4 py-2">{addresses}</td>
-                                <td className="px-4 py-2">
-                                    {(() => {
-                                        switch (appointment.appointmentStatus) {
-                                            case "1":
-                                                return "Upcoming";
-                                            case "2":
-                                                return "Ongoing";
-                                            case "3":
-                                                return "Completed";
-                                            case "4":
-                                                return "Cancelled";
-                                            default:
-                                                return "Unknown Status";
-                                        }
-                                    })()}
-                                </td>
-                                <td colSpan={2} className="px-4 py-2">
-                                    <td className="px-4 py-2">
-                                        {appointment.appointmentStatus === "1" ? (
-                                            <button onClick={() => CheckIn(appointment.id)}
-                                                    className="text-blue-500 hover:text-blue-600">
-                                                Check In
-                                            </button>
-                                        ) : appointment.appointmentStatus === "2" ? (
-                                            <button onClick={() => CompleteJob(appointment.id)}
-                                                    className="text-green-500 hover:text-green-600">
-                                                Complete Job
-                                            </button>
-                                        ) : null}
-                                    </td>
-
-                                    <td className="px-4 py-2">
-                                        <Link to={`/appointmentDetail?id=${appointment.id}`}
-                                              className="text-blue-500 hover:text-blue-600">
-                                            View
-                                        </Link>
-                                    </td>
-                                </td>
-                            </tr>
-                        );
-
-                        // }
-                        return null; // Don't render the row if the appointment date is in the past
-                    })}
-
-                    </tbody>
-                </table>
-            </div> */}
         </div>
     );
 }

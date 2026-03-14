@@ -244,6 +244,30 @@ AirServe Team
 
     # GET request
     def list(self, request, *args, **kwargs):
+        role, token_user_id = self._get_role_and_user_id(request)
+
+        # Non-coordinators must be scoped to their own records
+        if role == "customer":
+            queryset = Appointments.objects.filter(customerId=token_user_id)
+            serializer = AppointmentSerializer(queryset, many=True)
+            serialized_data = serializer.data
+            serialized_data_list = [dict(item) for item in serialized_data]
+            modified_data_list = [
+                include_all_info(data, request) for data in serialized_data_list
+            ]
+            return Response(modified_data_list, status=200)
+
+        if role == "technician":
+            queryset = Appointments.objects.filter(technicianId=token_user_id)
+            serializer = AppointmentSerializer(queryset, many=True)
+            serialized_data = serializer.data
+            serialized_data_list = [dict(item) for item in serialized_data]
+            modified_data_list = [
+                include_all_info(data, request) for data in serialized_data_list
+            ]
+            return Response(modified_data_list, status=200)
+
+        # Coordinators can use all filters
         query_params = request.query_params
         if "customerId" in query_params:
             serializer = AppointmentSerializer(
@@ -284,13 +308,6 @@ AirServe Team
             serializer = AppointmentSerializer(
                 Appointments.objects.filter(
                     appointmentStartTime__gte=query_params["appointmentStartTime"]
-                ),
-                many=True,
-            )
-        elif "appointmentStatus" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    appointmentStatus=query_params["appointmentStatus"]
                 ),
                 many=True,
             )
@@ -351,7 +368,14 @@ AirServe Team
     # Send email to customer for enquiry
     @action(detail=False, methods=["post"], url_path="sendEnquiry")
     def sendEnquiry(self, request, *args, **kwargs):
-        # get all data from post request
+        # Only coordinators can send enquiry emails
+        role, _ = self._get_role_and_user_id(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can send enquiry emails."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         customerId = request.data.get("customerId", None)
         emailSubject = request.data.get("emailSubject", None)
         emailBody = request.data.get("emailBody", None)
@@ -361,10 +385,8 @@ AirServe Team
                 {"error": "Invalid request data."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # get customer data from database
         customer = get_object_or_404(Customers, id=customerId)
 
-        # send email
         sendMail.send_email(
             emailSubject, emailBody, customer.customerEmail, "Coordinator"
         )
@@ -644,12 +666,11 @@ AirServe Team
         )
 
         if not serializer.is_valid():
-            # Return the actual validation errors to the frontend
             return Response(
                 {"error": "Validation failed", "details": serializer.errors}, status=400
             )
 
-        if serializer.is_valid():
+        if True:  # validation already passed above
             # Check if technician is being assigned for the first time
             if serializer.validated_data.get("technicianId") is not None:
                 if item.technicianId is None:
@@ -825,8 +846,14 @@ AirServe Team
 
         return Response(serializer.errors, status=400)
 
-    # DELETE request
+    # DELETE request — coordinators only
     def destroy(self, request, pk=None):
+        role, _ = self._get_role_and_user_id(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can delete appointments."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
@@ -838,10 +865,8 @@ AirServe Team
         Body: { rating: 1-5, customerId: uuid }
         """
         appointment = get_object_or_404(Appointments.objects.all(), pk=pk)
-        customer_id = request.data.get("customerId")
+        role, token_user_id = self._get_role_and_user_id(request)
         rating = request.data.get("rating")
-        if not customer_id:
-            return Response({"error": "customerId is required"}, status=400)
         if rating is None:
             return Response({"error": "rating is required (1-5)"}, status=400)
         try:
@@ -849,7 +874,8 @@ AirServe Team
         except (TypeError, ValueError):
             return Response({"error": "rating must be an integer 1-5"}, status=400)
 
-        if str(appointment.customerId.id) != str(customer_id):
+        # Verify caller is the customer who owns this appointment (using JWT, not request body)
+        if str(appointment.customerId.id) != str(token_user_id):
             return Response(
                 {"error": "You can only rate appointments that belong to you."},
                 status=403,
@@ -865,30 +891,35 @@ AirServe Team
         if not (1 <= rating <= 5):
             return Response({"error": "Rating must be between 1 and 5."}, status=400)
 
-        existing = AppointmentRating.objects.filter(
-            appointment=appointment, ratedBy="customer"
-        ).first()
-        if existing:
-            return Response(
-                {
-                    "error": "You have already rated this technician for this appointment."
-                },
-                status=400,
-            )
-
         from decimal import Decimal
 
-        technician = appointment.technicianId
-        old_avg = float(technician.technicianRating)
-        old_count = technician.technicianRatingCount
-        new_count = old_count + 1
-        new_avg = (old_avg * old_count + rating) / new_count
-        technician.technicianRating = Decimal(str(round(new_avg, 2)))
-        technician.technicianRatingCount = new_count
-        technician.save()
-        AppointmentRating.objects.create(
-            appointment=appointment, ratedBy="customer", rating=rating
-        )
+        with transaction.atomic():
+            # Lock the appointment row to prevent duplicate ratings
+            appointment = Appointments.objects.select_for_update().get(pk=pk)
+
+            existing = AppointmentRating.objects.filter(
+                appointment=appointment, ratedBy="customer"
+            ).first()
+            if existing:
+                return Response(
+                    {
+                        "error": "You have already rated this technician for this appointment."
+                    },
+                    status=400,
+                )
+
+            technician = Technicians.objects.select_for_update().get(pk=appointment.technicianId.id)
+            old_avg = float(technician.technicianRating)
+            old_count = technician.technicianRatingCount
+            new_count = old_count + 1
+            new_avg = (old_avg * old_count + rating) / new_count
+            technician.technicianRating = Decimal(str(round(new_avg, 2)))
+            technician.technicianRatingCount = new_count
+            technician.save()
+            AppointmentRating.objects.create(
+                appointment=appointment, ratedBy="customer", rating=rating
+            )
+
         return Response(
             {
                 "technicianRating": float(technician.technicianRating),
@@ -904,10 +935,8 @@ AirServe Team
         Body: { rating: 1-5, technicianId: uuid }
         """
         appointment = get_object_or_404(Appointments.objects.all(), pk=pk)
-        technician_id = request.data.get("technicianId")
+        role, token_user_id = self._get_role_and_user_id(request)
         rating = request.data.get("rating")
-        if not technician_id:
-            return Response({"error": "technicianId is required"}, status=400)
         if rating is None:
             return Response({"error": "rating is required (1-5)"}, status=400)
         try:
@@ -915,8 +944,9 @@ AirServe Team
         except (TypeError, ValueError):
             return Response({"error": "rating must be an integer 1-5"}, status=400)
 
+        # Verify caller is the technician assigned to this appointment (using JWT, not request body)
         if not appointment.technicianId or str(appointment.technicianId.id) != str(
-            technician_id
+            token_user_id
         ):
             return Response(
                 {"error": "You can only rate appointments assigned to you."}, status=403
@@ -928,28 +958,33 @@ AirServe Team
         if not (1 <= rating <= 5):
             return Response({"error": "Rating must be between 1 and 5."}, status=400)
 
-        existing = AppointmentRating.objects.filter(
-            appointment=appointment, ratedBy="technician"
-        ).first()
-        if existing:
-            return Response(
-                {"error": "You have already rated this customer for this appointment."},
-                status=400,
-            )
-
         from decimal import Decimal
 
-        customer = appointment.customerId
-        old_avg = float(customer.customerRating)
-        old_count = customer.ratingCount
-        new_count = old_count + 1
-        new_avg = (old_avg * old_count + rating) / new_count
-        customer.customerRating = Decimal(str(round(new_avg, 2)))
-        customer.ratingCount = new_count
-        customer.save()
-        AppointmentRating.objects.create(
-            appointment=appointment, ratedBy="technician", rating=rating
-        )
+        with transaction.atomic():
+            # Lock the appointment row to prevent duplicate ratings
+            appointment = Appointments.objects.select_for_update().get(pk=pk)
+
+            existing = AppointmentRating.objects.filter(
+                appointment=appointment, ratedBy="technician"
+            ).first()
+            if existing:
+                return Response(
+                    {"error": "You have already rated this customer for this appointment."},
+                    status=400,
+                )
+
+            customer = Customers.objects.select_for_update().get(pk=appointment.customerId.id)
+            old_avg = float(customer.customerRating)
+            old_count = customer.ratingCount
+            new_count = old_count + 1
+            new_avg = (old_avg * old_count + rating) / new_count
+            customer.customerRating = Decimal(str(round(new_avg, 2)))
+            customer.ratingCount = new_count
+            customer.save()
+            AppointmentRating.objects.create(
+                appointment=appointment, ratedBy="technician", rating=rating
+            )
+
         return Response(
             {
                 "customerRating": float(customer.customerRating),
@@ -967,6 +1002,14 @@ AirServe Team
         customer_id = request.query_params.get("customerId")
         if not customer_id:
             return Response({"error": "customerId is required"}, status=400)
+
+        # Only the customer themselves or a coordinator can view penalty status
+        role, token_user_id = self._get_role_and_user_id(request)
+        if role != "coordinator" and str(customer_id) != str(token_user_id):
+            return Response(
+                {"error": "You can only view your own penalty status."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         try:
             penalty_summary = get_penalty_summary(customer_id)
@@ -1048,13 +1091,9 @@ AirServe Team
                 )
 
                 if not created:
-                    # Update existing customer's details
-                    customer.customerName = name
-                    customer.customerPhone = phone
-                    customer.customerAddress = address
-                    customer.customerPostalCode = postal_code
-                    customer.customerLocation = location
-                    customer.save()
+                    # Do not overwrite a registered customer's profile from an
+                    # unauthenticated guest request — use their existing details.
+                    pass
 
             # Create aircon device + appointment inside a transaction for consistency
             with transaction.atomic():
@@ -1064,7 +1103,7 @@ AirServe Team
                     customerId=customer,
                     airconName=f"{aircon_brand} - {aircon_model} (Booking {booking_timestamp})",
                     numberOfUnits=number_of_units,
-                    airconType="split",  # Default type for guest bookings
+                    airconType="other",  # Default type for guest bookings
                 )
 
                 # Get nearby technicians and find available slot (prioritize specialists for this brand)
@@ -1303,7 +1342,7 @@ AirServe Scheduling System
                     "message": "Booking created successfully! A confirmation email has been sent.",
                     "appointment": response_data,
                     "customerId": str(customer.id),
-                    "isGuestBooking": not existing_customer,
+                    "isGuestBooking": created,
                 },
                 status=201,
             )

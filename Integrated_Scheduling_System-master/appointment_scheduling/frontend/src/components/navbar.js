@@ -6,8 +6,8 @@ function Navbar() {
     const navigate = useNavigate();
 
     const isCustomer = !!localStorage.getItem('customers_id');
-    const isTechnician = !!localStorage.getItem('technicians_phone');
-    const isCoordinator = !!localStorage.getItem('coordinators_email');
+    const isTechnician = !!localStorage.getItem('technicians_id');
+    const isCoordinator = !!localStorage.getItem('coordinators_id');
 
     // Show navbar on any /customer/* or /technician/* route
     const showForCustOrTech = (isCustomer || isTechnician) &&
