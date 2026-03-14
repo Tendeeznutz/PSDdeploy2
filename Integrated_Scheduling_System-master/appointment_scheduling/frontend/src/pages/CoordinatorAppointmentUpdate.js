@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
 import { Button, Select, message, Modal, Input } from "antd";
 
 const { TextArea } = Input;
 
 function CoordinatorAppointmentUpdate() {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [updatedAppointment, setUpdatedAppointment] = useState({});
     const [technicians, setTechnicians] = useState([]);
@@ -124,7 +126,7 @@ function CoordinatorAppointmentUpdate() {
 
             message.success('Appointment updated successfully');
             setTimeout(() => {
-                window.location.href = '/coordinator/home';
+                navigate('/coordinator/home');
             }, 1000);
         } catch (error) {
             console.error('Error updating appointment:', error);

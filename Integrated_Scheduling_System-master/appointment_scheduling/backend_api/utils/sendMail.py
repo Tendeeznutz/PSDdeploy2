@@ -24,9 +24,14 @@ def send_email(subject, body, to_email, alias_name):
 
     if not from_email or not from_password:
         logger.error(
-            "Email credentials not configured. Set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD env vars."
+            "EMAIL NOT CONFIGURED: EMAIL_HOST_USER=%s, EMAIL_HOST_PASSWORD=%s",
+            "set" if from_email else "MISSING",
+            "set" if from_password else "MISSING",
         )
         return False
+
+    # Strip spaces from App Password (Gmail App Passwords are sometimes displayed with spaces)
+    from_password = from_password.replace(" ", "")
 
     msg = MIMEText(body)
 
@@ -39,15 +44,16 @@ def send_email(subject, body, to_email, alias_name):
     msg["Subject"] = subject
 
     try:
+        logger.info("EMAIL SEND ATTEMPT: to=%s, from=%s, subject=%s", to_email, from_email, subject)
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30)
         server.ehlo()
         server.login(from_email, from_password)
         server.sendmail(from_email, to_email, msg.as_string())
         server.close()
 
-        logger.info("Email sent to %s", to_email)
+        logger.info("EMAIL SENT OK: to=%s", to_email)
         return True
 
     except Exception as e:
-        logger.exception("Failed to send email to %s", to_email)
+        logger.exception("EMAIL SEND FAILED: to=%s, error=%s", to_email, e)
         return False
