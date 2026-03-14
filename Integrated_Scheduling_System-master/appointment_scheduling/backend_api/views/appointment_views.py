@@ -1,15 +1,17 @@
+import logging
+import threading
+import uuid
+from datetime import datetime, timedelta
+
+from django.contrib.auth.hashers import make_password
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db import models, transaction
-from django.contrib.auth.hashers import make_password
-from rest_framework.throttling import AnonRateThrottle
-from datetime import datetime, timedelta
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-import logging
-import uuid
+from rest_framework.throttling import AnonRateThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -403,19 +405,44 @@ AirServe Team
         return appointment_end_time
 
     # POST request
+    def _send_notifications_async(self, appointment_id, customer_id, aircon_ids):
+        """Send email and mailbox receipt in a background thread to avoid blocking the response."""
+        try:
+            appointment = Appointments.objects.get(id=appointment_id)
+            customer = Customers.objects.get(id=customer_id)
+            technician = appointment.technicianId if appointment.technicianId else None
+            send_appointment_confirmation(appointment, customer, technician)
+            self.send_receipt_to_mailbox(appointment, customer, aircon_ids)
+        except Exception as e:
+            logger.exception("Background notification failed: %s", e)
+
     def create(self, request, *args, **kwargs):
+        customer_id = request.data.get("customerId")
+        start_time = request.data.get("appointmentStartTime")
+
+        # Prevent duplicate bookings: same customer, same start time, not cancelled
+        existing = Appointments.objects.filter(
+            customerId=customer_id,
+            appointmentStartTime=start_time,
+        ).exclude(appointmentStatus="4")
+        if existing.exists():
+            return Response(
+                {"error": "You already have an appointment at this time. Please choose a different time slot."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         aircon_brand = extract_aircon_brand(request.data.get("airconToService", []))
         nearby_technicians = get_nearby_technicians(
-            request.data["customerId"],
+            customer_id,
             aircon_brand=aircon_brand,
-            appointment_start_time=request.data["appointmentStartTime"],
+            appointment_start_time=start_time,
         )
         request.data["appointmentEndTime"] = self.get_appointment_end_time(
-            request.data["appointmentStartTime"], request.data["airconToService"]
+            start_time, request.data["airconToService"]
         )
         request.data["technicianId"] = get_technician_to_assign(
             nearby_technicians,
-            request.data["appointmentStartTime"],
+            start_time,
             request.data["appointmentEndTime"],
         )
         if request.data["technicianId"] is not None:
@@ -427,23 +454,22 @@ AirServe Team
         if serializer.is_valid():
             appointment = serializer.save()
 
-            # Send confirmation email to customer and technician
-            try:
-                customer = Customers.objects.get(id=appointment.customerId.id)
-                technician = (
-                    appointment.technicianId if appointment.technicianId else None
-                )
-                send_appointment_confirmation(appointment, customer, technician)
-            except Exception as e:
-                logger.exception("Failed to send appointment confirmation email: %s", e)
-
-            # Send receipt to customer's mailbox
+            # Send receipt to in-app mailbox (fast, no SMTP)
             try:
                 customer = Customers.objects.get(id=appointment.customerId.id)
                 aircon_ids = request.data.get("airconToService", [])
                 self.send_receipt_to_mailbox(appointment, customer, aircon_ids)
             except Exception as e:
                 logger.exception("Failed to send receipt to customer mailbox: %s", e)
+
+            # Send email in background thread to avoid SMTP timeout killing the worker
+            aircon_ids = request.data.get("airconToService", [])
+            thread = threading.Thread(
+                target=self._send_notifications_async,
+                args=(appointment.id, appointment.customerId.id, aircon_ids),
+                daemon=True,
+            )
+            thread.start()
 
             serializer_data = dict(serializer.data)
             modified_data = include_all_info(serializer_data, request)
