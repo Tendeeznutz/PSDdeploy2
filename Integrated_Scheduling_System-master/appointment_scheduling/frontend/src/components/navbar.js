@@ -1,4 +1,5 @@
 import {Link, useLocation, useNavigate} from 'react-router-dom';
+import { logout as serverLogout } from '../axiosConfig';
 
 function Navbar() {
     const location = useLocation();
@@ -16,18 +17,9 @@ function Navbar() {
         return null;
     }
 
-    const logout = () => {
+    const handleLogout = async () => {
         try {
-            localStorage.removeItem('customers_id');
-            localStorage.removeItem('customers_name');
-            localStorage.removeItem('technicians_phone');
-            localStorage.removeItem('technicians_id');
-            localStorage.removeItem('technicians_name');
-            localStorage.removeItem('coordinators_email');
-            localStorage.removeItem('coordinators_id');
-            localStorage.removeItem('coordinators_name');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            await serverLogout();
             navigate('/');
         } catch (err) {
             console.error(err.message);
@@ -79,7 +71,7 @@ function Navbar() {
                         )}
                     </li>
                     <li>
-                        <button onClick={logout} className="hover:text-blue-300">
+                        <button onClick={handleLogout} className="hover:text-blue-300">
                             Logout
                         </button>
                     </li>

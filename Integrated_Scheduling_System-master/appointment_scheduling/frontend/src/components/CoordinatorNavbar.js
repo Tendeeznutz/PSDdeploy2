@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { logout as serverLogout } from '../axiosConfig';
 
 function CoordinatorNavbar() {
     const location = useLocation();
@@ -12,13 +13,9 @@ function CoordinatorNavbar() {
         return null;
     }
 
-    const logout = () => {
+    const handleLogout = async () => {
         try {
-            localStorage.removeItem('coordinators_id');
-            localStorage.removeItem('coordinators_email');
-            localStorage.removeItem('coordinators_name');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            await serverLogout();
             navigate('/');
         } catch (err) {
             console.error(err.message);
@@ -45,7 +42,7 @@ function CoordinatorNavbar() {
                         </Link>
                     </li>
                     <li>
-                        <button onClick={logout} className="hover:text-blue-300">
+                        <button onClick={handleLogout} className="hover:text-blue-300">
                             Logout
                         </button>
                     </li>

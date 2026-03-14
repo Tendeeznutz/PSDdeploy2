@@ -12,13 +12,20 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from rest_framework.throttling import AnonRateThrottle
+
 from ..scheduling_algo import *
-from ..models import TechnicianPasswordResetToken, TechnicianHiringApplication
+from ..models import PasswordResetToken, TechnicianHiringApplication
 from ..serializers import TechnicianSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail
+from ..utils.jwt_cookies import set_jwt_cookies
 
 logger = logging.getLogger(__name__)
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    rate = "5/minute"
 
 
 class TechnicianViewSet(viewsets.ModelViewSet):
@@ -123,6 +130,8 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
+        self.throttle_classes = [LoginRateThrottle]
+        self.check_throttles(request)
         try:
             phone = request.data.get("email")
             password = request.data.get("password")
@@ -159,10 +168,12 @@ class TechnicianViewSet(viewsets.ModelViewSet):
                     "technician_id": technician.id,
                     "technicianName": technician.technicianName,
                     "role": "technician",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+                response = Response(response_data, status=status.HTTP_200_OK)
+                set_jwt_cookies(
+                    response, str(refresh.access_token), str(refresh)
+                )
+                return response
             return Response(
                 {"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
             )
@@ -213,8 +224,8 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             )
 
         # Invalidate any existing tokens
-        TechnicianPasswordResetToken.objects.filter(
-            technician=technician, isUsed=False
+        PasswordResetToken.objects.filter(
+            userType="technician", userId=technician.id, isUsed=False
         ).update(isUsed=True)
 
         # Generate a secure token
@@ -222,8 +233,8 @@ class TechnicianViewSet(viewsets.ModelViewSet):
         expires_at = timezone.now() + timedelta(hours=24)
 
         # Create the token
-        TechnicianPasswordResetToken.objects.create(
-            technician=technician, token=token, expiresAt=expires_at
+        PasswordResetToken.objects.create(
+            userType="technician", userId=technician.id, token=token, expiresAt=expires_at
         )
 
         # Send email with reset link
@@ -275,7 +286,7 @@ AirServe Team"""
             )
 
         try:
-            reset_token = TechnicianPasswordResetToken.objects.get(token=token)
+            reset_token = PasswordResetToken.objects.get(token=token, userType="technician")
 
             if reset_token.isUsed:
                 return Response(
@@ -289,15 +300,16 @@ AirServe Team"""
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            technician = Technicians.objects.get(id=reset_token.userId)
             return Response(
                 {
                     "valid": True,
-                    "technicianName": reset_token.technician.technicianName,
+                    "technicianName": technician.technicianName,
                 },
                 status=status.HTTP_200_OK,
             )
 
-        except TechnicianPasswordResetToken.DoesNotExist:
+        except PasswordResetToken.DoesNotExist:
             return Response(
                 {"valid": False, "error": "Invalid token"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -340,7 +352,7 @@ AirServe Team"""
             )
 
         try:
-            reset_token = TechnicianPasswordResetToken.objects.get(token=token)
+            reset_token = PasswordResetToken.objects.get(token=token, userType="technician")
 
             if reset_token.isUsed:
                 return Response(
@@ -354,7 +366,7 @@ AirServe Team"""
                 )
 
             # Update password
-            technician = reset_token.technician
+            technician = Technicians.objects.get(id=reset_token.userId)
             technician.technicianPassword = make_password(new_password)
             technician.save()
 
@@ -367,7 +379,7 @@ AirServe Team"""
                 status=status.HTTP_200_OK,
             )
 
-        except TechnicianPasswordResetToken.DoesNotExist:
+        except PasswordResetToken.DoesNotExist:
             return Response(
                 {"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST
             )

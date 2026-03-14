@@ -7,12 +7,18 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..models import Coordinators
 from ..serializers import CoordinatorSerializer
+from ..utils.jwt_cookies import set_jwt_cookies
 
 logger = logging.getLogger(__name__)
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    rate = "5/minute"
 
 
 class CoordinatorViewSet(viewsets.ModelViewSet):
@@ -78,6 +84,8 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
+        self.throttle_classes = [LoginRateThrottle]
+        self.check_throttles(request)
         try:
             email = request.data.get("email")
             password = request.data.get("password")
@@ -105,10 +113,12 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
                     "coordinatorEmail": coordinator.coordinatorEmail,
                     "coordinatorName": coordinator.coordinatorName,
                     "role": "coordinator",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+                response = Response(response_data, status=status.HTTP_200_OK)
+                set_jwt_cookies(
+                    response, str(refresh.access_token), str(refresh)
+                )
+                return response
             return Response(
                 {"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
             )

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Input, Button, Typography } from "@material-tailwind/react";
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import api from "../axiosConfig";
+import api, { clearSessionData } from "../axiosConfig";
 import backgroundImage from '../asset/img/air_servicing.png';
 
 const ROLES = [
@@ -51,23 +51,12 @@ function Login() {
             const payload = { email: emailOrPhone, password: password };
             const response = await api.post(endpoint, payload);
 
-            // Clear previous session data
-            localStorage.removeItem('customers_id');
-            localStorage.removeItem('customers_name');
-            localStorage.removeItem('technicians_id');
-            localStorage.removeItem('technicians_name');
-            localStorage.removeItem('technicians_phone');
-            localStorage.removeItem('coordinators_id');
-            localStorage.removeItem('coordinators_email');
-            localStorage.removeItem('coordinators_name');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            // Clear previous session data (tokens are now in HTTP-only cookies)
+            clearSessionData();
 
             if (response.status === 200) {
-                // Store JWT tokens
-                localStorage.setItem('access_token', response.data.access);
-                localStorage.setItem('refresh_token', response.data.refresh);
-
+                // JWT tokens are set as HTTP-only cookies by the server.
+                // Only store non-sensitive user info for UI display.
                 if (selectedRole === 'customer') {
                     localStorage.setItem('customers_id', response.data.customer_id);
                     localStorage.setItem('customers_name', response.data.customerName);

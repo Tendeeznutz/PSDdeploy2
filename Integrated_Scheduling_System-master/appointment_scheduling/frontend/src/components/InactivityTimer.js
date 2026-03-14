@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { logout as serverLogout } from '../axiosConfig';
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 const WARNING_TIME = 2 * 60 * 1000; // 2 minutes before logout (show at 3 min inactivity)
@@ -15,24 +16,18 @@ function InactivityTimer() {
     const warningTimeoutRef = useRef(null);
     const countdownRef = useRef(null);
 
-    // Check if user is logged in (any type of user)
+    // Check if user is logged in via session data (tokens are in HTTP-only cookies)
     const isLoggedIn = () => {
-        return !!localStorage.getItem('access_token');
+        return !!(
+            localStorage.getItem('customers_id') ||
+            localStorage.getItem('technicians_id') ||
+            localStorage.getItem('coordinators_id')
+        );
     };
 
     // Clear all auth data on logout
-    const logout = useCallback(() => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('coordinators_email');
-        localStorage.removeItem('coordinators_id');
-        localStorage.removeItem('coordinators_name');
-        localStorage.removeItem('customers_email');
-        localStorage.removeItem('customers_id');
-        localStorage.removeItem('customers_name');
-        localStorage.removeItem('technicians_id');
-        localStorage.removeItem('technicians_phone');
-        localStorage.removeItem('technicians_name');
+    const logout = useCallback(async () => {
+        await serverLogout();
         setShowWarning(false);
         navigate('/login');
     }, [navigate]);

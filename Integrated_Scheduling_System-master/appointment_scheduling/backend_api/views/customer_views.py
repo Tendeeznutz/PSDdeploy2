@@ -1,7 +1,11 @@
 import logging
+import re
+import secrets
+from datetime import timedelta
 
 from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -11,10 +15,12 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .format_response import include_all_info
+from ..models import PasswordResetToken
 from ..scheduling_algo import *
 from ..serializers import CustomerSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail
+from ..utils.jwt_cookies import set_jwt_cookies
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +34,24 @@ class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class = CustomerSerializer
 
     def get_permissions(self):
-        if self.action in ["login", "create"]:
+        if self.action in ["login", "create", "forgot_password", "validate_reset_token", "reset_password"]:
             return [AllowAny()]
-        return [AllowAny()]  # TODO: restrict to IsAuthenticated once auth is properly set up
+        return [IsAuthenticated()]
 
-    # GET request
+    def _get_user_id_from_token(self, request):
+        """Extract user_id from the JWT token on the request."""
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("user_id")
+        return None
+
+    # GET request — coordinators can list/search; customers cannot browse other customers
     def list(self, request):
+        role = request.auth.get("role") if request.auth else None
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can list customers."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if request.query_params.get("customerEmail") is not None:
             queryset = Customers.objects.filter(
                 customerEmail__icontains=request.query_params.get("customerEmail")
@@ -95,6 +113,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
+        self.throttle_classes = [LoginRateThrottle]
+        self.check_throttles(request)
         try:
             email = request.data.get("email")
             password = request.data.get("password")
@@ -121,10 +141,12 @@ class CustomerViewSet(viewsets.ModelViewSet):
                     "customer_id": customer.id,
                     "customerName": customer.customerName,
                     "role": "customer",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+                response = Response(response_data, status=status.HTTP_200_OK)
+                set_jwt_cookies(
+                    response, str(refresh.access_token), str(refresh)
+                )
+                return response
             else:
                 return Response(
                     {"error": "Invalid credentials"},
@@ -138,6 +160,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, pk=None):
         item = get_object_or_404(Customers.objects.all(), pk=pk)
+        # Customers can only view their own profile; coordinators can view any
+        token_user_id = self._get_user_id_from_token(request)
+        role = request.auth.get("role") if request.auth else None
+        if role != "coordinator" and str(item.id) != token_user_id:
+            return Response(
+                {"error": "You can only view your own profile."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = CustomerSerializer(item)
         return Response(serializer.data)
 
@@ -148,6 +178,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
     # PATCH request
     def partial_update(self, request, pk=None):
         item = get_object_or_404(Customers.objects.all(), pk=pk)
+        # Customers can only update their own profile; coordinators can update any
+        token_user_id = self._get_user_id_from_token(request)
+        role = request.auth.get("role") if request.auth else None
+        if role != "coordinator" and str(item.id) != token_user_id:
+            return Response(
+                {"error": "You can only update your own profile."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = CustomerSerializer(item, data=request.data, partial=True)
         if serializer.is_valid():
             # Hash password
@@ -169,32 +207,59 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="coordinator-reset-password")
     def coordinator_reset_password(self, request, pk=None):
         """
-        Coordinator resets customer password to default (password123).
-        Sends email notification to the customer.
+        Coordinator sends a password reset link to the customer's email.
         """
+        role = request.auth.get("role") if request.auth else None
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can reset customer passwords."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         customer = get_object_or_404(Customers.objects.all(), pk=pk)
 
-        default_password = "password123"
-        customer.customerPassword = make_password(default_password)
-        customer.save()
+        if not customer.customerEmail:
+            return Response(
+                {"error": "Customer does not have an email on file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Send email notification to customer
+        # Invalidate any existing tokens
+        PasswordResetToken.objects.filter(
+            userType="customer", userId=customer.id, isUsed=False
+        ).update(isUsed=True)
+
+        # Generate a secure token
+        token = secrets.token_urlsafe(32)
+        expires_at = timezone.now() + timedelta(hours=24)
+
+        PasswordResetToken.objects.create(
+            userType="customer", userId=customer.id, token=token, expiresAt=expires_at
+        )
+
+        # Send email with reset link
         try:
-            if customer.customerEmail:
-                subject = "Password Reset - AirServe"
-                body = f"""Dear {customer.customerName},
+            from django.conf import settings
+
+            frontend_base = getattr(
+                settings, "FRONTEND_BASE_URL", "http://localhost:3000"
+            )
+            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}"
+
+            subject = "Password Reset - AirServe"
+            body = f"""Dear {customer.customerName},
 
 Your password has been reset by the coordinator.
 
-Your new password is: {default_password}
+Click the link below to set a new password:
+{reset_url}
 
-Please log in and change your password as soon as possible.
+This link will expire in 24 hours.
 
 Best regards,
 AirServe Team"""
-                sendMail.send_email(
-                    subject, body, customer.customerEmail, "AirServe"
-                )
+            sendMail.send_email(
+                subject, body, customer.customerEmail, "AirServe"
+            )
         except Exception as e:
             logger.exception(
                 "Failed to send password reset notification to customer %s: %s", pk, e
@@ -202,14 +267,200 @@ AirServe Team"""
 
         return Response(
             {
-                "message": f"Password for {customer.customerName} has been reset to default (password123)",
+                "message": f"Password reset link sent to {customer.customerName}'s email",
                 "customerName": customer.customerName,
             },
             status=status.HTTP_200_OK,
         )
 
-    # DELETE request
+    @action(detail=False, methods=["post"], url_path="forgot-password")
+    def forgot_password(self, request):
+        """
+        Customer requests password reset - sends email with reset link.
+        Expects: { email: "customer@example.com" }
+        """
+        email = request.data.get("email")
+        if not email:
+            return Response(
+                {"error": "Email is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            customer = Customers.objects.get(customerEmail=email)
+        except Customers.DoesNotExist:
+            # Return success even if not found to prevent email enumeration
+            return Response(
+                {"message": "If an account with that email exists, a reset link has been sent."},
+                status=status.HTTP_200_OK,
+            )
+
+        # Invalidate any existing tokens
+        PasswordResetToken.objects.filter(
+            userType="customer", userId=customer.id, isUsed=False
+        ).update(isUsed=True)
+
+        # Generate a secure token
+        token = secrets.token_urlsafe(32)
+        expires_at = timezone.now() + timedelta(hours=24)
+
+        PasswordResetToken.objects.create(
+            userType="customer", userId=customer.id, token=token, expiresAt=expires_at
+        )
+
+        # Send email with reset link
+        try:
+            from django.conf import settings
+
+            frontend_base = getattr(
+                settings, "FRONTEND_BASE_URL", "http://localhost:3000"
+            )
+            reset_url = f"{frontend_base.rstrip('/')}/reset-password?token={token}"
+
+            subject = "Password Reset Request - AirServe"
+            body = f"""Dear {customer.customerName},
+
+You have requested to reset your password.
+
+Click the link below to reset your password:
+{reset_url}
+
+This link will expire in 24 hours.
+
+If you did not request this password reset, please ignore this email.
+
+Best regards,
+AirServe Team"""
+
+            sendMail.send_email(subject, body, email, "AirServe")
+        except Exception as e:
+            logger.exception("Failed to send password reset email to customer: %s", e)
+
+        return Response(
+            {"message": "If an account with that email exists, a reset link has been sent."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"], url_path="validate-reset-token")
+    def validate_reset_token(self, request):
+        """
+        Validate if a password reset token is valid and not expired.
+        Query param: token
+        """
+        token = request.query_params.get("token")
+        if not token:
+            return Response(
+                {"valid": False, "error": "Token is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            reset_token = PasswordResetToken.objects.get(token=token, userType="customer")
+
+            if reset_token.isUsed:
+                return Response(
+                    {"valid": False, "error": "Token has already been used"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if timezone.now() > reset_token.expiresAt:
+                return Response(
+                    {"valid": False, "error": "Token has expired"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            customer = Customers.objects.get(id=reset_token.userId)
+            return Response(
+                {
+                    "valid": True,
+                    "customerName": customer.customerName,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except PasswordResetToken.DoesNotExist:
+            return Response(
+                {"valid": False, "error": "Invalid token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=False, methods=["post"], url_path="reset-password")
+    def reset_password(self, request):
+        """
+        Reset password using token.
+        Expects: { token: "xxx", newPassword: "xxx" }
+        Password requirements: minimum 8 alphanumeric characters, at least 3 numbers.
+        """
+        token = request.data.get("token")
+        new_password = request.data.get("newPassword")
+
+        if not token or not new_password:
+            return Response(
+                {"error": "Token and new password are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate password requirements
+        if len(new_password) < 8:
+            return Response(
+                {"error": "Password must be at least 8 characters long"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not re.match(r"^[a-zA-Z0-9]+$", new_password):
+            return Response(
+                {"error": "Password must contain only alphanumeric characters"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        digit_count = sum(1 for c in new_password if c.isdigit())
+        if digit_count < 3:
+            return Response(
+                {"error": "Password must contain at least 3 numbers"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            reset_token = PasswordResetToken.objects.get(token=token, userType="customer")
+
+            if reset_token.isUsed:
+                return Response(
+                    {"error": "Token has already been used"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if timezone.now() > reset_token.expiresAt:
+                return Response(
+                    {"error": "Token has expired"}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update password
+            customer = Customers.objects.get(id=reset_token.userId)
+            customer.customerPassword = make_password(new_password)
+            customer.save()
+
+            # Mark token as used
+            reset_token.isUsed = True
+            reset_token.save()
+
+            return Response(
+                {"message": "Password has been reset successfully"},
+                status=status.HTTP_200_OK,
+            )
+
+        except PasswordResetToken.DoesNotExist:
+            return Response(
+                {"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # DELETE request — coordinators only
     def destroy(self, request, pk=None):
+        role = request.auth.get("role") if request.auth else None
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can delete customer accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Customers.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)

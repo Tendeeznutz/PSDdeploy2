@@ -1,3 +1,15 @@
 **/venv/
 **/__pycache__/
 **/*.sqlite3
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.production
+!.env.example
+
+# Media uploads
+**/media/
+
+# Node
+**/node_modules/

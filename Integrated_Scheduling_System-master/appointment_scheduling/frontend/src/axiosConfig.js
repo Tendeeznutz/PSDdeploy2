@@ -2,21 +2,10 @@ import axios from 'axios';
 
 const api = axios.create({
     baseURL: process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000',
+    withCredentials: true, // Send HTTP-only cookies with every request
 });
 
-// Attach JWT access token to every request
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('access_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
-);
-
-// Handle 401 responses by attempting token refresh
+// Handle 401 responses by attempting cookie-based token refresh
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -25,36 +14,52 @@ api.interceptors.response.use(
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-                try {
-                    const response = await axios.post(
-                        `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/token/refresh/`,
-                        { refresh: refreshToken }
-                    );
+            try {
+                // Refresh endpoint reads the refresh cookie automatically
+                await axios.post(
+                    `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/token/refresh/`,
+                    {},
+                    { withCredentials: true }
+                );
 
-                    const newAccess = response.data.access;
-                    localStorage.setItem('access_token', newAccess);
-                    if (response.data.refresh) {
-                        localStorage.setItem('refresh_token', response.data.refresh);
-                    }
-
-                    originalRequest.headers.Authorization = `Bearer ${newAccess}`;
-                    return api(originalRequest);
-                } catch (refreshError) {
-                    // Refresh failed — clear tokens and redirect to login
-                    localStorage.clear();
-                    window.location.href = '/login';
-                    return Promise.reject(refreshError);
-                }
-            } else {
-                localStorage.clear();
+                // Retry the original request — new access cookie is set
+                return api(originalRequest);
+            } catch (refreshError) {
+                // Refresh failed — clear session and redirect
+                clearSessionData();
                 window.location.href = '/login';
+                return Promise.reject(refreshError);
             }
         }
 
         return Promise.reject(error);
     }
 );
+
+/**
+ * Clear non-sensitive session data from localStorage.
+ * JWT tokens are now in HTTP-only cookies (cleared server-side via /api/auth/logout/).
+ */
+export function clearSessionData() {
+    const keys = [
+        'customers_id', 'customers_name',
+        'technicians_id', 'technicians_name', 'technicians_phone', 'technicians_email',
+        'coordinators_id', 'coordinators_email', 'coordinators_name',
+    ];
+    keys.forEach((k) => localStorage.removeItem(k));
+}
+
+/**
+ * Call the server logout endpoint (blacklists refresh token + clears cookies),
+ * then clear local session data.
+ */
+export async function logout() {
+    try {
+        await api.post('/api/auth/logout/');
+    } catch {
+        // Even if the server call fails, clear local state
+    }
+    clearSessionData();
+}
 
 export default api;
