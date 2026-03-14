@@ -194,9 +194,9 @@ class Appointments(TimeStampedModel):
     )
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
     customerId = models.ForeignKey(
-        Customers, 
-        on_delete=models.CASCADE, 
-        db_column='customerId', 
+        Customers,
+        on_delete=models.PROTECT,
+        db_column='customerId',
         related_name='appointments',
         default=None,
         null=False
@@ -207,14 +207,14 @@ class Appointments(TimeStampedModel):
     #appointmentStartTime = models.BigIntegerField(default=None, null=False)
     #appointmentEndTime = models.BigIntegerField(default=None, null=False)
     technicianId = models.ForeignKey(
-        Technicians, 
-        on_delete=models.CASCADE, 
+        Technicians,
+        on_delete=models.SET_NULL,
         db_column='technicianId',
-        related_name='appointments', 
+        related_name='appointments',
         default=None,
         null=True,
         blank=True
-        )
+    )
     # airconID = models.ForeignKey(airconCatalogs, on_delete=models.CASCADE, db_column='airconID', default=None, null=True)
     # validation should be done in serializer to check each entry exist in customerAirconDevices
     airconToService = models.JSONField(default=list, help_text='List of customerAirconDevices IDs')
@@ -517,18 +517,14 @@ class TechnicianAvailability(TimeStampedModel):
         return f'{self.technicianId.technicianName} - {self.get_dayOfWeek_display()}: {self.startTime}-{self.endTime}'
 
 
-class TechnicianPasswordResetToken(TimeStampedModel):
+class PasswordResetToken(TimeStampedModel):
     """
-    Token for technician password reset.
-    Tokens expire after 24 hours.
+    Generic password reset token for any user type (customer or technician).
+    Tokens expire after 24 hours and are single-use.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, null=False)
-    technician = models.ForeignKey(
-        Technicians,
-        on_delete=models.CASCADE,
-        related_name='password_reset_tokens',
-        null=False
-    )
+    userType = models.CharField(max_length=20, null=False, help_text='customer or technician')
+    userId = models.UUIDField(null=False, help_text='ID of the customer or technician')
     token = models.CharField(max_length=100, unique=True, null=False)
     expiresAt = models.DateTimeField(null=False, help_text='Token expiration time')
     isUsed = models.BooleanField(default=False, help_text='Whether token has been used')
@@ -536,13 +532,17 @@ class TechnicianPasswordResetToken(TimeStampedModel):
     class Meta:
         indexes = [
             Index(fields=['token']),
-            Index(fields=['technician']),
+            Index(fields=['userId', 'userType']),
             Index(fields=['expiresAt']),
         ]
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'Password reset token for {self.technician.technicianName}'
+        return f'Password reset token for {self.userType} {self.userId}'
+
+
+# Backwards-compatible alias so existing imports don't break during migration
+TechnicianPasswordResetToken = PasswordResetToken
 
 
 class TelegramLinkToken(TimeStampedModel):

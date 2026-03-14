@@ -11,7 +11,7 @@ from .models import (
     TechnicianHiringApplication,
     TechnicianAvailability,
     AppointmentRating,
-    TechnicianPasswordResetToken,
+    PasswordResetToken,
     TelegramLinkToken,
 )
 
@@ -116,10 +116,10 @@ class AppointmentRatingAdmin(admin.ModelAdmin):
     search_fields = ("appointment__id",)
 
 
-class TechnicianPasswordResetTokenAdmin(admin.ModelAdmin):
-    list_display = ("id", "technician", "expiresAt", "isUsed")
-    list_filter = ("isUsed",)
-    search_fields = ("technician__technicianName",)
+class PasswordResetTokenAdmin(admin.ModelAdmin):
+    list_display = ("id", "userType", "userId", "expiresAt", "isUsed")
+    list_filter = ("isUsed", "userType")
+    search_fields = ("userId",)
 
 
 admin.site.register(Appointments, AppointmentsAdmin)
@@ -132,7 +132,7 @@ admin.site.register(Messages, MessagesAdmin)
 admin.site.register(TechnicianHiringApplication, TechnicianHiringApplicationAdmin)
 admin.site.register(TechnicianAvailability, TechnicianAvailabilityAdmin)
 admin.site.register(AppointmentRating, AppointmentRatingAdmin)
-admin.site.register(TechnicianPasswordResetToken, TechnicianPasswordResetTokenAdmin)
+admin.site.register(PasswordResetToken, PasswordResetTokenAdmin)
 
 
 class TelegramLinkTokenAdmin(admin.ModelAdmin):

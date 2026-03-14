@@ -1,7 +1,8 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.hashers import make_password
+from rest_framework.throttling import AnonRateThrottle
 from datetime import datetime, timedelta
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -19,6 +20,7 @@ from ..models import (
     Appointments,
     Customers,
     Technicians,
+    Coordinators,
     CustomerAirconDevices,
     Messages,
     AppointmentRating,
@@ -35,6 +37,10 @@ from ..penalty_utils import (
     get_penalty_summary,
     CANCELLATION_THRESHOLD,
 )
+
+class GuestBookingThrottle(AnonRateThrottle):
+    rate = "10/minute"
+
 
 # Pricing constants (matching frontend)
 SERVICE_COST_PER_AIRCON = 50  # $50 per aircon serviced
@@ -64,6 +70,15 @@ def extract_aircon_brand(aircon_to_service):
 
 
 TRAVEL_FEE = 10  # $10 standard travel fee
+
+# Valid appointment status transitions
+# "1" = Pending, "2" = Confirmed, "3" = Completed, "4" = Cancelled
+VALID_STATUS_TRANSITIONS = {
+    "1": {"2", "4"},       # Pending → Confirmed or Cancelled
+    "2": {"3", "4"},       # Confirmed → Completed or Cancelled
+    "3": set(),            # Completed → nothing (terminal state)
+    "4": set(),            # Cancelled → nothing (terminal state)
+}
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
@@ -181,25 +196,34 @@ AirServe Team
         except Exception as e:
             logger.exception("Failed to send receipt to mailbox: %s", e)
 
-    def check_monthly_cancellation_limit(self, technician_id):
+    def _get_role_and_user_id(self, request):
+        """Extract role and user_id from the JWT token."""
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("role"), request.auth.get("user_id")
+        return None, None
+
+    def check_monthly_cancellation_limit(self, cancelled_by_role, actor_id):
         """
-        Check if technician has reached monthly cancellation limit (3 per month)
-        Returns (is_allowed, count) tuple
+        Check if actor has reached monthly cancellation limit (3 per month).
+        Applies to both technicians and coordinators.
+        Returns (is_allowed, count) tuple.
         """
-        # Get the first day of current month
         now = timezone.now()
         first_day_of_month = now.replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
-        # Count cancellations by this technician in current month
-        cancellation_count = Appointments.objects.filter(
-            appointmentStatus="4",  # Cancelled status
-            cancelledBy="technician",
-            technicianId=technician_id,
-            cancelledAt__gte=first_day_of_month,
-        ).count()
+        filters = {
+            "appointmentStatus": "4",
+            "cancelledBy": cancelled_by_role,
+            "cancelledAt__gte": first_day_of_month,
+        }
+        # Scope the count to the specific actor
+        if cancelled_by_role == "technician":
+            filters["technicianId"] = actor_id
+        # For coordinators, count all coordinator cancellations system-wide
 
+        cancellation_count = Appointments.objects.filter(**filters).count()
         return (cancellation_count < 3, cancellation_count)
 
     @action(detail=False, methods=["get"], url_path="unavailable")
@@ -413,7 +437,13 @@ AirServe Team
         return Response(modified_data)
 
     def update(self, request, pk=None):
-        # TODO: verify if this is sent by the coordinator
+        # Only coordinators can do full updates on appointments
+        role, _ = self._get_role_and_user_id(request)
+        if role != "coordinator":
+            return Response(
+                {"error": "Only coordinators can perform full appointment updates."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
         serializer = AppointmentSerializer(
             item, data=request.data, context={"request": request}
@@ -428,6 +458,43 @@ AirServe Team
     # PATCH request
     def partial_update(self, request, pk=None):
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
+        role, token_user_id = self._get_role_and_user_id(request)
+
+        # Role-based authorization
+        if role == "customer":
+            # Customers can only modify their own appointments, and only to cancel
+            if str(item.customerId.id) != token_user_id:
+                return Response(
+                    {"error": "You can only modify your own appointments."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            new_status = request.data.get("appointmentStatus")
+            if new_status is not None and str(new_status) != "4":
+                return Response(
+                    {"error": "Customers can only cancel appointments."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif role == "technician":
+            # Technicians can only update appointments assigned to them
+            if not item.technicianId or str(item.technicianId.id) != token_user_id:
+                return Response(
+                    {"error": "You can only update appointments assigned to you."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # Technicians can mark complete only after appointment start time
+            new_status = request.data.get("appointmentStatus")
+            if new_status is not None and str(new_status) == "3":
+                now_epoch = int(timezone.now().timestamp())
+                if now_epoch < item.appointmentStartTime:
+                    return Response(
+                        {"error": "Cannot mark appointment as complete before it has started."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+        elif role != "coordinator":
+            return Response(
+                {"error": "Unauthorized."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Handle empty string technicianId (convert to None for proper validation)
         if (
@@ -452,6 +519,23 @@ AirServe Team
                     {"error": f"Invalid technician ID format: {tech_id}"}, status=400
                 )
 
+        # Validate status transitions — terminal states cannot be changed
+        new_status = request.data.get("appointmentStatus")
+        if new_status is not None:
+            new_status = str(new_status)
+            current_status = item.appointmentStatus
+            allowed = VALID_STATUS_TRANSITIONS.get(current_status, set())
+            if new_status != current_status and new_status not in allowed:
+                status_names = {"1": "Pending", "2": "Confirmed", "3": "Completed", "4": "Cancelled"}
+                return Response(
+                    {
+                        "error": f"Cannot change status from "
+                        f"'{status_names.get(current_status, current_status)}' to "
+                        f"'{status_names.get(new_status, new_status)}'."
+                    },
+                    status=400,
+                )
+
         # Track if this is a cancellation for sending notification later
         is_cancellation = False
         cancellation_reason = None
@@ -471,13 +555,13 @@ AirServe Team
                     {"error": "Cancellation reason is required."}, status=400
                 )
 
-            # Determine who is cancelling — default to "customer" so penalty logic fires correctly
-            cancelled_by = request.data.get("cancelledBy", "customer")
+            # Use the authenticated role instead of trusting request data
+            cancelled_by = role  # from JWT token (customer/technician/coordinator)
 
-            # Only check limit for technicians and coordinators, not customers
-            if cancelled_by in ["technician", "coordinator"] and item.technicianId:
+            # Check monthly cancellation limit for technicians (coordinators are unlimited)
+            if cancelled_by == "technician" and item.technicianId:
                 is_allowed, count = self.check_monthly_cancellation_limit(
-                    item.technicianId.id
+                    "technician", item.technicianId.id
                 )
                 if not is_allowed:
                     return Response(
@@ -634,6 +718,52 @@ AirServe Team
                         cancelled_by=cancelled_by,
                         cancellation_reason=cancellation_reason,
                     )
+
+                    # Build cancellation details for in-app messages
+                    appt_time = datetime.fromtimestamp(
+                        updated_appointment.appointmentStartTime
+                    )
+                    formatted_time = appt_time.strftime("%B %d, %Y at %I:%M %p")
+                    canceller_label = cancelled_by.title()
+                    cancellation_body = (
+                        f"Appointment on {formatted_time} has been cancelled.\n\n"
+                        f"Cancelled by: {canceller_label}\n"
+                        f"Reason: {cancellation_reason}\n\n"
+                        f"Booking Reference: {str(updated_appointment.id)[:8].upper()}"
+                    )
+
+                    # In-app mailbox message to customer
+                    Messages.objects.create(
+                        senderType="coordinator",
+                        senderId="00000000-0000-0000-0000-000000000000",
+                        senderName="AirServe System",
+                        recipientType="customer",
+                        recipientId=customer.id,
+                        recipientName=customer.customerName,
+                        subject="Appointment Cancelled",
+                        body=cancellation_body,
+                        isRead=False,
+                        relatedAppointment=updated_appointment,
+                    )
+
+                    # In-app mailbox message to coordinator (as admin record)
+                    coordinator = Coordinators.objects.first()
+                    if coordinator:
+                        Messages.objects.create(
+                            senderType="coordinator",
+                            senderId="00000000-0000-0000-0000-000000000000",
+                            senderName="AirServe System",
+                            recipientType="coordinator",
+                            recipientId=coordinator.id,
+                            recipientName=coordinator.coordinatorName,
+                            subject=f"Appointment Cancelled by {canceller_label}",
+                            body=(
+                                f"Customer: {customer.customerName}\n"
+                                f"{cancellation_body}"
+                            ),
+                            isRead=False,
+                            relatedAppointment=updated_appointment,
+                        )
 
                     # Send penalty notification to customer if penalty was applied
                     if penalty_result and penalty_result["penalty_applied"]:
@@ -862,6 +992,10 @@ AirServe Team
         - appointmentStartTime
         - paymentMethod
         """
+        # Rate limit guest bookings to prevent spam
+        self.throttle_classes = [GuestBookingThrottle]
+        self.check_throttles(request)
+
         try:
             # Extract data from request
             name = request.data.get("customerName")
@@ -894,92 +1028,90 @@ AirServe Team
                     status=400,
                 )
 
-            # Check if customer already exists by phone or email
-            existing_customer = Customers.objects.filter(
-                models.Q(customerPhone=phone) | models.Q(customerEmail=email)
-            ).first()
+            # Atomic transaction to prevent race conditions creating duplicate customers
+            with transaction.atomic():
+                location = geo_onemap.get_location_from_postal(postal_code)
 
-            if existing_customer:
-                # Use existing customer but update their details
-                customer = existing_customer
-                customer.customerName = name
-                customer.customerPhone = phone
-                customer.customerEmail = email
-                customer.customerAddress = address
-                customer.customerPostalCode = postal_code
-                customer.customerLocation = geo_onemap.get_location_from_postal(
-                    postal_code
-                )
-                customer.save()
-            else:
-                # Create temporary guest customer with a default password
-                customer = Customers.objects.create(
-                    customerName=name,
-                    customerPhone=phone,
+                # get_or_create by email to prevent duplicates; update details if existing
+                customer, created = Customers.objects.select_for_update().get_or_create(
                     customerEmail=email,
-                    customerAddress=address,
-                    customerPostalCode=postal_code,
-                    customerLocation=geo_onemap.get_location_from_postal(postal_code),
-                    customerPassword=make_password(
-                        "GUEST_ACCOUNT_" + str(uuid.uuid4())[:8]
-                    ),  # Hashed random password for guest
+                    defaults={
+                        "customerName": name,
+                        "customerPhone": phone,
+                        "customerAddress": address,
+                        "customerPostalCode": postal_code,
+                        "customerLocation": location,
+                        "customerPassword": make_password(
+                            "GUEST_ACCOUNT_" + str(uuid.uuid4())[:8]
+                        ),
+                    },
                 )
 
-            # Create a temporary aircon device for this booking
-            # Add timestamp to make the name unique for each booking
-            booking_timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
-            aircon_device = CustomerAirconDevices.objects.create(
-                customerId=customer,
-                airconName=f"{aircon_brand} - {aircon_model} (Booking {booking_timestamp})",
-                numberOfUnits=number_of_units,
-                airconType="split",  # Default type for guest bookings
-            )
+                if not created:
+                    # Update existing customer's details
+                    customer.customerName = name
+                    customer.customerPhone = phone
+                    customer.customerAddress = address
+                    customer.customerPostalCode = postal_code
+                    customer.customerLocation = location
+                    customer.save()
 
-            # Get nearby technicians and find available slot (prioritize specialists for this brand)
-            nearby_technicians = get_nearby_technicians(
-                customer.id,
-                aircon_brand=aircon_brand,
-                appointment_start_time=appointment_time,
-            )
-            appointment_end_time = appointment_time + (
-                3600 * number_of_units
-            )  # 1 hour per aircon unit
+            # Create aircon device + appointment inside a transaction for consistency
+            with transaction.atomic():
+                # Create a temporary aircon device for this booking
+                booking_timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+                aircon_device = CustomerAirconDevices.objects.create(
+                    customerId=customer,
+                    airconName=f"{aircon_brand} - {aircon_model} (Booking {booking_timestamp})",
+                    numberOfUnits=number_of_units,
+                    airconType="split",  # Default type for guest bookings
+                )
 
-            # Try to assign a technician
-            assigned_technician = None
-            for tech_id in nearby_technicians:
-                technician = Technicians.objects.get(id=tech_id)
-                # Check if technician is available (simplified check)
-                conflicting_appointments = Appointments.objects.filter(
-                    technicianId=technician,
-                    appointmentStartTime__lt=appointment_end_time,
-                    appointmentEndTime__gt=appointment_time,
-                    appointmentStatus__in=["1", "2"],  # Pending or Upcoming
-                ).exists()
+                # Get nearby technicians and find available slot (prioritize specialists for this brand)
+                nearby_technicians = get_nearby_technicians(
+                    customer.id,
+                    aircon_brand=aircon_brand,
+                    appointment_start_time=appointment_time,
+                )
+                appointment_end_time = appointment_time + (
+                    3600 * number_of_units
+                )  # 1 hour per aircon unit
 
-                if not conflicting_appointments:
-                    assigned_technician = technician
-                    break
+                # Try to assign a technician
+                assigned_technician = None
+                for tech_id in nearby_technicians:
+                    technician = Technicians.objects.get(id=tech_id)
+                    # Check if technician is available (simplified check)
+                    conflicting_appointments = Appointments.objects.filter(
+                        technicianId=technician,
+                        appointmentStartTime__lt=appointment_end_time,
+                        appointmentEndTime__gt=appointment_time,
+                        appointmentStatus__in=["1", "2"],  # Pending or Upcoming
+                    ).exists()
 
-            if not assigned_technician and nearby_technicians:
-                # Assign to first technician if no one is perfectly available
-                assigned_technician = Technicians.objects.get(id=nearby_technicians[0])
+                    if not conflicting_appointments:
+                        assigned_technician = technician
+                        break
 
-            # Create the appointment
-            # Set status to '2' (Confirmed) if technician is assigned, otherwise '1' (Pending)
-            appointment_status = "2" if assigned_technician else "1"
-            appointment = Appointments.objects.create(
-                customerId=customer,
-                technicianId=assigned_technician,
-                appointmentStartTime=appointment_time,
-                appointmentEndTime=appointment_end_time,
-                appointmentStatus=appointment_status,
-                paymentMethod=payment_method,
-            )
+                if not assigned_technician and nearby_technicians:
+                    # Assign to first technician if no one is perfectly available
+                    assigned_technician = Technicians.objects.get(id=nearby_technicians[0])
 
-            # Link the aircon device to the appointment (airconToService is a JSONField list of IDs)
-            appointment.airconToService = [str(aircon_device.id)]
-            appointment.save()
+                # Create the appointment
+                # Set status to '2' (Confirmed) if technician is assigned, otherwise '1' (Pending)
+                appointment_status = "2" if assigned_technician else "1"
+                appointment = Appointments.objects.create(
+                    customerId=customer,
+                    technicianId=assigned_technician,
+                    appointmentStartTime=appointment_time,
+                    appointmentEndTime=appointment_end_time,
+                    appointmentStatus=appointment_status,
+                    paymentMethod=payment_method,
+                )
+
+                # Link the aircon device to the appointment
+                appointment.airconToService = [str(aircon_device.id)]
+                appointment.save()
 
             # Send email confirmation directly to guest's email
             appointment_datetime = datetime.fromtimestamp(appointment_time)

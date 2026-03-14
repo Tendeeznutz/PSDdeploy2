@@ -65,6 +65,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data, status=200)
 
+    def _get_token_user_id(self, request):
+        """Extract user_id from the JWT token on the request."""
+        if hasattr(request, "auth") and request.auth:
+            return request.auth.get("user_id")
+        return None
+
     def create(self, request, *args, **kwargs):
         """
         Create a new message.
@@ -72,6 +78,15 @@ class MessageViewSet(viewsets.ModelViewSet):
         """
         data = request.data
         sender_type = data.get("senderType")
+
+        # Verify that senderId matches the authenticated user to prevent impersonation
+        token_user_id = self._get_token_user_id(request)
+        claimed_sender_id = data.get("senderId")
+        if token_user_id and claimed_sender_id and str(claimed_sender_id) != str(token_user_id):
+            return Response(
+                {"error": "You can only send messages as yourself."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Special handling for customer messages
         if sender_type == "customer":
