@@ -84,33 +84,54 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     # POST request
     def create(self, request):
-        serializer = CustomerSerializer(data=request.data)
+        try:
+            serializer = CustomerSerializer(data=request.data)
 
-        customer_password = request.data.get("customerPassword")
-
-        existing_customer = Customers.objects.filter(
-            customerEmail=request.data.get("customerEmail")
-        ).first()
-        if existing_customer:
-            return Response(
-                {"error": "Customer with this email already exists."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if serializer.is_valid():
-            serializer.validated_data["customerPassword"] = make_password(
-                customer_password
-            )
-            serializer.validated_data["customerLocation"] = (
-                geo.get_location_from_postal(
-                    serializer.validated_data["customerPostalCode"]
+            customer_password = request.data.get("customerPassword")
+            if not customer_password:
+                return Response(
+                    {"error": "Password is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            )
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        # Return error response
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            existing_customer = Customers.objects.filter(
+                customerEmail=request.data.get("customerEmail")
+            ).first()
+            if existing_customer:
+                return Response(
+                    {"error": "Customer with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            existing_phone = Customers.objects.filter(
+                customerPhone=request.data.get("customerPhone")
+            ).first()
+            if existing_phone:
+                return Response(
+                    {"error": "Customer with this phone number already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if serializer.is_valid():
+                serializer.validated_data["customerPassword"] = make_password(
+                    customer_password
+                )
+                serializer.validated_data["customerLocation"] = (
+                    geo.get_location_from_postal(
+                        serializer.validated_data["customerPostalCode"]
+                    )
+                )
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+            # Return error response
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception("Customer registration error: %s", e)
+            return Response(
+                {"error": f"Registration failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
