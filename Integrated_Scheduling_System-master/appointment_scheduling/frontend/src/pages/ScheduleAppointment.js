@@ -108,6 +108,8 @@ function ScheduleAppointment() {
                 error.message === 'Please select a time between 8:00 AM and 8:00 PM.')
             {
                 setError(error.message);
+            } else if (error.response?.data?.error) {
+                setError(error.response.data.error);
             } else if (error.response?.data?.appointmentStartTime) {
                 setError("Scheduled Date cannot be past or present.");
             } else if (error.status === 500) {

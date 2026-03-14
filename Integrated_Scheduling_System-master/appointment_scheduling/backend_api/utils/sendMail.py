@@ -45,7 +45,7 @@ def send_email(subject, body, to_email, alias_name):
 
     try:
         logger.info("EMAIL SEND ATTEMPT: to=%s, from=%s, subject=%s", to_email, from_email, subject)
-        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30)
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10)
         server.ehlo()
         server.login(from_email, from_password)
         server.sendmail(from_email, to_email, msg.as_string())
