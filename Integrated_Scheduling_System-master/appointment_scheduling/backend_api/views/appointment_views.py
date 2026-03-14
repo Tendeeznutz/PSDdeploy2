@@ -99,11 +99,11 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         try:
             # Get aircon details
             aircon_devices = CustomerAirconDevices.objects.filter(id__in=aircon_ids)
-            aircon_names = [device.airconName for device in aircon_devices]
-            num_aircons = len(aircon_ids)
+            aircon_names = [f"{d.airconName} ({d.numberOfUnits} unit{'s' if d.numberOfUnits > 1 else ''})" for d in aircon_devices]
+            total_units = sum(d.numberOfUnits for d in aircon_devices)
 
-            # Calculate costs
-            service_cost = num_aircons * SERVICE_COST_PER_AIRCON
+            # Calculate costs based on total units, not number of devices
+            service_cost = total_units * SERVICE_COST_PER_AIRCON
             total_cost = service_cost + TRAVEL_FEE
 
             # Add penalty fee if any
@@ -151,7 +151,7 @@ Aircon Units to be Serviced:
 --------------------------------------------
 COST BREAKDOWN
 --------------------------------------------
-Service Fee ({num_aircons} aircon{"s" if num_aircons > 1 else ""} x ${SERVICE_COST_PER_AIRCON}):    ${service_cost}.00
+Service Fee ({total_units} unit{"s" if total_units > 1 else ""} x ${SERVICE_COST_PER_AIRCON}):    ${service_cost}.00
 Travel Fee:                            ${TRAVEL_FEE}.00"""
 
             if penalty_fee > 0:
@@ -758,13 +758,19 @@ AirServe Team
                             customer.id, appointment_start_time_unix=appt_start
                         )
 
-                    send_appointment_cancellation(
-                        appointment=updated_appointment,
-                        customer=customer,
-                        technician=technician,
-                        cancelled_by=cancelled_by,
-                        cancellation_reason=cancellation_reason,
-                    )
+                    # Send cancellation email in background thread (SMTP blocked on Render)
+                    def _send_cancel_email():
+                        try:
+                            send_appointment_cancellation(
+                                appointment=Appointments.objects.get(id=updated_appointment.id),
+                                customer=Customers.objects.get(id=customer.id),
+                                technician=Technicians.objects.get(id=technician.id) if technician else None,
+                                cancelled_by=cancelled_by,
+                                cancellation_reason=cancellation_reason,
+                            )
+                        except Exception as e:
+                            logger.exception("Background cancellation email failed: %s", e)
+                    threading.Thread(target=_send_cancel_email, daemon=True).start()
 
                     # Build cancellation details for in-app messages
                     appt_time = datetime.fromtimestamp(
