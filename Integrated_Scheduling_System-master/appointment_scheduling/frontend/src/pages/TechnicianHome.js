@@ -84,50 +84,23 @@ function TechnicianHome() {
     };
 
     useEffect(() => {
-        api.get(`/api/technicians/?technicianId=` + localStorage.getItem("technicians_id"))
-            .then(response => {
-                    localStorage.setItem("technicians_phone", response.data[0].phone);
-                    localStorage.setItem("technicians_email", response.data[0].email);
-                    localStorage.setItem("technicians_name", response.data[0].technicianName);
-                }
-            )
-            .catch(error => {
-                    console.error('There was an error!', error);
-                }
-            );
         api.get(`/api/appointments/?technicianId=${localStorage.getItem("technicians_id")}`)
             .then(response => {
                 setAppointments(response.data);
 
-                // Fetch customer data for each unique customer
-                const uniqueCustomerIds = [...new Set(response.data.map(appt => appt.customerId))];
+                // Build customer data from appointment display data (no separate API calls needed)
                 const customerDataMap = {};
-
-                Promise.all(
-                    uniqueCustomerIds.map(customerId =>
-                        api.get(`/api/customers/${customerId}/`)
-                            .then(customerResponse => {
-                                customerDataMap[customerId] = {
-                                    address: customerResponse.data.customerAddress,
-                                    postalCode: customerResponse.data.customerPostalCode,
-                                    name: customerResponse.data.customerName,
-                                    phone: customerResponse.data.customerPhone
-                                };
-                            })
-                            .catch(customerError => {
-                                console.error('Error fetching customer details:', customerError);
-                            })
-                    )
-                ).then(() => {
-                    setCustomerData(customerDataMap);
-                    // For backward compatibility, set the first customer's address
-                    if (response.data.length > 0) {
-                        const firstCustomerId = response.data[0].customerId;
-                        if (customerDataMap[firstCustomerId]) {
-                            setAddresses(customerDataMap[firstCustomerId].address);
-                        }
+                response.data.forEach(appt => {
+                    if (appt.display && appt.customerId && !customerDataMap[appt.customerId]) {
+                        customerDataMap[appt.customerId] = {
+                            address: appt.display.customerAddress || '',
+                            postalCode: appt.display.customerPostalCode || '',
+                            name: appt.display.customerName || '',
+                            phone: appt.display.customerPhone || ''
+                        };
                     }
                 });
+                setCustomerData(customerDataMap);
             })
             .catch(error => {
                 console.error('Error fetching appointments:', error);
