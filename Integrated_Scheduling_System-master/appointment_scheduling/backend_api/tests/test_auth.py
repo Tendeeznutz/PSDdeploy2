@@ -3,7 +3,8 @@ from unittest.mock import patch
 from django.contrib.auth.hashers import make_password
 from rest_framework.test import APIClient, APITestCase
 
-from backend_api.models import Customers
+from backend_api.models import Coordinators, Customers
+from backend_api.tests.helpers import auth_client_as
 
 
 @patch('backend_api.views.customer_views.geo.get_location_from_postal', return_value='1.3521,103.8198')
@@ -55,22 +56,12 @@ class AuthEnforcementTests(APITestCase):
 
     def test_valid_token_grants_access(self, *mocks):
         """A valid JWT allows access to protected customer list endpoint."""
-        Customers.objects.create(
-            customerName='Auth Tester',
-            customerPostalCode='123456',
-            customerAddress='1 Auth Street',
-            customerPhone='91234567',
-            customerEmail='authtest@example.com',
-            customerPassword=make_password('testpass123'),
-            customerLocation='1.3521,103.8198',
+        coordinator = Coordinators.objects.create(
+            coordinatorName='Auth Coord',
+            coordinatorEmail='authcoord@example.com',
+            coordinatorPhone='81234567',
+            coordinatorPassword=make_password('coordpass'),
         )
-        login_response = self.client.post(
-            '/api/customers/login/',
-            {'email': 'authtest@example.com', 'password': 'testpass123'},
-            format='json',
-        )
-        self.assertEqual(login_response.status_code, 200, msg="Login should succeed")
-        token = login_response.data['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        auth_client_as(self.client, coordinator, "coordinator")
         response = self.client.get('/api/customers/')
         self.assertEqual(response.status_code, 200, msg="Valid token should grant access to /api/customers/")

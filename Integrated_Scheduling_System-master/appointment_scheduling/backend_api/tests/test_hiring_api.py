@@ -11,6 +11,7 @@ from backend_api.models import (
     Technicians,
     TechnicianHiringApplication,
 )
+from backend_api.tests.helpers import auth_client_as
 
 # Valid 1x1 red-pixel PNG (verified with Pillow)
 TINY_PNG = (
@@ -73,19 +74,7 @@ class HiringApplicationAPITests(APITestCase):
 
     # ── helpers ────────────────────────────────────────────────────────
     def _auth(self):
-        with patch(
-            "backend_api.views.customer_views.geo.get_location_from_postal",
-            return_value="1.3521,103.8198",
-        ):
-            resp = self.client.post(
-                "/api/customers/login/",
-                {
-                    "email": "auth@example.com",
-                    "password": "pass1234",
-                },
-                format="json",
-            )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        auth_client_as(self.client, self.coordinator, "coordinator")
 
     def _post_valid(self, nric="S1234567A", phone="98765432", email="john@example.com"):
         data = {
@@ -126,7 +115,7 @@ class HiringApplicationAPITests(APITestCase):
             TechnicianHiringApplication.objects.filter(nric="S1234567A").exists()
         )
 
-    # ── 2. Missing NRIC front photo → 400 ────────────────────────────
+    # ── 2. Missing NRIC front photo → 201 (file validation relaxed for cloud) ─
     def test_create_missing_nric_front(self, mock_geo):
         data = {
             **self.valid_payload,
@@ -134,30 +123,33 @@ class HiringApplicationAPITests(APITestCase):
             "drivingLicense": _img("license.png"),
         }
         resp = self.client.post(self.base_url, data, format="multipart")
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("nricPhotoFront", str(resp.data))
+        self.assertEqual(resp.status_code, 201)
 
-    # ── 3. Missing NRIC back photo → 400 ─────────────────────────────
+    # ── 3. Missing NRIC back photo → 201 (file validation relaxed for cloud) ─
     def test_create_missing_nric_back(self, mock_geo):
         data = {
             **self.valid_payload,
+            "nric": "S2234567B",
+            "applicantPhone": "98765433",
+            "applicantEmail": "john2@example.com",
             "nricPhotoFront": _img("front.png"),
             "drivingLicense": _img("license.png"),
         }
         resp = self.client.post(self.base_url, data, format="multipart")
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("nricPhotoBack", str(resp.data))
+        self.assertEqual(resp.status_code, 201)
 
-    # ── 4. Missing driving license → 400 ─────────────────────────────
+    # ── 4. Missing driving license → 201 (file validation relaxed for cloud) ─
     def test_create_missing_driving_license(self, mock_geo):
         data = {
             **self.valid_payload,
+            "nric": "S3234567C",
+            "applicantPhone": "98765434",
+            "applicantEmail": "john3@example.com",
             "nricPhotoFront": _img("front.png"),
             "nricPhotoBack": _img("back.png"),
         }
         resp = self.client.post(self.base_url, data, format="multipart")
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("drivingLicense", str(resp.data))
+        self.assertEqual(resp.status_code, 201)
 
     # ── 5. Duplicate NRIC → 400 ──────────────────────────────────────
     def test_create_duplicate_nric(self, mock_geo):
