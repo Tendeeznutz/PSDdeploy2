@@ -224,8 +224,15 @@ function Login() {
                 }
             }
         } catch (error) {
-            const msg = error.response?.data?.error || error.response?.data?.detail || 'Login failed. Please try again.';
-            setErrorMessage(typeof msg === 'string' ? msg : 'Login failed. Please try again.');
+            if (!error.response) {
+                // No response at all — network error or backend cold start timeout
+                setErrorMessage('Server is starting up. Please wait a moment and try again.');
+            } else if (error.response.status >= 500) {
+                setErrorMessage('Server is temporarily unavailable. Please try again in a moment.');
+            } else {
+                const msg = error.response?.data?.error || error.response?.data?.detail || 'Login failed. Please try again.';
+                setErrorMessage(typeof msg === 'string' ? msg : 'Login failed. Please try again.');
+            }
         }
     };
 

@@ -98,7 +98,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             ).first()
             if existing_customer:
                 return Response(
-                    {"error": "An account with these details already exists."},
+                    {"error": "This email address is already in use. Please log in or use a different email."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -107,7 +107,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             ).first()
             if existing_phone:
                 return Response(
-                    {"error": "An account with these details already exists."},
+                    {"error": "This phone number is already in use. Please use a different number."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
