@@ -16,7 +16,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .format_response import include_all_info
-from ..models import Customers, PasswordResetToken
+from ..models import Customers, Appointments, AppointmentRating, Messages, PasswordResetToken
 from ..serializers import CustomerSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail
@@ -476,6 +476,8 @@ AirServe Team"""
             )
 
     # DELETE request — coordinators only
+    # Deletes the customer along with all their appointments, appointment
+    # ratings, related messages, and password-reset tokens.
     def destroy(self, request, pk=None):
         role = request.auth.get("role") if request.auth else None
         if role != "coordinator":
@@ -483,6 +485,29 @@ AirServe Team"""
                 {"error": "Only coordinators can delete customer accounts."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        item = get_object_or_404(Customers.objects.all(), pk=pk)
-        item.delete()
-        return Response(status=204)
+        customer = get_object_or_404(Customers.objects.all(), pk=pk)
+
+        with transaction.atomic():
+            # Collect all appointment IDs for this customer
+            appointment_ids = list(
+                Appointments.objects.filter(customerId=customer).values_list("id", flat=True)
+            )
+
+            # Delete ratings linked to those appointments
+            if appointment_ids:
+                AppointmentRating.objects.filter(appointment_id__in=appointment_ids).delete()
+
+            # Delete the appointments themselves (PROTECT FK prevents cascade)
+            Appointments.objects.filter(customerId=customer).delete()
+
+            # Clean up messages sent to or from this customer
+            Messages.objects.filter(senderId=customer.id, senderType="customer").delete()
+            Messages.objects.filter(recipientId=customer.id, recipientType="customer").delete()
+
+            # Clean up password-reset tokens
+            PasswordResetToken.objects.filter(userId=customer.id, userType="customer").delete()
+
+            # Delete the customer (cascades to CustomerAirconDevices)
+            customer.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
