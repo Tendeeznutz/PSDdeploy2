@@ -1,0 +1,703 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{microtype}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  language=bash,
+  backgroundcolor=\color{gray!10},
+  columns=fullflexible,
+  framesep=5pt,
+  xleftmargin=2pt,
+  xrightmargin=2pt
+}
+
+\begin{document}
+
+\title{AirServe: Cloud-Native Migration and Security Hardening of a Full-Stack Appointment Scheduling System}
+
+\author{
+\IEEEauthorblockN{Group 24}
+\IEEEauthorblockA{
+\textit{Singapore Institute of Technology} \\
+Singapore \\
+}
+}
+
+\maketitle
+
+\begin{abstract}
+This report documents the cloud-native migration, security hardening, and post-deployment refinement of AirServe, a Django and React-based appointment scheduling system for air-conditioning servicing in Singapore. The system was migrated from an Azure Virtual Machine deployment to a fully serverless, free-tier cloud architecture comprising Vercel (frontend hosting), Render (backend hosting), and Neon (serverless PostgreSQL database). Following the migration, a comprehensive security hardening phase addressed vulnerabilities introduced by the distributed architecture, including HTTP-only cookie-based JWT authentication, role-based access control, Insecure Direct Object Reference (IDOR) protection, and a secure password reset flow. A subsequent post-deployment phase resolved production bugs, modernised the test suite for cookie-based authentication, implemented a multi-provider email notification system using the Gmail API over HTTPS, and introduced duplicate booking prevention with a per-unit pricing model. We detail the architectural decisions, code modifications, deployment configuration, security measures, and trade-offs involved in transitioning from a monolithic VM-hosted deployment to a hardened, distributed cloud-native stack. The migration achieved zero-cost hosting while restoring email notification functionality through the Gmail API, with documented limitations in file storage, Telegram notifications, and cold-start latency.
+\end{abstract}
+
+\begin{IEEEkeywords}
+cloud migration, serverless architecture, Django, React, Vercel, Render, Neon PostgreSQL, PaaS, appointment scheduling, security hardening, JWT, RBAC, Gmail API, OAuth2
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+AirServe is a social enterprise appointment scheduling platform that connects customers requiring air-conditioning (AC) services with trained technicians in Singapore. The system aims to empower low-income individuals by providing skill-development opportunities in the HVAC industry through a structured hiring and scheduling workflow.
+
+The platform was originally developed as a monolithic full-stack application designed for local development and single-server deployment. As the project matured, the need arose to deploy the system to the cloud for demonstration, testing, and stakeholder access. The initial deployment used an Azure Virtual Machine, which required manual server administration, cost management, and infrastructure maintenance.
+
+Cloud migration from monolithic deployments to managed platforms has become an increasingly common pattern in modern software engineering, driven by cost reduction, operational simplicity, and deployment automation \cite{b6}. This report documents both the migration of AirServe from the Azure VM deployment to a cloud-native architecture using exclusively free-tier Platform-as-a-Service (PaaS) providers, and the subsequent security hardening required by the distributed architecture. The project aimed to achieve four objectives: (1) eliminate hosting costs, (2) remove server administration overhead, (3) enable continuous deployment from Git repositories, and (4) harden the application against security vulnerabilities introduced by the multi-service deployment topology. Following the security hardening, a post-deployment refinement phase addressed production bugs, restored email notification functionality via the Gmail API, and improved booking reliability.
+
+\section{System Overview}
+
+\subsection{Technology Stack}
+
+AirServe employs a modern full-stack architecture with clear separation between frontend and backend concerns:
+
+\begin{itemize}
+    \item \textbf{Frontend:} React 18.2.0 with Tailwind CSS, Ant Design, and Material UI for the component library
+    \item \textbf{Backend:} Django 4.2.5 with Django REST Framework 3.14.0
+    \item \textbf{Authentication:} JSON Web Tokens (JWT) via \texttt{djangorestframework-\allowbreak simplejwt}, stored in HTTP-only cookies with \texttt{SameSite=None} and \texttt{Secure} flags for cross-origin safety. Access tokens expire after 30 minutes, with 1-day refresh tokens and rotation
+    \item \textbf{Database:} SQLite (development), PostgreSQL (production)
+    \item \textbf{External APIs:} OneMap (Singapore geolocation), Google Maps, Gmail API (OAuth2 over HTTPS)
+    \item \textbf{Static Files:} WhiteNoise 6.6.0 for Django static file serving
+\end{itemize}
+
+\subsection{Core Features}
+
+The application provides the following capabilities:
+
+\begin{enumerate}
+    \item \textbf{Appointment Scheduling:} Intelligent technician-customer matching based on geographic proximity (via OneMap API), AC specialisations, technician availability, and ratings.
+    \item \textbf{Three-Stage Technician Hiring:} Progressive onboarding workflow comprising personal details with document uploads, bank information, and coordinator approval.
+    \item \textbf{Cancellation Penalty System:} Automated tracking and fee application for excessive appointment cancellations.
+    \item \textbf{Multi-Channel Notifications:} Email (Gmail SMTP) and Telegram bot integration for appointment confirmations, reminders, and cancellation alerts.
+    \item \textbf{Internal Messaging:} In-app messaging system between customers, technicians, and coordinators with read/unread tracking.
+    \item \textbf{Rating System:} Bidirectional feedback between customers and technicians after appointment completion.
+    \item \textbf{Guest Booking:} Appointment scheduling without mandatory account registration.
+\end{enumerate}
+
+\subsection{Scheduling Algorithm}
+
+The scheduling algorithm operates in four stages:
+
+\begin{enumerate}
+    \item \textbf{Technician Discovery:} Filters active technicians within a 30\,km radius and prioritises specialists for the requested AC brand/type.
+    \item \textbf{Availability Checking:} Validates daily schedules with a 2.5-hour buffer between appointments to account for travel and service time.
+    \item \textbf{Technician Assignment:} Selects the first available technician from the sorted candidate pool.
+    \item \textbf{Slot Generation:} Creates 30-minute interval bookable windows for the selected technician.
+\end{enumerate}
+
+\subsection{Data Model}
+
+The system comprises 13 Django models organised across four domains, plus one abstract base class:
+
+\begin{itemize}
+    \item \textbf{Core Entities:} \texttt{Customers}, \texttt{Technicians}, \texttt{Coordinators}, \texttt{AirconCatalogs}
+    \item \textbf{Service Management:} \texttt{Appointments}, \texttt{CustomerAirconDevices}, \texttt{AppointmentRating}, \texttt{Messages}
+    \item \textbf{Technician Onboarding:} \texttt{TechnicianHiringApplication}, \texttt{TechnicianAvailability}
+    \item \textbf{Security:} \texttt{PasswordResetToken} (supports both customer and technician accounts), \texttt{TelegramLinkToken}, \texttt{TimeStampedModel} (abstract base)
+\end{itemize}
+
+\section{Original Deployment Architecture}
+
+The original deployment targeted an Azure Virtual Machine with the following characteristics:
+
+\begin{itemize}
+    \item Single VM hosting both Django backend and serving the React build
+    \item PostgreSQL database running on the same VM or as an Azure managed service
+    \item Nginx reverse proxy for request routing and SSL termination
+    \item Let's Encrypt SSL certificates for HTTPS
+    \item Gunicorn as the WSGI application server
+    \item Manual deployment via SSH and \texttt{git pull}
+    \item File uploads stored in the VM filesystem (\texttt{media/} directory)
+    \item Telegram bot webhook and cron-based reminder system
+\end{itemize}
+
+This architecture, while functional, presented several operational challenges. The Azure VM incurred ongoing hosting costs even during periods of low usage. Deployments required manual SSH access and \texttt{git pull} commands, introducing risk of human error and preventing rapid iteration. The single-server topology also created a single point of failure, as all components (web server, application server, database) shared one machine. These limitations motivated the migration to a managed, distributed architecture.
+
+\section{Cloud-Native Target Architecture}
+
+The migration targeted a fully free, serverless architecture using three PaaS providers, as summarised in Table~\ref{tab:architecture}.
+
+\begin{table}[H]
+\centering
+\caption{Cloud-Native Architecture Components}
+\label{tab:architecture}
+\begin{tabular}{@{}p{1.8cm}p{1.8cm}p{3.8cm}@{}}
+\toprule
+\textbf{Component} & \textbf{Provider} & \textbf{Details} \\
+\midrule
+Frontend & Vercel & React SPA, auto-deploy from Git, global CDN \\
+Backend & Render & Django + Gunicorn, free web service tier \\
+Database & Neon & Serverless PostgreSQL, Singapore region \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Repository Structure}
+
+Two GitHub repositories support the deployment:
+
+\begin{itemize}
+    \item \textbf{PSDdeploy2} (original): Branch \texttt{main} contains the localhost/VM version; branch \texttt{cloud-native-deploy} contains cloud migration changes.
+    \item \textbf{PSDCloudNative}: Mirrors \texttt{cloud-native-deploy}. Both Render and Vercel deploy from this repository's \texttt{main} branch.
+\end{itemize}
+
+The Vercel deployment is configured with root directory \texttt{Integrated\_Scheduling\_System-master/\allowbreak appointment\_scheduling/\allowbreak frontend}, while Render deploys from the Django project root.
+
+\subsection{Production URLs}
+
+\begin{itemize}
+    \item Frontend: \texttt{https://ps-ddeploy2.vercel.app}
+    \item Backend API: \texttt{https://psddeploy2.\allowbreak onrender.com}
+\end{itemize}
+
+\section{Migration Implementation}
+
+With the target architecture defined, this section details each code change required to implement the cloud migration. The migration involved ten modifications across three commits on the \texttt{cloud-native-deploy} branch, grouped into backend configuration changes (Sections~\ref{sec:dbconfig}--\ref{sec:seed}), deployment infrastructure (Sections~\ref{sec:buildsh}--\ref{sec:vercelconf}), and frontend configuration (Section~\ref{sec:frontendenv}). The subsequent security hardening phase is detailed in Section~\ref{sec:security-hardening}.
+
+\subsection{Database Configuration (\texttt{settings.py})}
+\label{sec:dbconfig}
+
+The Django settings were modified to support Neon's serverless PostgreSQL via the \texttt{dj-database-url} package. A three-tier fallback strategy was implemented:
+
+\begin{lstlisting}[language=Python, caption={Database configuration fallback}]
+import dj_database_url
+
+# Tier 1: DATABASE_URL (Neon on Render)
+# Tier 2: DB_ENGINE env var (explicit PG)
+# Tier 3: SQLite (local development)
+\end{lstlisting}
+
+Additional settings changes included:
+\begin{itemize}
+    \item Added \texttt{RENDER\_EXTERNAL\_HOSTNAME} to \texttt{ALLOWED\_HOSTS} for Render's auto-assigned domain
+    \item Set \texttt{SECURE\_PROXY\_SSL\_HEADER} to \texttt{('HTTP\_X\_FORWARDED\_PROTO', 'https')} for Render's reverse proxy
+    \item Disabled \texttt{SECURE\_SSL\_REDIRECT} (\texttt{False}) to prevent redirect loops behind Render's proxy
+    \item Configured \texttt{CORS\_ALLOWED\_ORIGINS} to include the Vercel frontend domain
+\end{itemize}
+
+\subsection{Dependency Management (\texttt{requirements.txt})}
+
+The Python dependencies were updated to include cloud-specific packages:
+
+\begin{itemize}
+    \item Added \texttt{dj-database-url>=2.1.0} for \texttt{DATABASE\_URL} parsing
+    \item Retained \texttt{Pillow>=10.0.0} (required by \texttt{ImageField} definitions even with uploads disabled)
+    \item Removed duplicate \texttt{gunicorn} entry
+    \item Retained \texttt{psycopg2-binary>=2.9.9} for PostgreSQL connectivity
+\end{itemize}
+
+\subsection{Telegram Webhook Removal (\texttt{urls.py})}
+
+All Telegram-related URL routes were removed from the main URL configuration:
+
+\begin{itemize}
+    \item \texttt{api/telegram/webhook/} (incoming message handler)
+    \item \texttt{api/telegram/generate-link/} (account linking endpoint)
+    \item \texttt{api/telegram/status/} (connection status check)
+    \item \texttt{api/telegram/unlink/} (account unlinking)
+\end{itemize}
+
+This was necessary as the cloud deployment cannot maintain persistent webhook connections or cron jobs on the free tier.
+
+\subsection{Notification Stubs (\texttt{notifications.py})}
+
+The \texttt{telegram\_bot} import was removed and the \texttt{\_send\_telegram\_if\_linked} helper was converted to a no-op function. Email notification functions were retained as they depend only on SMTP credentials (configurable via environment variables).
+
+\subsection{File Upload Validation (\texttt{serializers.py})}
+
+Mandatory file upload validation was removed from the \texttt{Technician\-Hiring\-Application\-Serializer} for NRIC photos and driving licence documents. The cloud deployment has no persistent file storage on the free tier, making file uploads non-functional.
+
+\subsection{Test Data Seeding (\texttt{create\_test\_users.py})}
+\label{sec:seed}
+
+Two critical changes were made to the seeding script:
+
+\begin{enumerate}
+    \item \textbf{Password Hashing:} Added \texttt{make\_password()} calls for all test user passwords. The original script stored plain-text passwords, which caused Django's \texttt{check\_password()} to fail during authentication.
+    \item \textbf{Idempotent Updates:} Changed \texttt{get\_or\_create} to \texttt{update\_or\_create} so that redeployments fix stale or corrupted data rather than silently skipping existing records.
+\end{enumerate}
+
+\subsection{Render Build Script (\texttt{build.sh})}
+\label{sec:buildsh}
+
+A new build script was created for Render's build pipeline:
+
+\begin{lstlisting}[caption={Render build script (build.sh)}]
+#!/usr/bin/env bash
+set -o errexit
+pip install --upgrade pip
+pip install -r requirements.txt
+python manage.py collectstatic --no-input
+python manage.py migrate
+python create_test_users.py || \
+  echo "Seeding skipped or already done."
+\end{lstlisting}
+
+The script performs five operations: pip upgrade, dependency installation, static file collection (WhiteNoise), database migration, and test data seeding with graceful failure handling.
+
+\subsection{Render Service Blueprint (\texttt{render.yaml})}
+
+A declarative service blueprint was created specifying:
+
+\begin{itemize}
+    \item Service name: \texttt{airserve-backend}
+    \item Runtime: Python 3.11.6
+    \item Plan: Free tier
+    \item Build command: \texttt{./build.sh}
+    \item Start command: Gunicorn bound to \texttt{0.0.0.0:\$PORT}
+\end{itemize}
+
+\subsection{Vercel SPA and API Proxy Configuration (\texttt{vercel.json})}
+\label{sec:vercelconf}
+
+The Vercel configuration serves two purposes: (1) proxying API requests to the Render backend, and (2) supporting React Router's client-side routing. Both are implemented as rewrite rules, with the API proxy rule taking precedence:
+
+\begin{lstlisting}[caption={Vercel rewrite rules (vercel.json)}]
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination":
+        "https://psddeploy2.onrender.com/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+\end{lstlisting}
+
+The API proxy rewrite forwards all requests matching \texttt{/api/*} to the Render backend. This makes the browser treat API requests as same-origin, which resolves cross-site cookie blocking on Safari and other browsers that enforce strict third-party cookie policies (see Section~\ref{sec:safari-proxy}). The SPA catch-all rewrite handles all remaining routes by serving \texttt{index.html}, enabling client-side navigation.
+
+\subsection{Frontend Environment (\texttt{.env.production})}
+\label{sec:frontendenv}
+
+In development, the frontend connects directly to the local Django server. In production, the Axios HTTP client uses relative URLs (empty \texttt{baseURL}), so all API requests are routed through the Vercel proxy:
+
+\begin{lstlisting}[language=Python, caption={Axios base URL selection (axiosConfig.js)}]
+const baseURL =
+  process.env.NODE_ENV === 'production'
+    ? ''  // relative, proxied via Vercel
+    : 'http://127.0.0.1:8000';
+\end{lstlisting}
+
+\section{Security Hardening Implementation}
+\label{sec:security-hardening}
+
+Following the cloud migration, a comprehensive security hardening phase was conducted across two commits (43 files modified, +1581/--663 lines changed). The distributed architecture introduced new trust boundaries between the Vercel frontend, Render backend, and Neon database, each requiring explicit security controls.
+
+\subsection{JWT Cookie-Based Authentication}
+
+The original implementation stored JWT tokens in the browser's \texttt{localStorage}, which is vulnerable to cross-site scripting (XSS) exfiltration \cite{b10}. The tokens were migrated to HTTP-only cookies with the following configuration:
+
+\begin{itemize}
+    \item \texttt{HttpOnly}: Prevents JavaScript access to tokens
+    \item \texttt{Secure}: Restricts transmission to HTTPS connections
+    \item \texttt{SameSite=None}: Required for cross-origin requests between Vercel and Render domains
+    \item \texttt{Path=/}: Ensures cookies are sent on all API requests
+\end{itemize}
+
+A custom \texttt{CookieJWTAuthentication} class was implemented to extract tokens from cookies first, with a fallback to the \texttt{Authorization} header for backward compatibility and API testing tools. New endpoints were added for cookie-based token refresh (\texttt{/api/token/refresh/cookie/}) and logout (\texttt{/api/logout/}).
+
+\subsection{Role-Based Access Control}
+
+All API endpoints were guarded with explicit role checks to ensure that customers, technicians, and coordinators can only access resources appropriate to their role:
+
+\begin{itemize}
+    \item Customer endpoints verify \texttt{role == "customer"} and restrict data access to the authenticated user's own records
+    \item Technician endpoints verify \texttt{role == "technician"} with ownership checks on profile and appointment data
+    \item Coordinator endpoints verify \texttt{role == "coordinator"} for administrative operations such as hiring management and appointment reassignment
+    \item Appointment listings are role-scoped: customers and technicians see only their own appointments
+\end{itemize}
+
+\subsection{IDOR Protection}
+
+Insecure Direct Object Reference (IDOR) vulnerabilities were identified and mitigated across multiple endpoints. Ownership validation was added to ensure that authenticated users can only access or modify their own resources:
+
+\begin{itemize}
+    \item Customer aircon device endpoints verify device ownership before allowing read, update, or delete operations
+    \item Availability management endpoints verify the requesting technician's identity
+    \item Message endpoints enforce sender identity verification to prevent impersonation
+    \item Telegram linking endpoints validate account ownership
+\end{itemize}
+
+\subsection{Appointment Status State Machine}
+
+A formal status transition validation was implemented to prevent invalid appointment state changes. The state machine enforces the following transitions:
+
+\begin{itemize}
+    \item \texttt{Pending} $\rightarrow$ \texttt{Confirmed}, \texttt{Cancelled}
+    \item \texttt{Confirmed} $\rightarrow$ \texttt{Completed}, \texttt{Cancelled}
+    \item No transitions permitted from terminal states (\texttt{Completed}, \texttt{Cancelled})
+\end{itemize}
+
+Cancellation authorisation was further restricted by role: customers may cancel their own appointments, technicians may cancel assigned appointments, and coordinators may cancel any appointment. All cancellations generate in-app mailbox notifications to affected parties.
+
+\subsection{Password Reset Flow}
+
+The \texttt{Technician\-Password\-Reset\-Token} model was generalised to \texttt{PasswordResetToken}, supporting both customer and technician accounts via a \texttt{user\_type} field. The secure reset flow comprises three stages:
+
+\begin{enumerate}
+    \item \textbf{Request:} \texttt{POST /api/forgot-password/} generates a cryptographic token and sends a reset link via email
+    \item \textbf{Validation:} \texttt{GET /api/validate-reset-\allowbreak token/?\allowbreak token=\textit{token}} verifies the token has not expired
+    \item \textbf{Reset:} \texttt{POST /api/reset-password/} atomically updates the password within a \texttt{transaction.\allowbreak atomic()} block using \texttt{select\_for\_\allowbreak update()} to prevent race conditions
+\end{enumerate}
+
+This replaced a prior implementation that used hardcoded coordinator-initiated password resets.
+
+\subsection{Data Integrity Protections}
+
+Several measures were introduced to prevent data corruption under concurrent access:
+
+\begin{itemize}
+    \item Guest booking creation was wrapped in \texttt{transaction.atomic()} to prevent race conditions when multiple users book the same time slot
+    \item Foreign key constraints on appointment models were changed from \texttt{CASCADE} to \texttt{PROTECT} or \texttt{SET\_NULL} (via migrations 0006 and 0007) to prevent cascading deletions of appointment records when related entities are removed
+    \item An atomic guard prevents deletion of the last coordinator account
+\end{itemize}
+
+\subsection{Rate Limiting}
+
+Rate limiting was enforced on security-sensitive endpoints to mitigate brute-force attacks:
+
+\begin{itemize}
+    \item Login endpoint: 5 requests per minute
+    \item Guest booking endpoint: 10 requests per minute
+    \item General authenticated endpoints: 120 requests per minute
+    \item General anonymous endpoints: 30 requests per minute
+\end{itemize}
+
+\subsection{Frontend Security Updates}
+
+The React frontend was updated to support the cookie-based authentication model:
+
+\begin{itemize}
+    \item The Axios HTTP client was reconfigured with \texttt{withCredentials: true} to include cookies in cross-origin requests
+    \item Token storage and retrieval logic was removed from \texttt{localStorage}
+    \item The inactivity timer was stabilised using an object reference to prevent throttle-related memory leaks
+    \item Temporary password exposure was removed from the coordinator approval notification toast
+    \item Navigation routes were corrected for appointment detail and coordinator views
+\end{itemize}
+
+\subsection{Vercel API Proxy for Cross-Site Cookie Resolution}
+\label{sec:safari-proxy}
+
+During live testing on iOS Safari, authenticated users were redirected back to the login page immediately after a successful login. Server logs confirmed that the login endpoint returned HTTP~200 with valid \texttt{Set-Cookie} headers, but subsequent API requests arrived without cookies and returned HTTP~401. The root cause was Safari's Intelligent Tracking Prevention (ITP) \cite{b12}, which blocks third-party cookies set by cross-origin responses. Because the frontend (\texttt{ps-ddeploy2.vercel.app}) and backend (\texttt{psddeploy2.onrender.com}) reside on different domains, Safari classified the JWT cookies as third-party and refused to store them.
+
+The solution was to configure Vercel as a reverse proxy for all API requests (Section~\ref{sec:vercelconf}). The proxy forwards \texttt{/api/*} requests from the Vercel edge to Render's backend. From the browser's perspective, both the frontend and API share the same origin (\texttt{ps-ddeploy2.vercel.app}), making the cookies first-party. This resolved the authentication failure without requiring a custom domain or changes to the cookie security flags.
+
+The proxy introduced one operational consideration. Render's cold-start latency (approximately 50 seconds on the free tier) can cause the Vercel proxy to return a gateway timeout before the backend responds. The frontend was updated to detect network errors and 5xx responses, displaying ``Server is starting up'' instead of a generic login failure message.
+
+\section{Post-Deployment Refinements}
+\label{sec:post-deploy}
+
+Following the security hardening phase, sixteen additional commits addressed production bugs discovered during live testing, modernised the test suite, restored email notification functionality, and added frontend UX improvements. These changes are grouped into five categories.
+
+\subsection{Test Suite Modernisation}
+
+The entire test suite (9 test files, 207 insertions, 235 deletions) was updated to align with the cookie-based JWT authentication model introduced during security hardening. A shared \texttt{auth\_client\_as} helper function was created in \texttt{tests/helpers.py} to standardise test authentication across all test classes. This helper generates JWT tokens for any user type and injects them as HTTP-only cookies on the test client, eliminating duplicated authentication setup code.
+
+\subsection{Production Bug Fixes}
+
+Several bugs were identified and resolved during live deployment testing:
+
+\begin{enumerate}
+    \item \textbf{Environment URL Alignment:} The frontend \texttt{.env.production} file was corrected to match the Render service URL, resolving cross-origin request failures.
+    \item \textbf{Customer Registration Hardening:} Error handling was added to the customer registration endpoint, including duplicate phone number detection and structured error responses for validation failures.
+    \item \textbf{Location Field Overflow:} The \texttt{customerLocation} and \texttt{technicianLocation} model fields were widened from 32 to 64 characters (migration 0008) to accommodate full-precision OneMap API coordinate strings that were being silently truncated.
+    \item \textbf{Technician Home Page:} Blocked API calls to removed Telegram endpoints were eliminated from the technician dashboard, and address display was fixed to use the \texttt{technicianAddress} field from the formatted API response.
+    \item \textbf{Coordinator Cancellation State:} The coordinator appointment update page was fixed to correctly reset UI state after cancelling an appointment, preventing a blank form state.
+\end{enumerate}
+
+\subsection{Email Notification System}
+\label{sec:email-system}
+
+The original deployment used Gmail SMTP for email notifications. However, Render's free tier blocks outbound SMTP connections on ports 465 and 587, rendering the SMTP approach non-functional in the cloud environment. A multi-provider email system was implemented with the following priority chain:
+
+\begin{enumerate}
+    \item \textbf{Gmail API (Primary):} Sends email over HTTPS using Google's Gmail API with OAuth2 authentication. This bypasses SMTP port restrictions entirely. The implementation exchanges a long-lived refresh token for short-lived access tokens, then sends base64url-encoded MIME messages via the Gmail REST endpoint.
+    \item \textbf{Resend HTTP API (Fallback):} An alternative HTTP-based email provider configured via the \texttt{RESEND\_API\_KEY} environment variable, used during initial testing before Gmail API integration.
+    \item \textbf{Gmail SMTP (Local Fallback):} The original SMTP implementation is retained for local development environments where port restrictions do not apply.
+\end{enumerate}
+
+The Gmail API integration requires three environment variables: \texttt{GMAIL\_CLIENT\_ID}, \texttt{GMAIL\_CLIENT\_SECRET}, and \texttt{GMAIL\_REFRESH\_TOKEN}, obtained via the Google OAuth2 Playground with the \texttt{https://www.googleapis.com/\allowbreak auth/gmail.send} scope. The Google Cloud project's OAuth consent screen was published to production to prevent refresh token expiry, which occurs after 7 days in testing mode.
+
+Email sending was also made asynchronous using Python's \texttt{threading.Thread} for appointment creation and cancellation flows, preventing email delivery latency from blocking API responses and causing Gunicorn worker timeouts on Render's free tier.
+
+\subsection{Booking Improvements}
+
+Two improvements were made to the appointment booking flow:
+
+\begin{enumerate}
+    \item \textbf{Duplicate Booking Prevention:} An atomic database check was added to the appointment creation endpoint to prevent race conditions where multiple concurrent requests could book the same technician for overlapping time slots. The check uses \texttt{select\_for\_update()} within a \texttt{transaction.atomic()} block.
+    \item \textbf{Per-Unit Pricing Model:} The frontend cost summary was updated to calculate service fees based on the total number of aircon units across selected devices (at \$50 per unit), plus a flat \$10 travel fee. The previous implementation charged per device rather than per unit, undercharging customers with multi-unit devices.
+\end{enumerate}
+
+\subsection{Frontend UX Improvements and Additional Fixes}
+
+Several frontend enhancements and iterative fixes were made across seven additional commits:
+
+\begin{enumerate}
+    \item \textbf{Forgot Password Dialog:} A forgot password dialog was added to all three login pages (customer, technician, and coordinator), providing the frontend UI for the secure password reset flow implemented during security hardening (Section~\ref{sec:security-hardening}).
+    \item \textbf{Registration Success Popup:} A success confirmation popup with automatic redirect to the login page was added to the customer registration flow, improving the onboarding experience.
+    \item \textbf{Code Quality and Timezone Fixes:} General code quality improvements, security refinements, and timezone handling corrections were applied across the codebase.
+    \item \textbf{Vercel API Proxy Refinements:} The Vercel rewrite configuration required three iterative commits to resolve Safari's cross-site cookie blocking: configuring the API proxy, reverting cookie \texttt{SameSite} to \texttt{None} for cross-origin compatibility, and correcting the rewrite syntax for proper request forwarding.
+    \item \textbf{Cold Start Error Messages:} Frontend error handling was improved to display user-friendly messages when the backend is cold-starting, and duplicate registration error responses were made more informative.
+\end{enumerate}
+
+\section{Environment Variables}
+
+Table~\ref{tab:render-env} and Table~\ref{tab:vercel-env} summarise the environment variables configured on each platform.
+
+\begin{table}[H]
+\centering
+\caption{Render Environment Variables}
+\label{tab:render-env}
+\footnotesize
+\begin{tabular}{@{}p{3.0cm}p{4.3cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\texttt{ALLOWED\_HOSTS} & \texttt{psddeploy2.onrender.com} \\
+\texttt{CORS\_ALLOWED\_\allowbreak ORIGINS} & \texttt{https://ps-ddeploy2.\allowbreak vercel.app} \\
+\texttt{DATABASE\_URL} & Neon connection string \\
+\texttt{DEBUG} & \texttt{False} \\
+\texttt{EMAIL\_HOST\_USER} & Gmail sender address \\
+\texttt{FRONTEND\_BASE\_\allowbreak URL} & \texttt{https://ps-ddeploy2.\allowbreak vercel.app} \\
+\texttt{GMAIL\_CLIENT\_ID} & Google OAuth2 client ID \\
+\texttt{GMAIL\_CLIENT\_\allowbreak SECRET} & Google OAuth2 client secret \\
+\texttt{GMAIL\_REFRESH\_\allowbreak TOKEN} & Google OAuth2 refresh token \\
+\texttt{SECRET\_KEY} & Auto-generated \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Vercel Environment Variables}
+\label{tab:vercel-env}
+\begin{tabular}{@{}p{3.2cm}p{4.1cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\texttt{CI} & \texttt{false} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \texttt{CI=false} variable on Vercel prevents the React build from treating warnings as errors, which would otherwise cause build failures.
+
+\section{Testing and Verification}
+
+With the deployment infrastructure and environment configured, the system was verified using pre-provisioned test accounts. Test credentials were created for all three user roles, as shown in Table~\ref{tab:credentials}. All accounts use the password \texttt{password123}.
+
+\begin{table}[H]
+\centering
+\caption{Test Credentials}
+\label{tab:credentials}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Role} & \textbf{Login} & \textbf{Method} \\
+\midrule
+Coordinator & \texttt{admin@airserve.com} & Email \\
+Technician & \texttt{92222222} (Wang Richie) & Phone \\
+Customer & \texttt{alice.tan@email.com} & Email \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The seeding script creates 2 coordinators, 3 technicians, 4 customers, and 15 AC catalogue entries (across 5 brands: Daikin, Mitsubishi, Panasonic, LG, Samsung). The \texttt{update\_or\_create} pattern ensures data consistency across redeployments.
+
+The existing test suite, comprising over 170 unit and integration tests from the prior security hardening refactor, was retained. These tests cover authentication flows, appointment CRUD operations, scheduling algorithm correctness, and API endpoint validation.
+
+\section{Known Limitations and Trade-offs}
+
+The migration to free-tier services introduced several limitations:
+
+\subsection{Cold Start Latency}
+
+According to Render's documentation \cite{b2}, the free tier spins down web services after 15 minutes of inactivity. The first request after spin-down was observed to incur approximately 50 seconds of cold-start latency as the container re-initialises, loads dependencies, and establishes database connections.
+
+This latency directly affects user experience. When the backend is cold, login attempts fail because the Vercel proxy times out before Render responds. The Neon PostgreSQL database compounds this delay with its own auto-suspend after 5~minutes of inactivity. To mitigate the impact, the frontend detects network timeouts and 5xx responses, displaying a ``Server is starting up'' message that prompts the user to retry. Upgrading to Render's paid tier would eliminate cold starts entirely.
+
+\subsection{File Storage}
+
+Render's free tier provides an ephemeral filesystem that resets on each deployment. Consequently:
+\begin{itemize}
+    \item Technician hiring document uploads (NRIC photos, driving licences, resumes) are non-functional
+    \item Media files uploaded during a deployment cycle are lost on the next deploy
+    \item File upload validation was relaxed in serializers to prevent blocking the hiring workflow
+\end{itemize}
+
+A future enhancement could integrate a cloud object storage service (e.g., AWS S3, Cloudflare R2) for persistent file storage.
+
+\subsection{Notification Services}
+
+\begin{itemize}
+    \item \textbf{Telegram:} Fully disabled. Webhook endpoints were removed and notification functions were converted to no-ops, as the free tier cannot maintain persistent webhook connections or scheduled cron jobs for reminders.
+    \item \textbf{SMS:} Previously disabled in the original deployment.
+    \item \textbf{Email:} Fully functional via the Gmail API over HTTPS (see Section~\ref{sec:email-system}). Email notifications are sent asynchronously for appointment confirmations and cancellations. The Gmail API approach bypasses Render's SMTP port restrictions.
+\end{itemize}
+
+\subsection{Database Constraints}
+
+Neon's free tier \cite{b4} provides a serverless PostgreSQL instance with the following constraints:
+\begin{itemize}
+    \item Limited compute hours per month (191.9 hours at time of deployment)
+    \item Connection pooling required for concurrent access
+    \item Auto-suspend after 5 minutes of inactivity (similar to Render's cold start)
+\end{itemize}
+
+The Singapore region was selected to minimise latency for the target user base.
+
+\section{Comparison of Architectures}
+
+Table~\ref{tab:comparison} compares the original Azure VM deployment with the cloud-native architecture across nine dimensions. The cloud-native stack achieves clear advantages in cost, deployment automation, SSL management, and administrative overhead. However, these gains come at the expense of persistent file storage, full notification support, and always-on availability. This trade-off profile is well-suited to a demonstration and testing environment but would require mitigation for a production deployment.
+
+\begin{table}[H]
+\centering
+\caption{Architecture Comparison}
+\label{tab:comparison}
+\begin{tabular}{@{}p{2cm}p{2.8cm}p{2.5cm}@{}}
+\toprule
+\textbf{Aspect} & \textbf{Azure VM} & \textbf{Cloud-Native} \\
+\midrule
+Cost & Paid (VM + managed services) & Free (all tiers) \\
+Deployment & Manual (SSH + git pull) & Auto (git push) \\
+SSL/TLS & Let's Encrypt (manual renewal) & Platform-managed \\
+Scaling & Vertical (VM resize) & Single instance (free tier) \\
+File Storage & Persistent (VM disk) & Ephemeral \\
+Database & Self-managed or Azure PG & Neon serverless PG \\
+Cold Start & None (always on) & \textasciitilde50s after 15\,min idle \\
+Notifications & Full (Telegram, Email) & Email only (Gmail API) \\
+Admin Overhead & High (OS, patches, Nginx) & None \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Commit History}
+
+For traceability, Table~\ref{tab:commits} summarises the twenty-one commits on the \texttt{cloud-native-deploy} branch that comprise the migration, security hardening, and post-deployment refinement phases.
+
+\begin{table*}[t]
+\centering
+\caption{Commit History}
+\label{tab:commits}
+\begin{tabular}{@{}p{1.2cm}p{1.8cm}p{11.5cm}@{}}
+\toprule
+\textbf{Hash} & \textbf{Phase} & \textbf{Description} \\
+\midrule
+\texttt{26b0cf1} & Migration & Core cloud deployment: database URL support, SSL proxy headers, build scripts, Vercel configuration, notification stubs \\
+\texttt{7f518a0} & Migration & Fix authentication failure caused by plain-text passwords in the seeding script \\
+\texttt{8f579f2} & Migration & Idempotent seeding with \texttt{update\_or\_create} to correct stale data on redeployment \\
+\texttt{46e7f85} & Security & JWT cookie authentication, role-based access control, password reset tokens, IDOR checks, status state machine, rate limiting \\
+\texttt{3dc62c8} & Security & IDOR ownership checks on aircon devices and availability endpoints, coordinator role guards, frontend navigation and form fixes \\
+\texttt{f911dd3} & Post-deploy & Align \texttt{.env.production} backend URL with Render service URL \\
+\texttt{108a819} & Post-deploy & Add error handling to customer registration and duplicate phone number check \\
+\texttt{23e60b4} & Post-deploy & Widen location fields from 32 to 64 characters for OneMap coordinates (migration 0008) \\
+\texttt{3fbd12e} & Post-deploy & Resolve technician address display and remove blocked Telegram API calls from frontend \\
+\texttt{5660809} & Post-deploy & Modernise test suite (9 files) for cookie-based JWT authentication and RBAC \\
+\texttt{71b80e0} & Post-deploy & Fix coordinator blank state after cancellation; add email send diagnostics \\
+\texttt{c8285f7} & Post-deploy & Prevent duplicate bookings with atomic locking; async email to avoid worker timeout \\
+\texttt{1e253f2} & Post-deploy & Switch email to Resend HTTP API; fix per-unit pricing model; async cancellation email \\
+\texttt{1aac942} & Post-deploy & Add Gmail API over HTTPS as primary email transport with OAuth2 refresh tokens \\
+\texttt{a94b041} & Post-deploy & Code quality, security, and timezone fixes \\
+\texttt{59234a7} & Post-deploy & Add forgot password dialog to all login pages (customer, technician, coordinator) \\
+\texttt{7be21a2} & Post-deploy & Add registration success popup with redirect to login \\
+\texttt{01f7c69} & Post-deploy & Proxy API through Vercel to fix Safari cross-site cookie blocking \\
+\texttt{f147dad} & Post-deploy & Revert cookies to \texttt{SameSite=None} for cross-origin compatibility \\
+\texttt{83f8b37} & Post-deploy & Better error messages for cold start timeout and duplicate registration \\
+\texttt{08cfeea} & Post-deploy & Correct Vercel rewrite syntax for API proxy \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{API Architecture}
+
+The REST API exposes nine ViewSet-based resource endpoints via Django REST Framework's \texttt{DefaultRouter}, plus four authentication endpoints added during the security hardening phase:
+
+\begin{itemize}
+    \item \texttt{/api/appointments/}: Appointment lifecycle management (role-scoped)
+    \item \texttt{/api/customers/}: Customer registration and profiles (ownership-checked)
+    \item \texttt{/api/technicians/}: Technician management and authentication (ownership-checked)
+    \item \texttt{/api/coordinators/}: Administrative operations (coordinator-only)
+    \item \texttt{/api/customeraircondevices/}: Customer AC unit inventory (ownership-checked)
+    \item \texttt{/api/messages/}: Internal messaging system (sender-verified)
+    \item \texttt{/api/hiring-applications/}: Technician onboarding workflow (coordinator-only management)
+    \item \texttt{/api/technician-availability/}: Schedule management (ownership-checked)
+    \item \texttt{/api/aircon-catalogs/}: AC brand and model catalogue
+    \item \texttt{/api/forgot-password/}: Password reset request (rate-limited)
+    \item \texttt{/api/validate-reset-token/}: Reset token verification
+    \item \texttt{/api/reset-password/}: Password update (atomic transaction)
+    \item \texttt{/api/token/refresh/cookie/}: Cookie-based JWT refresh
+\end{itemize}
+
+Rate limiting is enforced at 30 requests per minute for anonymous users and 120 requests per minute for authenticated users, with a stricter 5 requests per minute limit on login endpoints and 10 requests per minute on guest booking endpoints.
+
+\section{Security Considerations}
+
+Migrating to a distributed cloud architecture introduced new trust boundaries between the Vercel frontend, Render backend, and Neon database. Each cross-service boundary required explicit security controls, as detailed in Section~\ref{sec:security-hardening}. Table~\ref{tab:security-summary} summarises the security measures implemented across both the migration and hardening phases.
+
+\begin{table}[H]
+\centering
+\caption{Security Measures Summary}
+\label{tab:security-summary}
+\begin{tabular}{@{}p{2.5cm}p{5cm}@{}}
+\toprule
+\textbf{Category} & \textbf{Measures} \\
+\midrule
+Authentication & HTTP-only cookie JWT with rotation and blacklisting; \texttt{Authorization} header fallback \\
+Authorisation & Role-based access control on all endpoints; IDOR ownership checks \\
+Data Integrity & \texttt{transaction.atomic()} for password resets and guest bookings; \texttt{PROTECT/SET\_NULL} foreign keys \\
+Rate Limiting & 5 req/min on login; 10 req/min on guest booking; 120 req/min authenticated; 30 req/min anonymous \\
+Transport & Platform-managed SSL/TLS on Vercel and Render; \texttt{SECURE\_PROXY\_SSL\_HEADER} configured \\
+Client-side & \texttt{HttpOnly}, \texttt{Secure}, \texttt{SameSite=None} cookie flags; no \texttt{localStorage} token storage \\
+Django Middleware & XSS, clickjacking, content-type sniffing protections; HSTS headers; \texttt{DEBUG=False} enforced \\
+CORS & Restricted to the specific Vercel frontend domain \\
+Password Management & \texttt{make\_password()} hashing; secure token-based reset flow \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The combination of cookie-based JWT storage, role-based access control, and IDOR protection addresses the primary risks of the distributed architecture. The HTTP-only cookie approach mitigates XSS-based token theft, while ownership checks prevent horizontal privilege escalation across user accounts. SSL/TLS is managed by both Vercel and Render at the platform level, eliminating manual certificate management.
+
+\section{Conclusion}
+
+The migration of AirServe from an Azure VM to a cloud-native serverless architecture, followed by security hardening and post-deployment refinements, was completed across twenty-one commits modifying 59 files (+2146/--1037 lines). The cloud migration (3 commits) established the serverless deployment infrastructure, the security hardening (2 commits) addressed vulnerabilities introduced by the distributed architecture, and the post-deployment phase (16 commits) resolved production bugs, modernised the test suite, restored email notification functionality, and added frontend UX improvements including forgot password dialogs and registration success feedback.
+
+The security hardening phase delivered four key improvements: (1) HTTP-only cookie-based JWT authentication to mitigate XSS token theft, (2) role-based access control with IDOR protection across all endpoints, (3) a secure token-based password reset flow for both customer and technician accounts, and (4) data integrity protections including atomic transactions and defensive foreign key constraints.
+
+The post-deployment phase addressed a critical gap in the initial migration: email notifications. Render's free tier blocks outbound SMTP connections, which rendered the original Gmail SMTP integration non-functional. This was resolved by implementing a Gmail API integration over HTTPS using OAuth2 refresh tokens, bypassing SMTP port restrictions entirely. Additional improvements included duplicate booking prevention via atomic database locking, a corrected per-unit pricing model, frontend UX enhancements (forgot password dialogs on all login pages, registration success popups), and production bug fixes for location field overflow, customer registration validation, and coordinator UI state management.
+
+A cross-browser authentication issue was discovered during live testing: Safari's Intelligent Tracking Prevention blocked third-party cookies between the Vercel and Render domains, preventing authenticated sessions from persisting. This was resolved by configuring Vercel as a reverse proxy for API requests, making all traffic same-origin from the browser's perspective.
+
+The primary remaining trade-offs (cold-start latency, ephemeral file storage, and disabled Telegram notifications) are acceptable for a demonstration and testing environment. Cold-start latency is the most user-visible limitation, as the free tier's 15-minute inactivity timeout causes login failures when the backend is waking up. For production use, these limitations could be addressed by upgrading to paid tiers on Render to eliminate cold starts, integrating cloud object storage for file persistence, and re-enabling Telegram webhooks with a persistent worker process.
+
+This project demonstrates that modern PaaS platforms can support full-stack Django/React applications at zero cost with minimal architectural changes, that the security implications of distributed deployments can be addressed through systematic hardening, and that platform-imposed restrictions (such as SMTP port blocking and cross-origin cookie blocking) can be overcome through API-based alternatives and reverse proxy configurations.
+
+\begin{thebibliography}{00}
+\bibitem{b1} Django Software Foundation, ``Django documentation,'' \url{https://docs.djangoproject.com/en/4.2/}, 2024.
+\bibitem{b2} Render, ``Render documentation,'' \url{https://render.com/docs}, 2024.
+\bibitem{b3} Vercel, ``Vercel documentation,'' \url{https://vercel.com/docs}, 2024.
+\bibitem{b4} Neon, ``Neon serverless PostgreSQL,'' \url{https://neon.tech/docs}, 2024.
+\bibitem{b5} Django REST Framework, ``Django REST Framework documentation,'' \url{https://www.django-rest-framework.org/}, 2024.
+\bibitem{b6} P. Jamshidi, C. Pahl, N. C. Mendon\c{c}a, J. Lewis, and S. Tilkov, ``Microservices: the journey so far and challenges ahead,'' \textit{IEEE Software}, vol.~35, no.~3, pp.~24--35, May/Jun. 2018.
+\bibitem{b7} OneMap, ``OneMap API documentation,'' \url{https://www.onemap.gov.sg/apidocs/}, 2024.
+\bibitem{b8} A. Balalaie, A. Heydarnoori, and P. Jamshidi, ``Migrating to cloud-native architectures using microservices: an experience report,'' in \textit{Proc. 1st Int. Workshop on Cloud Adoption and Migration (CloudWay)}, 2016, pp.~201--215.
+\bibitem{b9} M. Villamizar \textit{et al.}, ``Evaluating the monolithic and the microservice architecture pattern to deploy web applications in the cloud,'' in \textit{Proc. 10th Computing Colombian Conf. (10CCC)}, IEEE, 2015, pp.~583--590.
+\bibitem{b10} OWASP Foundation, ``JSON Web Token (JWT) Cheat Sheet for Java,'' \url{https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html}, 2024.
+\bibitem{b11} Google, ``Gmail API Reference: Users.messages.send,'' \url{https://developers.google.com/gmail/api/reference/rest/v1/users.messages/send}, 2024.
+\bibitem{b12} Apple, ``Intelligent Tracking Prevention,'' \url{https://webkit.org/tracking-prevention/}, 2024.
+\end{thebibliography}
+
+\end{document}
