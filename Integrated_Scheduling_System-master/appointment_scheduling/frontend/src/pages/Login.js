@@ -10,6 +10,155 @@ const ROLES = [
   { id: 'coordinator', label: 'Coordinator', description: 'Manage appointments and technicians', icon: '📋' },
 ];
 
+function ForgotPasswordDialog({ role, onClose }) {
+    const isPhone = role === 'technician';
+    const [value, setValue] = useState('');
+    const [message, setMessage] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [sent, setSent] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setMessage('');
+        setError('');
+        setLoading(true);
+
+        try {
+            let endpoint, payload;
+            if (isPhone) {
+                endpoint = '/api/technicians/forgot-password/';
+                payload = { phone: value };
+            } else {
+                endpoint = '/api/customers/forgot-password/';
+                payload = { email: value };
+            }
+            const response = await api.post(endpoint, payload);
+            setMessage(response.data.message || 'If an account exists, a reset link has been sent.');
+            setSent(true);
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to send reset link. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Coordinators don't have self-service password reset
+    if (role === 'coordinator') {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+                <div
+                    className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-between items-center mb-4">
+                        <Typography variant="h5" className="font-bold">
+                            Reset Password
+                        </Typography>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 mb-4">
+                        <Typography variant="paragraph" className="text-blue-gray-700 text-sm">
+                            Coordinator password resets must be performed by another coordinator from the admin panel.
+                        </Typography>
+                    </div>
+                    <Button fullWidth onClick={onClose}>
+                        Back to Login
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+            <div
+                className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex justify-between items-center mb-4">
+                    <Typography variant="h5" className="font-bold">
+                        Reset Password
+                    </Typography>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                    >
+                        &times;
+                    </button>
+                </div>
+
+                {!sent ? (
+                    <form onSubmit={handleSubmit}>
+                        <Typography variant="small" color="blue-gray" className="mb-4">
+                            {isPhone
+                                ? 'Enter your phone number and we\'ll send a reset link to your registered email.'
+                                : 'Enter your email address and we\'ll send you a password reset link.'}
+                        </Typography>
+
+                        <div className="mb-4">
+                            <Typography variant="small" color="blue-gray" className="font-bold mb-2">
+                                {isPhone ? 'Phone Number' : 'Email'} <span className="text-red-500">*</span>
+                            </Typography>
+                            <input
+                                type={isPhone ? 'tel' : 'email'}
+                                placeholder={isPhone ? 'e.g. 91234567' : 'name@mail.com'}
+                                className="w-full px-3 py-2 text-gray-900 bg-transparent border border-blue-gray-200 rounded-lg focus:border-gray-900 focus:outline-none"
+                                value={value}
+                                onChange={(e) => setValue(e.target.value)}
+                                required
+                                {...(isPhone ? { pattern: '[0-9]{8}', title: 'Phone number must be 8 digits' } : {})}
+                                autoFocus
+                            />
+                        </div>
+
+                        {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+
+                        <div className="flex gap-3">
+                            <Button
+                                variant="outlined"
+                                className="flex-1"
+                                type="button"
+                                onClick={onClose}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                className="flex-1"
+                                type="submit"
+                                disabled={loading}
+                            >
+                                {loading ? 'Sending...' : 'Send Reset Link'}
+                            </Button>
+                        </div>
+                    </form>
+                ) : (
+                    <div>
+                        <div className="p-4 bg-green-50 rounded-lg border border-green-200 mb-4">
+                            <Typography variant="paragraph" className="text-green-700 text-sm">
+                                {message}
+                            </Typography>
+                            <Typography variant="small" color="blue-gray" className="mt-2">
+                                Please check your email for the password reset link.
+                            </Typography>
+                        </div>
+                        <Button fullWidth onClick={onClose}>
+                            Back to Login
+                        </Button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function Login() {
     const location = useLocation();
     const pathRole = location.pathname.replace(/^\/login\/?/, '') || null;
@@ -18,6 +167,7 @@ function Login() {
     const [emailOrPhone, setEmailOrPhone] = useState('');
     const [password, setPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
     const navigate = useNavigate();
 
     // Sync selectedRole when URL changes (e.g. direct link to /login/customer)
@@ -157,6 +307,17 @@ function Login() {
                 Sign in as {ROLES.find(r => r.id === selectedRole)?.label}
               </Button>
 
+              {/* Forgot Password link — shown for all roles */}
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
               {selectedRole === 'customer' && (
                 <>
                   <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
@@ -175,16 +336,9 @@ function Login() {
                 </>
               )}
               {selectedRole === 'technician' && (
-                <>
-                  <div className="text-center mt-4">
-                    <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
-                      Forgot Password?
-                    </Link>
-                  </div>
-                  <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
-                    Want to work as a technician? <Link to="/apply-technician" className="text-gray-900 ml-1">Apply here</Link>
-                  </Typography>
-                </>
+                <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
+                  Want to work as a technician? <Link to="/apply-technician" className="text-gray-900 ml-1">Apply here</Link>
+                </Typography>
               )}
             </form>
           )}
@@ -192,6 +346,14 @@ function Login() {
         <div className="w-2/5 h-full hidden lg:block">
           <img src={backgroundImage} className="h-full w-full object-cover rounded-3xl" alt="" />
         </div>
+
+        {/* Forgot Password Dialog */}
+        {showForgotPassword && (
+          <ForgotPasswordDialog
+            role={selectedRole}
+            onClose={() => setShowForgotPassword(false)}
+          />
+        )}
       </section>
     );
 }
