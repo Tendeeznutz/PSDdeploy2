@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://psddeploy2.onrender.com/api/:path*" },
+    { "source": "/api/(.*)", "destination": "https://psddeploy2.onrender.com/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
