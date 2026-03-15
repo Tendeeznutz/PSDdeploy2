@@ -5,7 +5,7 @@ import api from "../axiosConfig";
 import {Button, Modal, message} from 'antd';
 import DeleteAppointmentPopup from "../components/DeleteAppointmentPopup";
 import { ListItemIcon, MenuItem, Box } from '@mui/material';
-import { Delete, PageviewRounded, Send, Update, LockReset, PersonOff, PersonAdd, ToggleOn, ToggleOff } from '@mui/icons-material';
+import { Delete, PageviewRounded, Send, Update, LockReset, PersonOff, PersonAdd, ToggleOn, ToggleOff, PersonRemove } from '@mui/icons-material';
 import { MailOutlined } from '@ant-design/icons';
 
 function CoordinatorHome() {
@@ -36,6 +36,10 @@ function CoordinatorHome() {
     const [toggleActiveTechnician, setToggleActiveTechnician] = useState(null);
     const [toggleActiveLoading, setToggleActiveLoading] = useState(false);
     const [deactivationReason, setDeactivationReason] = useState('');
+    const [showDeleteCustomerModal, setShowDeleteCustomerModal] = useState(false);
+    const [deleteCustomer, setDeleteCustomer] = useState(null);
+    const [deleteCustomerLoading, setDeleteCustomerLoading] = useState(false);
+    const [deleteCustomerConfirmText, setDeleteCustomerConfirmText] = useState('');
 
     const fetchAppointments = async () => {
         let url = `/api/appointments/`;
@@ -214,6 +218,42 @@ function CoordinatorHome() {
             message.error('Failed to reset customer password. Please try again.');
         } finally {
             setResetPasswordCustomerLoading(false);
+        }
+    };
+
+    const handleOpenDeleteCustomerModal = (customer) => {
+        setDeleteCustomer(customer);
+        setDeleteCustomerConfirmText('');
+        setShowDeleteCustomerModal(true);
+    };
+
+    const handleCancelDeleteCustomer = () => {
+        setShowDeleteCustomerModal(false);
+        setDeleteCustomer(null);
+        setDeleteCustomerConfirmText('');
+    };
+
+    const handleConfirmDeleteCustomer = async () => {
+        if (!deleteCustomer || deleteCustomerConfirmText !== 'DELETE') return;
+
+        setDeleteCustomerLoading(true);
+        try {
+            await api.delete(`/api/customers/${deleteCustomer.id}/`);
+            message.success(`Customer account for ${deleteCustomer.customerName} has been permanently deleted.`);
+
+            // Refresh customers and appointments lists
+            const custResponse = await api.get(`/api/customers/`);
+            setCustomers(custResponse.data);
+            fetchAppointments();
+
+            setShowDeleteCustomerModal(false);
+            setDeleteCustomer(null);
+            setDeleteCustomerConfirmText('');
+        } catch (error) {
+            console.error('Error deleting customer account:', error);
+            message.error('Failed to delete customer account. Please try again.');
+        } finally {
+            setDeleteCustomerLoading(false);
         }
     };
 
@@ -633,6 +673,19 @@ function CoordinatorHome() {
                 </ListItemIcon>
                 Reset Password
             </MenuItem>,
+            <MenuItem
+                key={1}
+                onClick={() => {
+                    handleOpenDeleteCustomerModal(row.original);
+                    closeMenu();
+                }}
+                sx={{ m: 0, color: 'error.main' }}
+            >
+                <ListItemIcon>
+                    <PersonRemove color="error" />
+                </ListItemIcon>
+                Delete Account
+            </MenuItem>,
         ]
     });
 
@@ -837,6 +890,54 @@ function CoordinatorHome() {
                         <p className="text-sm text-yellow-600 mt-1">
                             They will need to click the link in the email to set a new password.
                         </p>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Delete Customer Account Confirmation Modal */}
+            <Modal
+                title="Delete Customer Account"
+                open={showDeleteCustomerModal}
+                onOk={handleConfirmDeleteCustomer}
+                onCancel={handleCancelDeleteCustomer}
+                okText="Delete Permanently"
+                okButtonProps={{
+                    danger: true,
+                    loading: deleteCustomerLoading,
+                    disabled: deleteCustomerConfirmText !== 'DELETE',
+                }}
+                cancelButtonProps={{ disabled: deleteCustomerLoading }}
+            >
+                <div className="py-4">
+                    <p className="text-gray-700 mb-4">
+                        Are you sure you want to permanently delete the account for <strong>{deleteCustomer?.customerName}</strong>?
+                    </p>
+                    <div className="p-3 bg-red-50 border border-red-200 rounded mb-4">
+                        <p className="text-sm text-red-700 font-semibold">
+                            This action is permanent and cannot be reversed.
+                        </p>
+                        <p className="text-sm text-red-600 mt-2">
+                            The following data will be permanently deleted:
+                        </p>
+                        <ul className="text-sm text-red-600 mt-1 list-disc list-inside">
+                            <li>Customer account information (name, email, phone number)</li>
+                            <li>All appointments (pending, confirmed, and completed)</li>
+                            <li>All appointment history and ratings</li>
+                            <li>All registered aircon devices</li>
+                            <li>All messages sent to or from this customer</li>
+                        </ul>
+                    </div>
+                    <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Type <strong>DELETE</strong> to confirm:
+                        </label>
+                        <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                            placeholder="Type DELETE here"
+                            value={deleteCustomerConfirmText}
+                            onChange={(e) => setDeleteCustomerConfirmText(e.target.value)}
+                        />
                     </div>
                 </div>
             </Modal>
