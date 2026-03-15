@@ -6,7 +6,6 @@ from rest_framework import serializers
 
 from .models import (
     Appointments,
-    AppointmentRequest,
     Customers,
     Technicians,
     Coordinators,
@@ -88,12 +87,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
                         "Customer aircon device does not belong to the customer"
                     )
         return value
-
-
-class AppointmentRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AppointmentRequest
-        fields = "__all__"
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -352,9 +345,7 @@ class TechnicianAvailabilitySerializer(serializers.ModelSerializer):
             if day_of_week and not existing_days.filter(dayOfWeek=day_of_week).exists():
                 unique_days += 1
 
-            # Validate minimum 10 working days
-            # Since there are only 7 days in a week, we interpret this as: technician must work at least 5 days per week
-            # and have at least 2 weeks worth of schedule (10 working day slots)
+            # Technician must work at least 5 days per week
             if unique_days < 5:
                 raise serializers.ValidationError(
                     {

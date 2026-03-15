@@ -16,8 +16,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .format_response import include_all_info
-from ..models import PasswordResetToken
-from ..scheduling_algo import *
+from ..models import Customers, PasswordResetToken
 from ..serializers import CustomerSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail
@@ -99,7 +98,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             ).first()
             if existing_customer:
                 return Response(
-                    {"error": "Customer with this email already exists."},
+                    {"error": "An account with these details already exists."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -108,7 +107,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             ).first()
             if existing_phone:
                 return Response(
-                    {"error": "Customer with this phone number already exists."},
+                    {"error": "An account with these details already exists."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

@@ -14,11 +14,11 @@ from backend_api.models import (
 )
 from backend_api.scheduling_algo import (
     TIME_BUFFER_SECONDS,
+    SEARCH_RANGE_METERS,
     find_common_timerange,
     get_available_time_slots,
     get_common_unavailable_time,
     get_nearby_technicians,
-    get_search_range,
     get_technician_to_assign,
     is_slot_available,
     is_technician_available_on_day,
@@ -33,10 +33,9 @@ class _MockAppt:
         self.appointmentEndTime = end
 
 
-class GetSearchRangeTests(TestCase):
-    def test_returns_30000_for_any_travel_type(self):
-        for tt in ("own_vehicle", "company_vehicle", "rental_van", None, ""):
-            self.assertEqual(get_search_range(tt), 30000)
+class SearchRangeConstantTests(TestCase):
+    def test_search_range_is_30km(self):
+        self.assertEqual(SEARCH_RANGE_METERS, 30000)
 
 
 @patch("backend_api.scheduling_algo.geo_onemap.is_in_range", return_value=True)

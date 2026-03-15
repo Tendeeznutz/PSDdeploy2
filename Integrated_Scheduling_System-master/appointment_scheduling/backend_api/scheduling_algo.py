@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 from typing import Any
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from geopy.distance import distance as geo_distance
@@ -11,22 +12,17 @@ from .sg_geo.src import geo_onemap
 
 load_dotenv()
 
+# Singapore timezone — all appointment timestamps are interpreted in SGT
+SGT = ZoneInfo("Asia/Singapore")
+
 logger = logging.getLogger(__name__)
 
 # Service and travel time buffer in seconds (2.5 hours)
 TIME_BUFFER_SECONDS = 2.5 * 60 * 60  # 9000 seconds
 
 
-def get_search_range(travel_type) -> int:
-    """
-    get search range in meters based on travel type
-    All technicians use vehicles (own_vehicle, company_vehicle, rental_van)
-    so a fixed 30km range is used across Singapore.
-    :param travel_type: vehicle type (own_vehicle, company_vehicle, rental_van)
-    :return: search range in meters (30000 = 30km)
-    """
-    # Fixed 30km range for all vehicle-based travel types
-    return 30000
+# Fixed 30km search radius — all technicians use vehicles in Singapore
+SEARCH_RANGE_METERS = 30000
 
 
 def _get_technician_effective_location(technician, appointment_start_time):
@@ -42,11 +38,11 @@ def _get_technician_effective_location(technician, appointment_start_time):
     if appointment_start_time is None:
         return technician.technicianLocation
 
-    appointment_datetime = datetime.fromtimestamp(appointment_start_time)
+    appointment_datetime = datetime.fromtimestamp(appointment_start_time, tz=SGT)
     appointment_date = appointment_datetime.date()
 
     # Get start-of-day timestamp
-    day_start = datetime.combine(appointment_date, datetime.min.time())
+    day_start = datetime.combine(appointment_date, datetime.min.time(), tzinfo=SGT)
     day_start_ts = int(day_start.timestamp())
 
     # Find the most recent appointment before the requested time on the same day
@@ -112,12 +108,11 @@ def get_nearby_technicians(customer_id, aircon_brand=None, appointment_start_tim
             )
             continue
 
-        travel_type = technician.technicianTravelType
         in_range = geo_onemap.is_in_range(
             technician_location,
             customer_location,
-            get_search_range(travel_type),
-            travel_type,
+            SEARCH_RANGE_METERS,
+            technician.technicianTravelType,
         )
         if not in_range:
             logger.info(
@@ -208,7 +203,7 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
     :param appointment_timestamp: Unix timestamp of the appointment
     :return: True if technician is available, False otherwise
     """
-    appointment_datetime = datetime.fromtimestamp(appointment_timestamp)
+    appointment_datetime = datetime.fromtimestamp(appointment_timestamp, tz=SGT)
     appointment_date = appointment_datetime.date()
     day_name = appointment_datetime.strftime("%A").lower()
     appointment_time = appointment_datetime.strftime("%H:%M")
@@ -386,8 +381,6 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
     :param duration_hours: Duration of appointment in hours (default 1)
     :return: List of available time slots as tuples (start_timestamp, end_timestamp)
     """
-    from datetime import datetime, timedelta
-
     target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     day_name = target_date.strftime("%A").lower()
 
@@ -421,10 +414,12 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
     end_hour, end_minute = map(int, end_time_str.split(":"))
 
     work_start = datetime.combine(
-        target_date, datetime.min.time().replace(hour=start_hour, minute=start_minute)
+        target_date, datetime.min.time().replace(hour=start_hour, minute=start_minute),
+        tzinfo=SGT,
     )
     work_end = datetime.combine(
-        target_date, datetime.min.time().replace(hour=end_hour, minute=end_minute)
+        target_date, datetime.min.time().replace(hour=end_hour, minute=end_minute),
+        tzinfo=SGT,
     )
 
     # Get existing appointments for this day
@@ -444,9 +439,9 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
     buffer_delta = timedelta(seconds=TIME_BUFFER_SECONDS)
 
     for appointment in existing_appointments:
-        appointment_start = datetime.fromtimestamp(appointment.appointmentStartTime)
+        appointment_start = datetime.fromtimestamp(appointment.appointmentStartTime, tz=SGT)
         appointment_end = (
-            datetime.fromtimestamp(appointment.appointmentEndTime) + buffer_delta
+            datetime.fromtimestamp(appointment.appointmentEndTime, tz=SGT) + buffer_delta
         )
 
         # Check if there's a slot before this appointment

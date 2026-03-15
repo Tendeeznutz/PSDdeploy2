@@ -15,8 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from rest_framework.throttling import AnonRateThrottle
 
-from ..scheduling_algo import *
-from ..models import PasswordResetToken, TechnicianHiringApplication
+from ..models import Technicians, PasswordResetToken, TechnicianHiringApplication
 from ..serializers import TechnicianSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail

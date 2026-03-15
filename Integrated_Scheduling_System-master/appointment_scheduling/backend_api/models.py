@@ -269,11 +269,6 @@ class AppointmentRating(TimeStampedModel):
         return f'Rating {self.rating} by {self.ratedBy} for Appt {self.appointment.id}'
 
 
-class AppointmentRequest(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    class Meta:
-        managed = True
-
 class Messages(TimeStampedModel):
     """
     Internal messaging system for communication between customers, coordinators, and technicians
@@ -457,7 +452,7 @@ class TechnicianHiringApplication(TimeStampedModel):
 class TechnicianAvailability(TimeStampedModel):
     """
     Tracks technician working days and time availability.
-    Ensures minimum 10 working days per technician.
+    Ensures minimum 5 working days per week per technician.
     """
     DAY_CHOICES = (
         ('monday', 'Monday'),

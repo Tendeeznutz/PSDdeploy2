@@ -1,4 +1,5 @@
 import logging
+import secrets
 import threading
 import uuid
 from datetime import datetime, timedelta
@@ -16,7 +17,12 @@ from rest_framework.throttling import AnonRateThrottle
 logger = logging.getLogger(__name__)
 
 from .format_response import include_all_info
-from ..scheduling_algo import *
+from ..scheduling_algo import (
+    get_nearby_technicians,
+    get_common_unavailable_time,
+    get_technician_to_assign,
+    get_available_time_slots,
+)
 from ..sg_geo.src import geo_onemap
 from ..models import (
     Appointments,
@@ -111,7 +117,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             total_cost_with_penalty = total_cost + float(penalty_fee)
 
             # Format appointment time
-            appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime)
+            from zoneinfo import ZoneInfo
+            appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime, tz=ZoneInfo("Asia/Singapore"))
             formatted_time = appointment_time.strftime("%B %d, %Y at %I:%M %p")
 
             # Get payment method display name
@@ -1117,7 +1124,7 @@ AirServe Team
                         "customerPostalCode": postal_code,
                         "customerLocation": location,
                         "customerPassword": make_password(
-                            "GUEST_ACCOUNT_" + str(uuid.uuid4())[:8]
+                            secrets.token_urlsafe(32)
                         ),
                     },
                 )
