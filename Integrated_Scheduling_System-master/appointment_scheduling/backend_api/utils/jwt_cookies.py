@@ -4,9 +4,10 @@ Utilities for setting and clearing JWT tokens as HTTP-only cookies.
 Tokens are stored in HTTP-only, Secure cookies instead of being returned
 in the response body.  This prevents XSS attacks from stealing JWTs.
 
-For cross-origin deployments (e.g. Vercel frontend + Render backend),
-SameSite=None is required so that the browser sends cookies on
-cross-origin requests.  Secure=True is mandatory when SameSite=None.
+With the Vercel proxy, API requests arrive from the same origin as the
+frontend, so SameSite=Lax works in all browsers (including Safari).
+SameSite=None is kept as a fallback for direct cross-origin API access
+(e.g. Postman, mobile apps).
 """
 
 from django.conf import settings
@@ -31,7 +32,7 @@ def _cookie_kwargs(max_age: int) -> dict:
         "max_age": max_age,
         "httponly": True,
         "secure": not settings.DEBUG,          # True in production (HTTPS)
-        "samesite": "None" if not settings.DEBUG else "Lax",
+        "samesite": "Lax" if not settings.DEBUG else "Lax",
         "path": "/",
     }
 
@@ -53,6 +54,6 @@ def clear_jwt_cookies(response):
         response.delete_cookie(
             name,
             path="/",
-            samesite="None" if not settings.DEBUG else "Lax",
+            samesite="Lax",
         )
     return response

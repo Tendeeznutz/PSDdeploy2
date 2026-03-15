@@ -1,7 +1,14 @@
 import axios from 'axios';
 
+// In production, use relative URLs so requests go through Vercel's proxy
+// (same-origin, no cross-site cookie issues). In development, hit the
+// local Django server directly.
+const baseURL = process.env.NODE_ENV === 'production'
+    ? ''  // relative — Vercel rewrites /api/* to Render
+    : (process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000');
+
 const api = axios.create({
-    baseURL: process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000',
+    baseURL,
     withCredentials: true, // Send HTTP-only cookies with every request
 });
 
@@ -17,7 +24,7 @@ api.interceptors.response.use(
             try {
                 // Refresh endpoint reads the refresh cookie automatically
                 await axios.post(
-                    `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/token/refresh/`,
+                    `${baseURL}/api/token/refresh/`,
                     {},
                     { withCredentials: true }
                 );
