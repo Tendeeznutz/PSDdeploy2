@@ -7,12 +7,19 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..models import Coordinators
+from ..utils.audit_log import log_admin_action
+from ..utils.jwt_cookies import set_jwt_cookies
 from ..serializers import CoordinatorSerializer
 
 logger = logging.getLogger(__name__)
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    scope = "login"
 
 
 class CoordinatorViewSet(viewsets.ModelViewSet):
@@ -24,8 +31,17 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def _require_role(self, request, allowed_roles):
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        return role in allowed_roles
+
+    def _get_user_id(self, request):
+        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+
     # GET request of all coordinators data
     def list(self, request):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         queryset = Coordinators.objects.all()
         # serialize queryset
         serializer = self.serializer_class(queryset, many=True)
@@ -34,12 +50,16 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
 
     # GET request of a coordinator's data
     def retrieve(self, request, pk):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
     # POST request to create coordinator
     def create(self, request):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         # deserialize request data
         serializer = self.serializer_class(data=request.data)
         password = request.data.get("coordinatorPassword")
@@ -58,6 +78,11 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
 
     # PATCH request
     def partial_update(self, request, pk):
+        user_id = self._get_user_id(request)
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+        if str(pk) != user_id:
+            return Response({"error": "Can only update own profile"}, status=status.HTTP_403_FORBIDDEN)
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
@@ -72,12 +97,22 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
 
     # DELETE request to delete coordinator
     def destroy(self, request, pk):
+        user_id = self._get_user_id(request)
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+        if str(pk) != user_id:
+            return Response({"error": "Can only delete own account"}, status=status.HTTP_403_FORBIDDEN)
+        if Coordinators.objects.count() <= 1:
+            return Response({"error": "Cannot delete the last coordinator"}, status=status.HTTP_400_BAD_REQUEST)
         item = get_object_or_404(Coordinators.objects.all(), pk=pk)
         item.delete()
+        log_admin_action(request, "account_delete", "coordinator", str(pk))
         return Response(status=204)
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
+        self.throttle_classes = [LoginRateThrottle]
+        self.check_throttles(request)
         try:
             email = request.data.get("email")
             password = request.data.get("password")
@@ -105,10 +140,10 @@ class CoordinatorViewSet(viewsets.ModelViewSet):
                     "coordinatorEmail": coordinator.coordinatorEmail,
                     "coordinatorName": coordinator.coordinatorName,
                     "role": "coordinator",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+                response = Response(response_data, status=status.HTTP_200_OK)
+                set_jwt_cookies(response, str(refresh.access_token), str(refresh))
+                return response
             return Response(
                 {"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
             )

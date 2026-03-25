@@ -2,21 +2,38 @@ import axios from 'axios';
 
 const api = axios.create({
     baseURL: process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000',
+    withCredentials: true,  // Send HTTP-only cookies with every request
 });
 
-// Attach JWT access token to every request
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('access_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
-);
+/**
+ * Clear non-sensitive session data from localStorage.
+ * JWT tokens are in HTTP-only cookies (not accessible to JS).
+ */
+function clearSessionData() {
+    const keysToRemove = [
+        'customers_id', 'customers_name',
+        'technicians_id', 'technicians_name', 'technicians_phone', 'technicians_email',
+        'coordinators_id', 'coordinators_name', 'coordinators_email',
+        'role',
+    ];
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+}
 
-// Handle 401 responses by attempting token refresh
+/**
+ * Log out: call the server to blacklist the refresh token cookie,
+ * then clear local session data and redirect to login.
+ */
+export async function logout() {
+    try {
+        await api.post('/api/auth/logout/');
+    } catch (err) {
+        // Server may be unreachable — still clear local state
+    }
+    clearSessionData();
+    window.location.href = '/login';
+}
+
+// Handle 401 responses by attempting cookie-based token refresh
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -25,31 +42,16 @@ api.interceptors.response.use(
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-                try {
-                    const response = await axios.post(
-                        `${process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/token/refresh/`,
-                        { refresh: refreshToken }
-                    );
-
-                    const newAccess = response.data.access;
-                    localStorage.setItem('access_token', newAccess);
-                    if (response.data.refresh) {
-                        localStorage.setItem('refresh_token', response.data.refresh);
-                    }
-
-                    originalRequest.headers.Authorization = `Bearer ${newAccess}`;
-                    return api(originalRequest);
-                } catch (refreshError) {
-                    // Refresh failed — clear tokens and redirect to login
-                    localStorage.clear();
-                    window.location.href = '/login';
-                    return Promise.reject(refreshError);
-                }
-            } else {
-                localStorage.clear();
+            try {
+                // The refresh token is in an HTTP-only cookie — the browser sends it automatically
+                await api.post('/api/token/refresh/');
+                // New access token is set as a cookie by the server
+                return api(originalRequest);
+            } catch (refreshError) {
+                // Refresh failed — session expired
+                clearSessionData();
                 window.location.href = '/login';
+                return Promise.reject(refreshError);
             }
         }
 

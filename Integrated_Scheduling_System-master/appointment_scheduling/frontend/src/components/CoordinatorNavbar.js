@@ -1,9 +1,9 @@
 import React from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { logout } from '../axiosConfig';
 
 function CoordinatorNavbar() {
     const location = useLocation();
-    const navigate = useNavigate();
 
     const isCoordinator = !!localStorage.getItem('coordinators_email');
 
@@ -12,17 +12,8 @@ function CoordinatorNavbar() {
         return null;
     }
 
-    const logout = () => {
-        try {
-            localStorage.removeItem('coordinators_id');
-            localStorage.removeItem('coordinators_email');
-            localStorage.removeItem('coordinators_name');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            navigate('/');
-        } catch (err) {
-            console.error(err.message);
-        }
+    const handleLogout = () => {
+        logout();  // Calls server to blacklist token, clears localStorage, redirects
     };
 
     return (
@@ -45,7 +36,7 @@ function CoordinatorNavbar() {
                         </Link>
                     </li>
                     <li>
-                        <button onClick={logout} className="hover:text-blue-300">
+                        <button onClick={handleLogout} className="hover:text-blue-300">
                             Logout
                         </button>
                     </li>

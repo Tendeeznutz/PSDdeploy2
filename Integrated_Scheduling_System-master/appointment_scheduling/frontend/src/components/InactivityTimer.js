@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button } from 'antd';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { logout as serverLogout } from '../axiosConfig';
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 const WARNING_TIME = 2 * 60 * 1000; // 2 minutes before logout (show at 3 min inactivity)
@@ -8,7 +9,6 @@ const WARNING_TIME = 2 * 60 * 1000; // 2 minutes before logout (show at 3 min in
 function InactivityTimer() {
     const [showWarning, setShowWarning] = useState(false);
     const [remainingTime, setRemainingTime] = useState(WARNING_TIME);
-    const navigate = useNavigate();
     const location = useLocation();
 
     const timeoutRef = useRef(null);
@@ -16,26 +16,21 @@ function InactivityTimer() {
     const countdownRef = useRef(null);
 
     // Check if user is logged in (any type of user)
+    // With cookie-based auth, check for stored role/user info
     const isLoggedIn = () => {
-        return !!localStorage.getItem('access_token');
+        return !!(
+            localStorage.getItem('customers_id') ||
+            localStorage.getItem('technicians_id') ||
+            localStorage.getItem('coordinators_id') ||
+            localStorage.getItem('role')
+        );
     };
 
     // Clear all auth data on logout
     const logout = useCallback(() => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('coordinators_email');
-        localStorage.removeItem('coordinators_id');
-        localStorage.removeItem('coordinators_name');
-        localStorage.removeItem('customers_email');
-        localStorage.removeItem('customers_id');
-        localStorage.removeItem('customers_name');
-        localStorage.removeItem('technicians_id');
-        localStorage.removeItem('technicians_phone');
-        localStorage.removeItem('technicians_name');
         setShowWarning(false);
-        navigate('/login');
-    }, [navigate]);
+        serverLogout();  // Calls server to blacklist token, clears localStorage, redirects
+    }, []);
 
     const resetTimer = useCallback(() => {
         // Don't reset if not logged in

@@ -60,13 +60,10 @@ function Login() {
             localStorage.removeItem('coordinators_id');
             localStorage.removeItem('coordinators_email');
             localStorage.removeItem('coordinators_name');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-
             if (response.status === 200) {
-                // Store JWT tokens
-                localStorage.setItem('access_token', response.data.access);
-                localStorage.setItem('refresh_token', response.data.refresh);
+                // JWT tokens are now set as HTTP-only cookies by the server
+                // Only store non-sensitive display data in localStorage
+                localStorage.setItem('role', selectedRole);
 
                 if (selectedRole === 'customer') {
                     localStorage.setItem('customers_id', response.data.customer_id);

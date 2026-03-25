@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import viewsets
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import CustomerAirconDevices
@@ -9,6 +10,13 @@ from ..serializers import CustomerAirconDeviceSerializer
 class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
     queryset = CustomerAirconDevices.objects.all()
     serializer_class = CustomerAirconDeviceSerializer
+
+    def _require_role(self, request, allowed_roles):
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        return role in allowed_roles
+
+    def _get_user_id(self, request):
+        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
 
     # GET request of all customer aircon devices data
     def list(self, request):
@@ -25,7 +33,10 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
         elif request.GET:
             return Response(status=400)
         else:
-            queryset = CustomerAirconDevices.objects.all()
+            if self._require_role(request, ["coordinator"]):
+                queryset = CustomerAirconDevices.objects.all()
+            else:
+                return Response({"error": "Coordinator access required for full list"}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
@@ -63,6 +74,9 @@ class CustomerAirconDeviceViewSet(viewsets.ModelViewSet):
 
     # DELETE request to delete customer aircon device
     def destroy(self, request, pk):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         item = get_object_or_404(CustomerAirconDevices.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)

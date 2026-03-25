@@ -1,0 +1,7 @@
+# Environment variables — never commit secrets
+.env
+.env.local
+.env.production
+
+# But DO track the example template
+!.env.example

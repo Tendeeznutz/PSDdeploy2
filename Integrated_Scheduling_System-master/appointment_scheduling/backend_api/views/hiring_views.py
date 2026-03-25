@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from ..models import TechnicianHiringApplication, Technicians
 from ..serializers import TechnicianHiringApplicationSerializer
+from ..utils.audit_log import log_admin_action
 from ..sg_geo.src import geo_onemap as geo
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,18 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def _require_role(self, request, allowed_roles):
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        return role in allowed_roles
+
+    def _get_user_id(self, request):
+        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+
     def list(self, request):
         """Get all hiring applications with optional filtering"""
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         queryset = TechnicianHiringApplication.objects.all()
 
         # Filter by application status
@@ -52,6 +63,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, pk):
         """Get a specific hiring application"""
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -70,7 +84,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def partial_update(self, request, pk):
-        """Update a hiring application"""
+        """Update a hiring application — coordinator only"""
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -84,6 +100,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, pk):
         """Delete a hiring application"""
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -137,6 +156,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         """
         Stage 3: Coordinator approves application and creates technician account
         """
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -192,6 +214,8 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
                 application.createdTechnician = technician
                 application.save()
 
+            log_admin_action(request, "hiring_approve", "hiring_application", str(pk))
+
             serializer = self.serializer_class(application)
             response_data = serializer.data
             response_data["technicianId"] = str(technician.id)
@@ -211,6 +235,9 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="coordinator-reject")
     def coordinator_reject(self, request, pk=None):
         """Coordinator rejects application"""
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -224,6 +251,8 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         application.coordinatorApprovedAt = timezone.now()
         application.applicationStatus = "rejected"
         application.save()
+
+        log_admin_action(request, "hiring_reject", "hiring_application", str(pk))
 
         serializer = self.serializer_class(application)
         return Response(serializer.data)

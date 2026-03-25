@@ -38,6 +38,11 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 
+# Validate secrets in production
+if not DEBUG:
+    if not SECRET_KEY or SECRET_KEY.startswith('django-insecure'):
+        raise ValueError("SECRET_KEY must be set to a secure value in production")
+
 _extra_hosts = [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
@@ -69,6 +74,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "backend_api.middleware.security.ContentSecurityPolicyMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -171,16 +177,30 @@ LOGGING = {
             "format": "[{asctime}] {levelname} {name}: {message}",
             "style": "{",
         },
+        "audit_format": {
+            "format": "{asctime} | {message}",
+            "style": "{",
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        "audit_file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "audit.log",
+            "formatter": "audit_format",
+        },
     },
     "loggers": {
         "backend_api": {
             "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "audit": {
+            "handlers": ["console", "audit_file"],
             "level": "INFO",
             "propagate": False,
         },
@@ -218,7 +238,7 @@ from datetime import timedelta
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTStatelessUserAuthentication",
+        "backend_api.authentication.CookieJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": [
@@ -229,6 +249,7 @@ REST_FRAMEWORK = {
         "anon": "30/minute",
         "user": "120/minute",
         "login": "5/minute",
+        "guest_booking": "10/minute",
     },
 }
 
@@ -269,3 +290,6 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+if not DEBUG and not TELEGRAM_WEBHOOK_SECRET:
+    import warnings
+    warnings.warn("TELEGRAM_WEBHOOK_SECRET is not set — webhook endpoint is unprotected")

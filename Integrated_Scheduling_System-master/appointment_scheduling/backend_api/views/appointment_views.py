@@ -3,12 +3,16 @@ from django.utils import timezone
 from django.db import models
 from django.contrib.auth.hashers import make_password
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 import logging
 import uuid
+
+SGT = ZoneInfo("Asia/Singapore")
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,11 @@ def extract_aircon_brand(aircon_to_service):
 TRAVEL_FEE = 10  # $10 standard travel fee
 
 
+class GuestBookingThrottle(AnonRateThrottle):
+    scope = "guest_booking"
+    rate = "10/minute"
+
+
 class AppointmentViewSet(viewsets.ModelViewSet):
     queryset = Appointments.objects.all()
     serializer_class = AppointmentSerializer
@@ -74,6 +83,13 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if self.action == "guest_booking":
             return [AllowAny()]
         return [IsAuthenticated()]
+
+    def _require_role(self, request, allowed_roles):
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        return role in allowed_roles
+
+    def _get_user_id(self, request):
+        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
 
     def send_receipt_to_mailbox(self, appointment, customer, aircon_ids):
         """
@@ -94,7 +110,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             total_cost_with_penalty = total_cost + float(penalty_fee)
 
             # Format appointment time
-            appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime)
+            appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime, tz=SGT)
             formatted_time = appointment_time.strftime("%B %d, %Y at %I:%M %p")
 
             # Get payment method display name
@@ -427,6 +443,11 @@ AirServe Team
 
     # PATCH request
     def partial_update(self, request, pk=None):
+        # Coordinators can update any field; customers/technicians can only cancel their own
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        if role not in ("coordinator", "customer", "technician"):
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
 
         # Handle empty string technicianId (convert to None for proper validation)
@@ -697,6 +718,9 @@ AirServe Team
 
     # DELETE request
     def destroy(self, request, pk=None):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+
         item = get_object_or_404(Appointments.objects.all(), pk=pk)
         item.delete()
         return Response(status=204)
@@ -914,6 +938,9 @@ AirServe Team
         - appointmentStartTime
         - paymentMethod
         """
+        self.throttle_classes = [GuestBookingThrottle]
+        self.check_throttles(request)
+
         try:
             # Extract data from request
             name = request.data.get("customerName")
@@ -1034,7 +1061,7 @@ AirServe Team
             appointment.save()
 
             # Send email confirmation directly to guest's email
-            appointment_datetime = datetime.fromtimestamp(appointment_time)
+            appointment_datetime = datetime.fromtimestamp(appointment_time, tz=SGT)
             formatted_time = appointment_datetime.strftime("%B %d, %Y at %I:%M %p")
 
             # Calculate costs

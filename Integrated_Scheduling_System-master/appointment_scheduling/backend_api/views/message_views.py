@@ -18,6 +18,13 @@ class MessageViewSet(viewsets.ModelViewSet):
     queryset = Messages.objects.all()
     serializer_class = MessageSerializer
 
+    def _require_role(self, request, allowed_roles):
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        return role in allowed_roles
+
+    def _get_user_id(self, request):
+        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+
     def list(self, request, *args, **kwargs):
         """
         Get messages for a specific user (filtered by recipient or sender)
@@ -60,7 +67,10 @@ class MessageViewSet(viewsets.ModelViewSet):
                     status=400,
                 )
         else:
-            messages = Messages.objects.all()
+            if self._require_role(request, ["coordinator"]):
+                messages = Messages.objects.all()
+            else:
+                return Response({"error": "Filter parameters required"}, status=400)
 
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data, status=200)

@@ -6,7 +6,6 @@ from rest_framework import serializers
 
 from .models import (
     Appointments,
-    AppointmentRequest,
     Customers,
     Technicians,
     Coordinators,
@@ -36,7 +35,14 @@ def validate_file_upload(file, allowed_types, max_size=MAX_FILE_SIZE):
 class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointments
-        fields = "__all__"
+        fields = [
+            "id", "customerId", "technicianId",
+            "appointmentStartTime", "appointmentEndTime",
+            "airconToService", "customerFeedback",
+            "appointmentStatus", "paymentMethod",
+            "cancellationReason", "cancelledBy", "cancelledAt",
+            "created_at", "updated_at",
+        ]
 
     def validate_appointmentStartTime(self, value):
         # Only validate future date for NEW appointments or when appointmentStartTime is being changed
@@ -81,12 +87,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
                         "Customer aircon device does not belong to the customer"
                     )
         return value
-
-
-class AppointmentRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AppointmentRequest
-        fields = "__all__"
 
 
 class CustomerSerializer(serializers.ModelSerializer):

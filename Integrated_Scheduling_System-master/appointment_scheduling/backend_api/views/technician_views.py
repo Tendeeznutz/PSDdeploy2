@@ -10,15 +10,22 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..scheduling_algo import *
-from ..models import TechnicianPasswordResetToken, TechnicianHiringApplication
+from ..models import PasswordResetToken, TechnicianHiringApplication
 from ..serializers import TechnicianSerializer
 from ..sg_geo.src import geo_onemap as geo
 from ..utils import sendMail
+from ..utils.audit_log import log_admin_action
+from ..utils.jwt_cookies import set_jwt_cookies
 
 logger = logging.getLogger(__name__)
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    scope = "login"
 
 
 class TechnicianViewSet(viewsets.ModelViewSet):
@@ -35,8 +42,17 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def _require_role(self, request, allowed_roles):
+        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        return role in allowed_roles
+
+    def _get_user_id(self, request):
+        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+
     # GET request of all techicians data
     def list(self, request):
+        if not self._require_role(request, ["coordinator", "technician"]):
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
         if request.query_params.get("technicianName") is not None:
             queryset = Technicians.objects.filter(
                 technicianName__icontains=request.query_params.get("technicianName")
@@ -76,12 +92,17 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     # GET request of a technician's data
     def retrieve(self, request, pk):
+        user_id = self._get_user_id(request)
+        if not self._require_role(request, ["coordinator"]) and str(pk) != user_id:
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         serializer = self.serializer_class(item)
         return Response(serializer.data)
 
     # POST request to create technician
     def create(self, request):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         serializer = self.serializer_class(data=request.data)
         password = request.data.get("technicianPassword")
         if serializer.is_valid():
@@ -101,6 +122,9 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     # PATCH request
     def partial_update(self, request, pk):
+        user_id = self._get_user_id(request)
+        if not self._require_role(request, ["coordinator"]) and str(pk) != user_id:
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         serializer = self.serializer_class(item, data=request.data, partial=True)
         if serializer.is_valid():
@@ -123,6 +147,8 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request, *args, **kwargs):
+        self.throttle_classes = [LoginRateThrottle]
+        self.check_throttles(request)
         try:
             phone = request.data.get("email")
             password = request.data.get("password")
@@ -159,10 +185,10 @@ class TechnicianViewSet(viewsets.ModelViewSet):
                     "technician_id": technician.id,
                     "technicianName": technician.technicianName,
                     "role": "technician",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+                response = Response(response_data, status=status.HTTP_200_OK)
+                set_jwt_cookies(response, str(refresh.access_token), str(refresh))
+                return response
             return Response(
                 {"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
             )
@@ -175,8 +201,11 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
     # DELETE request to delete technician
     def destroy(self, request, pk):
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
         item.delete()
+        log_admin_action(request, "account_delete", "technician", str(pk))
         return Response(status=204)
 
     @action(detail=False, methods=["post"], url_path="forgot-password")
@@ -185,6 +214,9 @@ class TechnicianViewSet(viewsets.ModelViewSet):
         Request password reset - sends email with reset link.
         Expects: { phone: "12345678" }
         """
+        self.throttle_classes = [LoginRateThrottle]
+        self.check_throttles(request)
+
         phone = request.data.get("phone")
         if not phone:
             return Response(
@@ -196,8 +228,8 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             technician = Technicians.objects.get(technicianPhone=phone)
         except Technicians.DoesNotExist:
             return Response(
-                {"error": "No technician found with this phone number"},
-                status=status.HTTP_404_NOT_FOUND,
+                {"message": "If an account with that phone number exists, a reset link has been sent."},
+                status=status.HTTP_200_OK,
             )
 
         # Find the associated hiring application to get email
@@ -208,13 +240,13 @@ class TechnicianViewSet(viewsets.ModelViewSet):
             email = application.applicantEmail
         except TechnicianHiringApplication.DoesNotExist:
             return Response(
-                {"error": "No email associated with this technician account"},
-                status=status.HTTP_404_NOT_FOUND,
+                {"message": "If an account with that phone number exists, a reset link has been sent."},
+                status=status.HTTP_200_OK,
             )
 
         # Invalidate any existing tokens
-        TechnicianPasswordResetToken.objects.filter(
-            technician=technician, isUsed=False
+        PasswordResetToken.objects.filter(
+            userType="technician", userId=technician.id, isUsed=False
         ).update(isUsed=True)
 
         # Generate a secure token
@@ -222,8 +254,8 @@ class TechnicianViewSet(viewsets.ModelViewSet):
         expires_at = timezone.now() + timedelta(hours=24)
 
         # Create the token
-        TechnicianPasswordResetToken.objects.create(
-            technician=technician, token=token, expiresAt=expires_at
+        PasswordResetToken.objects.create(
+            userType="technician", userId=technician.id, token=token, expiresAt=expires_at
         )
 
         # Send email with reset link
@@ -252,13 +284,15 @@ AirServe Team"""
 
             sendMail.send_email(subject, body, email, "AirServe")
             return Response(
-                {"message": "Password reset email sent successfully"},
+                {"message": "If an account with that phone number exists, a reset link has been sent."},
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
+            logger.exception("Failed to send password reset email: %s", e)
+            # Return same generic message to prevent account enumeration
             return Response(
-                {"error": "Failed to send password reset email"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"message": "If an account with that phone number exists, a reset link has been sent."},
+                status=status.HTTP_200_OK,
             )
 
     @action(detail=False, methods=["get"], url_path="validate-reset-token")
@@ -275,7 +309,7 @@ AirServe Team"""
             )
 
         try:
-            reset_token = TechnicianPasswordResetToken.objects.get(token=token)
+            reset_token = PasswordResetToken.objects.get(token=token, userType="technician")
 
             if reset_token.isUsed:
                 return Response(
@@ -292,12 +326,12 @@ AirServe Team"""
             return Response(
                 {
                     "valid": True,
-                    "technicianName": reset_token.technician.technicianName,
+                    "technicianName": Technicians.objects.get(id=reset_token.userId).technicianName,
                 },
                 status=status.HTTP_200_OK,
             )
 
-        except TechnicianPasswordResetToken.DoesNotExist:
+        except PasswordResetToken.DoesNotExist:
             return Response(
                 {"valid": False, "error": "Invalid token"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -340,7 +374,7 @@ AirServe Team"""
             )
 
         try:
-            reset_token = TechnicianPasswordResetToken.objects.get(token=token)
+            reset_token = PasswordResetToken.objects.get(token=token, userType="technician")
 
             if reset_token.isUsed:
                 return Response(
@@ -354,7 +388,7 @@ AirServe Team"""
                 )
 
             # Update password
-            technician = reset_token.technician
+            technician = Technicians.objects.get(id=reset_token.userId)
             technician.technicianPassword = make_password(new_password)
             technician.save()
 
@@ -367,7 +401,7 @@ AirServe Team"""
                 status=status.HTTP_200_OK,
             )
 
-        except TechnicianPasswordResetToken.DoesNotExist:
+        except (PasswordResetToken.DoesNotExist, Technicians.DoesNotExist):
             return Response(
                 {"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST
             )
@@ -377,11 +411,15 @@ AirServe Team"""
         """
         Coordinator resets technician password to a secure random temporary password.
         """
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
 
         default_password = secrets.token_urlsafe(12)
         technician.technicianPassword = make_password(default_password)
         technician.save()
+
+        log_admin_action(request, "password_reset", "technician", str(pk), f"Reset password for {technician.technicianName}")
 
         # Optionally send email notification
         try:
@@ -422,6 +460,8 @@ AirServe Team"""
         Toggle technician's active/inactive status (for firing/rehiring).
         Expects: { reason: "optional reason for deactivation" }
         """
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
         reason = request.data.get("reason", "")
 
@@ -431,6 +471,8 @@ AirServe Team"""
             technician.deactivatedAt = timezone.now()
             technician.deactivationReason = reason
             technician.save()
+
+            log_admin_action(request, "toggle_active", "technician", str(pk), f"Set active={technician.isActive}")
 
             # Send notification email
             try:
@@ -472,6 +514,8 @@ AirServe Team"""
             technician.deactivationReason = None
             technician.save()
 
+            log_admin_action(request, "toggle_active", "technician", str(pk), f"Set active={technician.isActive}")
+
             # Send notification email
             try:
                 application = TechnicianHiringApplication.objects.filter(
@@ -510,6 +554,8 @@ AirServe Team"""
         Toggle technician's availability status (Available/Unavailable).
         Only coordinators should use this endpoint.
         """
+        if not self._require_role(request, ["coordinator"]):
+            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
         technician = get_object_or_404(Technicians.objects.all(), pk=pk)
 
         if technician.technicianStatus == "1":
