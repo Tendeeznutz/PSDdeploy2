@@ -4,13 +4,16 @@ from django.contrib.auth.hashers import make_password
 from rest_framework.test import APIClient, APITestCase
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
-from backend_api.models import Customers, CustomerAirconDevices
+from backend_api.models import Coordinators, Customers, CustomerAirconDevices
 
 
 class CustomerAirconDeviceAPITests(APITestCase):
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {"anon": "1000/minute"}
-        UserRateThrottle.THROTTLE_RATES = {"user": "1000/minute"}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
         self.base_url = "/api/customeraircondevices/"
 
@@ -33,21 +36,21 @@ class CustomerAirconDeviceAPITests(APITestCase):
             customerLocation="1.3521,103.8198",
         )
 
-        with patch(
-            "backend_api.views.customer_views.geo.get_location_from_postal",
-            return_value="1.3521,103.8198",
-        ):
-            resp = self.client.post(
-                "/api/customers/login/",
-                {
-                    "email": "test@example.com",
-                    "password": "pass1234",
-                },
-                format="json",
-            )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        # Use coordinator auth (most endpoints require coordinator role)
+        self.coordinator = Coordinators.objects.create(
+            coordinatorName="Test Coord",
+            coordinatorEmail="coord@example.com",
+            coordinatorPhone="71234567",
+            coordinatorPassword=make_password("coordpass"),
+        )
+        resp = self.client.post(
+            "/api/coordinators/login/",
+            {"email": "coord@example.com", "password": "coordpass"},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.cookies['access_token'].value}")
 
-    def _make_device(self, customer=None, name="Test AC", units=1, ac_type="split"):
+    def _make_device(self, customer=None, name="Test AC", units=1, ac_type="daikin"):
         return CustomerAirconDevices.objects.create(
             customerId=customer or self.customer,
             airconName=name,
@@ -61,7 +64,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Daikin FTN25",
             "numberOfUnits": 2,
-            "airconType": "split",
+            "airconType": "daikin",
         }
         resp = self.client.post(self.base_url, payload, format="json")
         self.assertEqual(resp.status_code, 201)
@@ -77,7 +80,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
         payload = {
             "customerId": str(self.customer.id),
             "numberOfUnits": 1,
-            "airconType": "split",
+            "airconType": "daikin",
         }
         resp = self.client.post(self.base_url, payload, format="json")
         self.assertEqual(resp.status_code, 201)
@@ -91,7 +94,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Living Room AC",
             "numberOfUnits": 1,
-            "airconType": "split",
+            "airconType": "daikin",
         }
         resp = self.client.post(self.base_url, payload, format="json")
         self.assertEqual(resp.status_code, 400)
@@ -103,7 +106,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Bad Units",
             "numberOfUnits": 0,
-            "airconType": "split",
+            "airconType": "daikin",
         }
         resp = self.client.post(self.base_url, payload, format="json")
         self.assertEqual(resp.status_code, 400)
@@ -115,7 +118,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Too Many Units",
             "numberOfUnits": 101,
-            "airconType": "split",
+            "airconType": "daikin",
         }
         resp = self.client.post(self.base_url, payload, format="json")
         self.assertEqual(resp.status_code, 400)
@@ -127,7 +130,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Bad Month",
             "numberOfUnits": 1,
-            "airconType": "split",
+            "airconType": "daikin",
             "lastServiceMonth": "2024-13",
         }
         resp = self.client.post(self.base_url, payload, format="json")
@@ -140,7 +143,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Future Month",
             "numberOfUnits": 1,
-            "airconType": "split",
+            "airconType": "daikin",
             "lastServiceMonth": "2030-06",
         }
         resp = self.client.post(self.base_url, payload, format="json")
@@ -153,7 +156,7 @@ class CustomerAirconDeviceAPITests(APITestCase):
             "customerId": str(self.customer.id),
             "airconName": "Valid Month",
             "numberOfUnits": 1,
-            "airconType": "split",
+            "airconType": "daikin",
             "lastServiceMonth": "2024-01",
         }
         resp = self.client.post(self.base_url, payload, format="json")

@@ -10,8 +10,11 @@ class AirconCatalogAPITests(APITestCase):
     """
 
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {"anon": "1000/minute"}
-        UserRateThrottle.THROTTLE_RATES = {"user": "1000/minute"}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
 
     def test_airconcatalogs_endpoint_not_registered(self):

@@ -31,8 +31,11 @@ def _img(name="file.png"):
 )
 class HiringApplicationAPITests(APITestCase):
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {"anon": "1000/minute"}
-        UserRateThrottle.THROTTLE_RATES = {"user": "1000/minute"}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
         self.base_url = "/api/hiring-applications/"
 
@@ -73,19 +76,16 @@ class HiringApplicationAPITests(APITestCase):
 
     # ── helpers ────────────────────────────────────────────────────────
     def _auth(self):
-        with patch(
-            "backend_api.views.customer_views.geo.get_location_from_postal",
-            return_value="1.3521,103.8198",
-        ):
-            resp = self.client.post(
-                "/api/customers/login/",
-                {
-                    "email": "auth@example.com",
-                    "password": "pass1234",
-                },
-                format="json",
-            )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        """Authenticate as coordinator for endpoints requiring coordinator role."""
+        resp = self.client.post(
+            "/api/coordinators/login/",
+            {
+                "email": "coord@example.com",
+                "password": "coordpass",
+            },
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.cookies['access_token'].value}")
 
     def _post_valid(self, nric="S1234567A", phone="98765432", email="john@example.com"):
         data = {

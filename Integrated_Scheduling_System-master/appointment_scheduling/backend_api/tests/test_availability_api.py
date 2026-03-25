@@ -11,8 +11,11 @@ WORK_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"]
 
 class TechnicianAvailabilityAPITests(APITestCase):
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {"anon": "1000/minute"}
-        UserRateThrottle.THROTTLE_RATES = {"user": "1000/minute"}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
         self.base_url = "/api/technician-availability/"
 
@@ -55,7 +58,7 @@ class TechnicianAvailabilityAPITests(APITestCase):
                 },
                 format="json",
             )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.cookies['access_token'].value}")
 
     def _seed_five_days(self, technician=None):
         """Create availability for mon–fri directly in DB (bypasses serializer)."""
@@ -359,3 +362,133 @@ class TechnicianAvailabilityAPITests(APITestCase):
         client = APIClient()
         resp = client.get(self.base_url)
         self.assertEqual(resp.status_code, 401)
+
+    # ── 22. Specific date override creates successfully ──────────────
+    def test_specific_date_override(self):
+        self._seed_five_days()
+        resp = self.client.post(
+            self.base_url,
+            {
+                "technicianId": str(self.technician.id),
+                "dayOfWeek": "monday",
+                "specificDate": "2025-12-25",
+                "startTime": "09:00",
+                "endTime": "12:00",
+                "isAvailable": False,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["specificDate"], "2025-12-25")
+        self.assertFalse(resp.data["isAvailable"])
+
+    # ── 23. Specific date unavailable override is returned in list ───
+    def test_specific_date_in_list(self):
+        self._seed_five_days()
+        TechnicianAvailability.objects.create(
+            technicianId=self.technician,
+            dayOfWeek="monday",
+            specificDate="2025-12-25",
+            startTime="09:00",
+            endTime="12:00",
+            isAvailable=False,
+        )
+        resp = self.client.get(
+            self.base_url,
+            {"technicianId": str(self.technician.id), "specificDate": "2025-12-25"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data), 1)
+        self.assertFalse(resp.data[0]["isAvailable"])
+
+    # ── 24. Working days endpoint reflects meetsMinimumRequirement ───
+    def test_working_days_below_minimum(self):
+        # Only create 3 days directly in DB (bypasses serializer validation)
+        for day in ["monday", "tuesday", "wednesday"]:
+            TechnicianAvailability.objects.create(
+                technicianId=self.technician,
+                dayOfWeek=day,
+                startTime="09:00",
+                endTime="17:00",
+                isAvailable=True,
+            )
+        resp = self.client.get(
+            f"{self.base_url}working-days/",
+            {"technicianId": str(self.technician.id)},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.data["meetsMinimumRequirement"])
+        self.assertEqual(resp.data["totalWeeklyDays"], 3)
+
+    # ── 25. Available slots with nonexistent technician → 404 ───────
+    def test_available_slots_nonexistent_technician(self):
+        import uuid as _uuid
+
+        resp = self.client.get(
+            f"{self.base_url}available-slots/",
+            {"technicianId": str(_uuid.uuid4()), "date": "2025-06-09"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    # ── 26. Available slots with invalid date format → 400 ──────────
+    def test_available_slots_invalid_date(self):
+        resp = self.client.get(
+            f"{self.base_url}available-slots/",
+            {"technicianId": str(self.technician.id), "date": "not-a-date"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Invalid date format", str(resp.data))
+
+    # ── 27. Deleting a specific-date override is always allowed ─────
+    def test_delete_specific_date_override_allowed(self):
+        self._seed_five_days()
+        override = TechnicianAvailability.objects.create(
+            technicianId=self.technician,
+            dayOfWeek="monday",
+            specificDate="2025-12-25",
+            startTime="09:00",
+            endTime="12:00",
+            isAvailable=False,
+        )
+        resp = self.client.delete(f"{self.base_url}{override.id}/")
+        self.assertEqual(resp.status_code, 204)
+
+    # ── 28. Bulk create for new technician with 5+ days ─────────────
+    def test_bulk_create_for_new_technician(self):
+        """Bulk create for a technician with no existing schedule should succeed."""
+        schedules = [
+            {"dayOfWeek": d, "startTime": "10:00", "endTime": "18:00"}
+            for d in WORK_DAYS
+        ]
+        resp = self.client.post(
+            f"{self.base_url}bulk-create/",
+            {
+                "technicianId": str(self.technician2.id),
+                "schedules": schedules,
+            },
+            format="json",
+        )
+        self.assertIn(resp.status_code, [201, 207])
+
+    # ── 29. Working days with date range returns specific overrides ──
+    def test_working_days_with_date_range(self):
+        self._seed_five_days()
+        TechnicianAvailability.objects.create(
+            technicianId=self.technician,
+            dayOfWeek="monday",
+            specificDate="2025-06-09",
+            startTime="09:00",
+            endTime="12:00",
+            isAvailable=False,
+        )
+        resp = self.client.get(
+            f"{self.base_url}working-days/",
+            {
+                "technicianId": str(self.technician.id),
+                "startDate": "2025-06-01",
+                "endDate": "2025-06-30",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("specificDateOverrides", resp.data)
+        self.assertIn("2025-06-09", resp.data["specificDateOverrides"])

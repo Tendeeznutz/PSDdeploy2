@@ -9,6 +9,7 @@ import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import Button from '@/components/Button';
 import BookingDetailsModal from '@/components/BookingDetailsModal';
+import RatingPopup from '@/components/RatingPopup';
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { mockAppointments } from '@/lib/mockData';
@@ -218,6 +219,7 @@ export default function DashboardPage() {
         />
       )}
       
+      <RatingPopup />
       <Footer />
     </div>
   );

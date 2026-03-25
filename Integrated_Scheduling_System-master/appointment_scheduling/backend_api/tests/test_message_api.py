@@ -11,8 +11,11 @@ from backend_api.models import Appointments, Coordinators, Customers, Messages, 
 class MessageAPITests(APITestCase):
 
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {'anon': '1000/minute'}
-        UserRateThrottle.THROTTLE_RATES = {'user': '1000/minute'}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
         self.base_url = '/api/messages/'
 
@@ -31,7 +34,7 @@ class MessageAPITests(APITestCase):
                 'email': 'testcustomer@example.com',
                 'password': 'pass1234',
             }, format='json')
-        token = resp.data['access']
+        token = resp.cookies['access_token'].value
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
         # Shared UUIDs for ORM-created messages
@@ -102,9 +105,12 @@ class MessageAPITests(APITestCase):
         self.assertTrue(response.data.get('success'))
         self.assertGreaterEqual(response.data.get('count', 0), 1)
 
-    # 3. List all messages
+    # 3. List messages filtered by recipient
     def test_list_messages(self):
-        response = self.client.get(self.base_url)
+        response = self.client.get(self.base_url, {
+            'recipientId': str(self.recipient_id),
+            'recipientType': 'technician',
+        })
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(len(response.data), 1)
 
@@ -155,3 +161,103 @@ class MessageAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('unreadCount', response.data)
         self.assertEqual(response.data['unreadCount'], 1)
+
+    # 9. Mark-read changes isRead to True and sets readAt
+    def test_mark_read_updates_fields(self):
+        self.assertFalse(self.msg.isRead)
+        self.assertIsNone(self.msg.readAt)
+        self.client.patch(f'{self.base_url}{self.msg.id}/mark-read/')
+        self.msg.refresh_from_db()
+        self.assertTrue(self.msg.isRead)
+        self.assertIsNotNone(self.msg.readAt)
+
+    # 10. Unread count decreases after marking read
+    def test_unread_count_decreases_after_mark_read(self):
+        self.client.patch(f'{self.base_url}{self.msg.id}/mark-read/')
+        response = self.client.get(f'{self.base_url}unread-count/', {
+            'recipientId': str(self.recipient_id),
+            'recipientType': 'technician',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['unreadCount'], 0)
+
+    # 11. Multiple unread messages counted correctly
+    def test_multiple_unread_messages(self):
+        Messages.objects.create(
+            senderType='coordinator',
+            senderId=self.sender_id,
+            senderName='Coord One',
+            recipientType='technician',
+            recipientId=self.recipient_id,
+            recipientName='Tech One',
+            subject='Second Message',
+            body='Second body',
+        )
+        response = self.client.get(f'{self.base_url}unread-count/', {
+            'recipientId': str(self.recipient_id),
+            'recipientType': 'technician',
+        })
+        self.assertEqual(response.data['unreadCount'], 2)
+
+    # 12. Inbox only returns messages for the specified recipient
+    def test_inbox_filters_correctly(self):
+        other_id = uuid.uuid4()
+        Messages.objects.create(
+            senderType='coordinator',
+            senderId=self.sender_id,
+            senderName='Coord One',
+            recipientType='technician',
+            recipientId=other_id,
+            recipientName='Other Tech',
+            subject='Other Message',
+            body='Not for recipient',
+        )
+        response = self.client.get(f'{self.base_url}inbox/', {
+            'recipientId': str(self.recipient_id),
+            'recipientType': 'technician',
+        })
+        self.assertEqual(response.status_code, 200)
+        for msg in response.data:
+            self.assertEqual(str(msg['recipientId']), str(self.recipient_id))
+
+    # 13. Sent only returns messages from the specified sender
+    def test_sent_filters_correctly(self):
+        other_sender = uuid.uuid4()
+        Messages.objects.create(
+            senderType='coordinator',
+            senderId=other_sender,
+            senderName='Other Coord',
+            recipientType='technician',
+            recipientId=self.recipient_id,
+            recipientName='Tech One',
+            subject='From Other',
+            body='Different sender',
+        )
+        response = self.client.get(f'{self.base_url}sent/', {
+            'senderId': str(self.sender_id),
+            'senderType': 'coordinator',
+        })
+        self.assertEqual(response.status_code, 200)
+        for msg in response.data:
+            self.assertEqual(str(msg['senderId']), str(self.sender_id))
+
+    # 14. Create message missing required fields returns 400
+    def test_create_message_missing_body(self):
+        payload = {
+            'senderType': 'coordinator',
+            'senderId': str(uuid.uuid4()),
+            'senderName': 'Coord Test',
+            'recipientType': 'technician',
+            'recipientId': str(uuid.uuid4()),
+            'recipientName': 'Tech Test',
+            'subject': 'No body',
+            # Missing 'body'
+        }
+        response = self.client.post(self.base_url, payload, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    # 15. Auth required for messages
+    def test_auth_required(self):
+        client = APIClient()
+        response = client.get(self.base_url)
+        self.assertEqual(response.status_code, 401)

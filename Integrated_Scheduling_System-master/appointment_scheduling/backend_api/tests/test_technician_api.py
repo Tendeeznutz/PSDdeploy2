@@ -4,7 +4,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from rest_framework.test import APITestCase, APIClient
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
-from ..models import Technicians, Customers
+from ..models import Coordinators, Technicians, Customers
 
 
 @patch('backend_api.views.technician_views.geo.get_location_from_postal', return_value='1.3521,103.8198')
@@ -12,8 +12,11 @@ from ..models import Technicians, Customers
 class TechnicianAPITestCase(APITestCase):
 
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {'anon': '1000/minute'}
-        UserRateThrottle.THROTTLE_RATES = {'user': '1000/minute'}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
         self.base_url = '/api/technicians/'
 
@@ -36,21 +39,19 @@ class TechnicianAPITestCase(APITestCase):
         )
 
     def _get_auth_token(self, mock_send_email=None):
-        """Create a customer and log in to get a JWT access token."""
-        with patch('backend_api.views.customer_views.geo.get_location_from_postal', return_value='1.3521,103.8198'):
-            Customers.objects.create(
-                customerName='Test User',
-                customerPostalCode='654321',
-                customerPhone='81234567',
-                customerEmail='testuser@example.com',
-                customerPassword=make_password('pass1234'),
-                customerLocation='1.3521,103.8198',
+        """Create a coordinator and log in to get a JWT access token (coordinator role needed for most tech endpoints)."""
+        if not Coordinators.objects.filter(coordinatorEmail='testcoord@example.com').exists():
+            Coordinators.objects.create(
+                coordinatorName='Test Coordinator',
+                coordinatorEmail='testcoord@example.com',
+                coordinatorPhone='71234567',
+                coordinatorPassword=make_password('coordpass'),
             )
-            resp = self.client.post('/api/customers/login/', {
-                'email': 'testuser@example.com',
-                'password': 'pass1234',
-            }, format='json')
-        return resp.data['access']
+        resp = self.client.post('/api/coordinators/login/', {
+            'email': 'testcoord@example.com',
+            'password': 'coordpass',
+        }, format='json')
+        return resp.cookies['access_token'].value
 
     def _auth_client(self):
         token = self._get_auth_token()
@@ -76,8 +77,8 @@ class TechnicianAPITestCase(APITestCase):
             'password': 'password123',
         }, format='json')
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('access', resp.data)
-        self.assertIn('refresh', resp.data)
+        self.assertIn('access_token', resp.cookies)
+        self.assertIn('refresh_token', resp.cookies)
         self.assertEqual(resp.data['technician_phone'], '91234567')
         self.assertEqual(resp.data['role'], 'technician')
 

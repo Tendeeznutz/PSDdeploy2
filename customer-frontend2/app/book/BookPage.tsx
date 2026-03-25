@@ -25,6 +25,9 @@ import { format } from 'date-fns';
 
 const STEPS = ['Service', 'Address', 'Schedule', 'Contact', 'Review'];
 
+// Buffer used by the backend (2.5 hours in seconds)
+const UNAVAILABLE_BUFFER = 9000;
+
 function BookPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,6 +39,9 @@ function BookPageContent() {
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [numberOfUnits, setNumberOfUnits] = useState(1);
+  const [unavailableSlots, setUnavailableSlots] = useState<number[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState(false);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<BookingFormData>({
     defaultValues: {
@@ -106,6 +112,56 @@ function BookPageContent() {
     } catch (error) {
       console.error('Failed to load aircon devices:', error);
     }
+  };
+
+  // Fetch unavailable slots when the selected date changes
+  useEffect(() => {
+    if (!selectedDate || !customer) {
+      setUnavailableSlots([]);
+      return;
+    }
+
+    const fetchUnavailableSlots = async () => {
+      setSlotsLoading(true);
+      setSlotsError(false);
+      try {
+        const data = await appointmentApi.getUnavailableSlots(customer.id);
+        setUnavailableSlots(data.unavailable_timeslots || []);
+      } catch (err) {
+        console.error('Failed to fetch unavailable slots:', err);
+        setSlotsError(true);
+        setUnavailableSlots([]);
+      } finally {
+        setSlotsLoading(false);
+      }
+    };
+
+    fetchUnavailableSlots();
+  }, [selectedDate, customer]);
+
+  // Clear time slot selection if the selected time becomes unavailable after date change
+  useEffect(() => {
+    if (!selectedDate || !watchedValues.timeSlot) return;
+    if (isSlotUnavailable(watchedValues.timeSlot)) {
+      setValue('timeSlot', '');
+    }
+  }, [unavailableSlots, selectedDate]);
+
+  const isSlotUnavailable = (slotTime: string): boolean => {
+    if (!selectedDate || unavailableSlots.length === 0) return false;
+
+    const [hours, minutes] = slotTime.split(':').map(Number);
+    const slotDate = new Date(selectedDate);
+    slotDate.setHours(hours, minutes, 0, 0);
+    const slotTimestamp = Math.floor(slotDate.getTime() / 1000);
+
+    // Check if this slot overlaps with any unavailable appointment window
+    // An appointment at time T blocks the range [T - BUFFER, T + BUFFER]
+    return unavailableSlots.some((unavailableTime) => {
+      const blockStart = unavailableTime - UNAVAILABLE_BUFFER;
+      const blockEnd = unavailableTime + UNAVAILABLE_BUFFER;
+      return slotTimestamp >= blockStart && slotTimestamp <= blockEnd;
+    });
   };
 
   const calculateTotal = () => {
@@ -179,7 +235,7 @@ function BookPageContent() {
             customerId: customerId,
             airconName: `Unit ${i + 1}`,
             numberOfUnits: 1,
-            airconType: 'split',
+            airconType: 'other',
           } as any);
           deviceIds.push(device.id);
         }
@@ -494,22 +550,47 @@ function BookPageContent() {
                           <label className="block text-sm font-medium text-gray-700 mb-3">
                             Select Time Slot *
                           </label>
-                          <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                            {TIME_SLOTS.map((slot) => (
-                              <button
-                                key={slot.time}
-                                type="button"
-                                onClick={() => setValue('timeSlot', slot.time)}
-                                className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                                  watchedValues.timeSlot === slot.time
-                                    ? 'bg-primary-600 text-white border-primary-600'
-                                    : 'bg-white border-gray-300 hover:border-primary-400'
-                                }`}
-                              >
-                                {slot.label}
-                              </button>
-                            ))}
-                          </div>
+                          {slotsLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mr-3"></div>
+                              <span className="text-sm text-gray-600">Checking availability...</span>
+                            </div>
+                          ) : (
+                            <>
+                              {slotsError && (
+                                <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                  <p className="text-sm text-yellow-800">Could not check slot availability. All slots are shown but some may be taken.</p>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                                {TIME_SLOTS.map((slot) => {
+                                  const unavailable = isSlotUnavailable(slot.time);
+                                  return (
+                                    <button
+                                      key={slot.time}
+                                      type="button"
+                                      onClick={() => {
+                                        if (!unavailable) setValue('timeSlot', slot.time);
+                                      }}
+                                      disabled={unavailable}
+                                      className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
+                                        unavailable
+                                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50 line-through'
+                                          : watchedValues.timeSlot === slot.time
+                                            ? 'bg-primary-600 text-white border-primary-600'
+                                            : 'bg-white border-gray-300 hover:border-primary-400'
+                                      }`}
+                                    >
+                                      {slot.label}
+                                      {unavailable && (
+                                        <div className="text-xs mt-1 no-underline" style={{ textDecoration: 'none' }}>Unavailable</div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

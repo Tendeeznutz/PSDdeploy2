@@ -25,13 +25,16 @@ def get_auth_header(client, coordinator):
         {'email': coordinator.coordinatorEmail, 'password': 'password123'},
         format='json',
     )
-    return {'HTTP_AUTHORIZATION': f'Bearer {resp.data["access"]}'}
+    return {'HTTP_AUTHORIZATION': f'Bearer {resp.cookies["access_token"].value}'}
 
 
 class CoordinatorAPITests(APITestCase):
     def setUp(self):
-        AnonRateThrottle.THROTTLE_RATES = {'anon': '1000/minute'}
-        UserRateThrottle.THROTTLE_RATES = {'user': '1000/minute'}
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
         self.client = APIClient()
         self.coordinator = make_coordinator()
         self.auth = get_auth_header(self.client, self.coordinator)
@@ -57,8 +60,8 @@ class CoordinatorAPITests(APITestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('access', resp.data)
-        self.assertIn('refresh', resp.data)
+        self.assertIn('access_token', resp.cookies)
+        self.assertIn('refresh_token', resp.cookies)
         self.assertEqual(resp.data['coordinatorEmail'], self.coordinator.coordinatorEmail)
         self.assertEqual(resp.data['role'], 'coordinator')
 
@@ -140,7 +143,8 @@ class CoordinatorAPITests(APITestCase):
         for item in list_resp.data:
             self.assertNotIn('coordinatorPassword', item)
 
-    # 11. List requires authentication
+    # 11. List requires authentication (fresh client with no cookies)
     def test_list_requires_auth(self):
-        resp = self.client.get(BASE_URL)
+        fresh_client = APIClient()
+        resp = fresh_client.get(BASE_URL)
         self.assertIn(resp.status_code, [401, 403])

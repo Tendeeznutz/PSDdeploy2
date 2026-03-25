@@ -14,11 +14,11 @@ from backend_api.models import (
 )
 from backend_api.scheduling_algo import (
     TIME_BUFFER_SECONDS,
+    SEARCH_RANGE_METERS,
     find_common_timerange,
     get_available_time_slots,
     get_common_unavailable_time,
     get_nearby_technicians,
-    get_search_range,
     get_technician_to_assign,
     is_slot_available,
     is_technician_available_on_day,
@@ -33,10 +33,9 @@ class _MockAppt:
         self.appointmentEndTime = end
 
 
-class GetSearchRangeTests(TestCase):
-    def test_returns_30000_for_any_travel_type(self):
-        for tt in ("own_vehicle", "company_vehicle", "rental_van", None, ""):
-            self.assertEqual(get_search_range(tt), 30000)
+class SearchRangeConstantTests(TestCase):
+    def test_search_range_is_30000(self):
+        self.assertEqual(SEARCH_RANGE_METERS, 30000)
 
 
 @patch("backend_api.scheduling_algo.geo_onemap.is_in_range", return_value=True)
@@ -283,10 +282,10 @@ class IsSlotAvailableTests(TestCase):
             technicianPassword=make_password("p"),
             technicianLocation="1,1",
         )
-        # No availability set → should fail
+        # No availability set → defaults to available (no schedule configured)
         monday_10am = datetime(2025, 1, 6, 10, 0, 0)
         ts = int(monday_10am.timestamp())
-        self.assertFalse(is_slot_available(ts, ts + 3600, [], technician_id=tech.id))
+        self.assertTrue(is_slot_available(ts, ts + 3600, [], technician_id=tech.id))
 
 
 class GetTechnicianToAssignTests(TestCase):
@@ -416,3 +415,114 @@ class GetAvailableTimeSlotsTests(TestCase):
         )
         with_appt = get_available_time_slots(self.tech.id, "2025-01-06", 1)
         self.assertLess(len(with_appt), len(baseline))
+
+
+class TimeBufferTests(TestCase):
+    """Tests for the 2.5-hour buffer between appointments."""
+
+    def test_buffer_is_9000_seconds(self):
+        self.assertEqual(TIME_BUFFER_SECONDS, 9000)
+
+    def test_slot_available_after_buffer(self):
+        """A slot starting exactly at end + buffer should be available."""
+        existing = _MockAppt(1000, 2000)
+        new_start = 2000 + int(TIME_BUFFER_SECONDS) + 1
+        new_end = new_start + 3600
+        # This slot starts after the buffer period
+        self.assertTrue(is_slot_available(new_start, new_end, [existing]))
+
+    def test_slot_unavailable_within_buffer(self):
+        """A slot starting within the buffer period should be unavailable."""
+        existing = _MockAppt(1000, 2000)
+        new_start = 2000 + 100  # Way within buffer
+        new_end = new_start + 3600
+        self.assertFalse(is_slot_available(new_start, new_end, [existing]))
+
+    def test_slot_before_existing_respects_new_buffer(self):
+        """New appointment's buffer must not overlap with existing start."""
+        existing = _MockAppt(20000, 23600)
+        # New appointment ends at 11001, buffer would go to 11001+9000=20001
+        # This overlaps with the existing start at 20000
+        new_start = 7401
+        new_end = 11001
+        self.assertFalse(is_slot_available(new_start, new_end, [existing]))
+
+    def test_multiple_existing_appointments_respected(self):
+        """Slot must not conflict with ANY existing appointment."""
+        appt1 = _MockAppt(1000, 2000)
+        appt2 = _MockAppt(20000, 23600)
+        # Slot between them but within buffer of appt1
+        new_start = 2000 + 100
+        new_end = new_start + 3600
+        self.assertFalse(is_slot_available(new_start, new_end, [appt1, appt2]))
+
+
+class IsTechnicianAvailableEdgeCaseTests(TestCase):
+    """Additional edge case tests for technician availability."""
+
+    def setUp(self):
+        self.tech = Technicians.objects.create(
+            technicianName="Edge Tech",
+            technicianPostalCode="123456",
+            technicianAddress="a",
+            technicianPhone="91234567",
+            technicianPassword=make_password("p"),
+            technicianLocation="1,1",
+        )
+
+    def test_no_schedule_defaults_to_available(self):
+        """Technician with no availability records defaults to available."""
+        monday_10am = datetime(2025, 1, 6, 10, 0, 0)
+        ts = int(monday_10am.timestamp())
+        self.assertTrue(is_technician_available_on_day(self.tech.id, ts))
+
+    def test_specific_date_available_with_custom_hours(self):
+        """Specific date override with custom hours allows within-range time."""
+        TechnicianAvailability.objects.create(
+            technicianId=self.tech,
+            dayOfWeek="monday",
+            startTime="09:00",
+            endTime="17:00",
+            isAvailable=True,
+        )
+        # Create a specific date override with shorter hours
+        target_date = datetime(2025, 1, 6).date()
+        TechnicianAvailability.objects.create(
+            technicianId=self.tech,
+            dayOfWeek="monday",
+            specificDate=target_date,
+            startTime="10:00",
+            endTime="14:00",
+            isAvailable=True,
+        )
+        # 11am should be available (within 10:00-14:00)
+        ts_11am = int(datetime(2025, 1, 6, 11, 0, 0).timestamp())
+        self.assertTrue(is_technician_available_on_day(self.tech.id, ts_11am))
+
+        # 15:00 should NOT be available (outside 10:00-14:00 override)
+        ts_3pm = int(datetime(2025, 1, 6, 15, 0, 0).timestamp())
+        self.assertFalse(is_technician_available_on_day(self.tech.id, ts_3pm))
+
+    def test_exactly_at_end_time_is_unavailable(self):
+        """Appointment at exactly the end time boundary should be unavailable."""
+        TechnicianAvailability.objects.create(
+            technicianId=self.tech,
+            dayOfWeek="monday",
+            startTime="09:00",
+            endTime="17:00",
+            isAvailable=True,
+        )
+        ts_5pm = int(datetime(2025, 1, 6, 17, 0, 0).timestamp())
+        self.assertFalse(is_technician_available_on_day(self.tech.id, ts_5pm))
+
+    def test_exactly_at_start_time_is_available(self):
+        """Appointment at exactly the start time should be available."""
+        TechnicianAvailability.objects.create(
+            technicianId=self.tech,
+            dayOfWeek="monday",
+            startTime="09:00",
+            endTime="17:00",
+            isAvailable=True,
+        )
+        ts_9am = int(datetime(2025, 1, 6, 9, 0, 0).timestamp())
+        self.assertTrue(is_technician_available_on_day(self.tech.id, ts_9am))

@@ -186,6 +186,16 @@ export const appointmentApi = {
     });
     return response.data;
   },
+
+  getUnratedCompleted: async (customerId: string) => {
+    const response = await api.get(`/appointments/unrated-completed/?customerId=${customerId}`);
+    return response.data;
+  },
+
+  rateTechnician: async (appointmentId: string, data: { rating: number; customerId: string }) => {
+    const response = await api.post(`/appointments/${appointmentId}/rate-technician/`, data);
+    return response.data;
+  },
 };
 
 // Telegram API
