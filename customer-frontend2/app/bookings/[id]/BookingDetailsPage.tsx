@@ -10,7 +10,7 @@ import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { mockAppointments } from '@/lib/mockData';
+
 import type { Appointment } from '@/lib/types';
 import {
   Calendar,
@@ -65,15 +65,8 @@ function BookingDetailsContent() {
   const loadAppointment = async () => {
     try {
       setLoading(true);
-      const isMockUser = customer?.id === 'mock-customer-id-123' || customer?.customerEmail === 'test@hotmail.com';
-
-      if (isMockUser) {
-        const mockAppt = mockAppointments.find(a => a.id === params.id);
-        if (mockAppt) setAppointment(mockAppt);
-      } else {
-        const data = await appointmentApi.getAppointment(params.id as string);
-        setAppointment(data);
-      }
+      const data = await appointmentApi.getAppointment(params.id as string);
+      setAppointment(data);
     } catch (error) {
       console.error('Failed to load appointment:', error);
     } finally {

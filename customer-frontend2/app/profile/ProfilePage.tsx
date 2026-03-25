@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
@@ -9,7 +9,6 @@ import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import { customerApi, airconDeviceApi, appointmentApi, messageApi, telegramApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { mockCustomer, mockAirconDevices, mockAppointments, mockMessages } from '@/lib/mockData';
 import type { Customer, CustomerAirconDevice, Appointment } from '@/lib/types';
 import {
   User,
@@ -73,6 +72,8 @@ export default function ProfilePage() {
   const [telegramLinked, setTelegramLinked] = useState(false);
   const [telegramDeepLink, setTelegramDeepLink] = useState('');
   const [telegramLoading, setTelegramLoading] = useState(false);
+  const telegramPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const telegramTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Profile Edit State ──
   const [isEditing, setIsEditing] = useState(false);
@@ -120,39 +121,32 @@ export default function ProfilePage() {
     fetchTelegramStatus();
   }, [customer, isAuthenticated]);
 
+  useEffect(() => {
+    return () => {
+      if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+      if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+    };
+  }, []);
+
   const loadProfileData = async () => {
     if (!customer) return;
     try {
       setLoading(true);
 
-      // Use mock data if it's the test user, otherwise try API
-      const isMockUser = customer.id === 'mock-customer-id-123' || customer.customerEmail === 'test@hotmail.com';
-
-      if (isMockUser) {
-        // Use mock data
-        setProfile(mockCustomer);
-        setAirconDevices(mockAirconDevices);
-        setAppointments(mockAppointments);
-        setMessages(mockMessages);
-        setUnreadCount(mockMessages.filter(m => !m.isRead).length);
-        setSentMessages([]);
-      } else {
-        // Try real API
-        const [profileData, devicesData, appointmentsData, messagesData, unreadData, sentData] = await Promise.all([
-          customerApi.getProfile(customer.id).catch(() => customer),
-          airconDeviceApi.getDevices(customer.id).catch(() => []),
-          appointmentApi.getAppointments(customer.id).catch(() => []),
-          messageApi.getInbox(customer.id, 'customer').catch(() => []),
-          messageApi.getUnreadCount(customer.id, 'customer').catch(() => 0),
-          messageApi.getSent(customer.id, 'customer').catch(() => []),
-        ]);
-        setProfile(profileData);
-        setAirconDevices(devicesData);
-        setAppointments(appointmentsData);
-        setMessages(messagesData);
-        setUnreadCount(unreadData);
-        setSentMessages(sentData);
-      }
+      const [profileData, devicesData, appointmentsData, messagesData, unreadData, sentData] = await Promise.all([
+        customerApi.getProfile(customer.id).catch(() => customer),
+        airconDeviceApi.getDevices(customer.id).catch(() => []),
+        appointmentApi.getAppointments(customer.id).catch(() => []),
+        messageApi.getInbox(customer.id, 'customer').catch(() => []),
+        messageApi.getUnreadCount(customer.id, 'customer').catch(() => 0),
+        messageApi.getSent(customer.id, 'customer').catch(() => []),
+      ]);
+      setProfile(profileData);
+      setAirconDevices(devicesData);
+      setAppointments(appointmentsData);
+      setMessages(messagesData);
+      setUnreadCount(unreadData);
+      setSentMessages(sentData);
     } catch (error) {
       console.error('Failed to load profile data:', error);
       setProfile(customer);
@@ -164,11 +158,8 @@ export default function ProfilePage() {
   const refreshDevices = async () => {
     if (!customer) return;
     try {
-      const isMockUser = customer.id === 'mock-customer-id-123' || customer.customerEmail === 'test@hotmail.com';
-      if (!isMockUser) {
-        const devicesData = await airconDeviceApi.getDevices(customer.id);
-        setAirconDevices(devicesData);
-      }
+      const devicesData = await airconDeviceApi.getDevices(customer.id);
+      setAirconDevices(devicesData);
     } catch (error) {
       console.error('Failed to refresh devices:', error);
     }
@@ -177,17 +168,14 @@ export default function ProfilePage() {
   const refreshMessages = async () => {
     if (!customer) return;
     try {
-      const isMockUser = customer.id === 'mock-customer-id-123' || customer.customerEmail === 'test@hotmail.com';
-      if (!isMockUser) {
-        const [messagesData, unreadData, sentData] = await Promise.all([
-          messageApi.getInbox(customer.id, 'customer').catch(() => []),
-          messageApi.getUnreadCount(customer.id, 'customer').catch(() => 0),
-          messageApi.getSent(customer.id, 'customer').catch(() => []),
-        ]);
-        setMessages(messagesData);
-        setUnreadCount(unreadData);
-        setSentMessages(sentData);
-      }
+      const [messagesData, unreadData, sentData] = await Promise.all([
+        messageApi.getInbox(customer.id, 'customer').catch(() => []),
+        messageApi.getUnreadCount(customer.id, 'customer').catch(() => 0),
+        messageApi.getSent(customer.id, 'customer').catch(() => []),
+      ]);
+      setMessages(messagesData);
+      setUnreadCount(unreadData);
+      setSentMessages(sentData);
     } catch (error) {
       console.error('Failed to refresh messages:', error);
     }
@@ -240,17 +228,24 @@ export default function ProfilePage() {
       const result = await telegramApi.generateLink(customer.id);
       setTelegramDeepLink(result.deepLink);
       // Poll for link completion
-      const poll = setInterval(async () => {
+      telegramPollRef.current = setInterval(async () => {
         try {
           const status = await telegramApi.checkStatus(customer.id);
           if (status.linked) {
             setTelegramLinked(true);
             setTelegramDeepLink('');
-            clearInterval(poll);
+            if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+            if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+            telegramPollRef.current = null;
+            telegramTimeoutRef.current = null;
           }
         } catch {}
       }, 3000);
-      setTimeout(() => clearInterval(poll), 600000);
+      telegramTimeoutRef.current = setTimeout(() => {
+        if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+        telegramPollRef.current = null;
+        telegramTimeoutRef.current = null;
+      }, 600000);
     } catch (err) {
       console.error('Error generating Telegram link:', err);
     }
@@ -259,6 +254,10 @@ export default function ProfilePage() {
 
   const handleUnlinkTelegram = async () => {
     if (!customer?.id) return;
+    if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+    if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+    telegramPollRef.current = null;
+    telegramTimeoutRef.current = null;
     try {
       await telegramApi.unlink(customer.id);
       setTelegramLinked(false);
@@ -1171,18 +1170,12 @@ export default function ProfilePage() {
                                 {!message.isRead && (
                                   <button
                                     onClick={async () => {
-                                      const isMockUser = customer?.id === 'mock-customer-id-123' || customer?.customerEmail === 'test@hotmail.com';
-                                      if (isMockUser) {
+                                      try {
+                                        await messageApi.markAsRead(message.id);
                                         setMessages(messages.map(m => m.id === message.id ? { ...m, isRead: true } : m));
                                         setUnreadCount(Math.max(0, unreadCount - 1));
-                                      } else {
-                                        try {
-                                          await messageApi.markAsRead(message.id);
-                                          setMessages(messages.map(m => m.id === message.id ? { ...m, isRead: true } : m));
-                                          setUnreadCount(Math.max(0, unreadCount - 1));
-                                        } catch (error) {
-                                          console.error('Failed to mark as read:', error);
-                                        }
+                                      } catch (error) {
+                                        console.error('Failed to mark as read:', error);
                                       }
                                     }}
                                     className="text-xs text-primary-600 hover:text-primary-700"

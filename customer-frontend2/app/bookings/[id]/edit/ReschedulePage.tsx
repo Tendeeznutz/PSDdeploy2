@@ -9,7 +9,7 @@ import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { mockAppointments } from '@/lib/mockData';
+
 import { TIME_SLOTS } from '@/lib/constants';
 import type { Appointment } from '@/lib/types';
 import { Calendar, Clock, CheckCircle, AlertCircle } from 'lucide-react';
@@ -45,21 +45,10 @@ function RescheduleContent() {
   const loadAppointment = async () => {
     try {
       setLoading(true);
-      const isMockUser = customer?.id === 'mock-customer-id-123' || customer?.customerEmail === 'test@hotmail.com';
-
-      if (isMockUser) {
-        const mockAppt = mockAppointments.find(a => a.id === params.id);
-        if (mockAppt) {
-          setAppointment(mockAppt);
-          setSelectedDate(new Date(mockAppt.appointmentStartTime * 1000));
-          setSelectedTimeSlot(format(new Date(mockAppt.appointmentStartTime * 1000), 'HH:mm'));
-        }
-      } else {
-        const data = await appointmentApi.getAppointment(params.id as string);
-        setAppointment(data);
-        setSelectedDate(new Date(data.appointmentStartTime * 1000));
-        setSelectedTimeSlot(format(new Date(data.appointmentStartTime * 1000), 'HH:mm'));
-      }
+      const data = await appointmentApi.getAppointment(params.id as string);
+      setAppointment(data);
+      setSelectedDate(new Date(data.appointmentStartTime * 1000));
+      setSelectedTimeSlot(format(new Date(data.appointmentStartTime * 1000), 'HH:mm'));
     } catch (error) {
       console.error('Failed to load appointment:', error);
     } finally {
@@ -138,26 +127,17 @@ function RescheduleContent() {
     setSubmitting(true);
 
     try {
-      const isMockUser = customer?.id === 'mock-customer-id-123' || customer?.customerEmail === 'test@hotmail.com';
+      const [hours, minutes] = selectedTimeSlot.split(':').map(Number);
+      selectedDate.setHours(hours, minutes, 0, 0);
+      const newStartTime = Math.floor(selectedDate.getTime() / 1000);
+      const duration = appointment.appointmentEndTime - appointment.appointmentStartTime;
 
-      if (isMockUser) {
-        setTimeout(() => {
-          setShowSuccess(true);
-          setSubmitting(false);
-        }, 1000);
-      } else {
-        const [hours, minutes] = selectedTimeSlot.split(':').map(Number);
-        selectedDate.setHours(hours, minutes, 0, 0);
-        const newStartTime = Math.floor(selectedDate.getTime() / 1000);
-        const duration = appointment.appointmentEndTime - appointment.appointmentStartTime;
+      await appointmentApi.updateAppointment(appointment.id, {
+        appointmentStartTime: newStartTime,
+        appointmentEndTime: newStartTime + duration,
+      } as any);
 
-        await appointmentApi.updateAppointment(appointment.id, {
-          appointmentStartTime: newStartTime,
-          appointmentEndTime: newStartTime + duration,
-        } as any);
-
-        setShowSuccess(true);
-      }
+      setShowSuccess(true);
     } catch (error: any) {
       alert(error.response?.data?.error || 'Failed to reschedule appointment');
     } finally {

@@ -12,7 +12,7 @@ import BookingDetailsModal from '@/components/BookingDetailsModal';
 import RatingPopup from '@/components/RatingPopup';
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { mockAppointments } from '@/lib/mockData';
+
 import type { Appointment } from '@/lib/types';
 import { Calendar, MapPin, Clock, Eye, Package } from 'lucide-react';
 import { format } from 'date-fns';
@@ -39,17 +39,8 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
-      // Use mock data if it's the test user, otherwise try API
-      const isMockUser = customer.id === 'mock-customer-id-123' || customer.customerEmail === 'test@hotmail.com';
-      
-      if (isMockUser) {
-        // Use mock data
-        setAppointments(mockAppointments);
-      } else {
-        // Try real API
-        const data = await appointmentApi.getAppointments(customer.id);
-        setAppointments(data);
-      }
+      const data = await appointmentApi.getAppointments(customer.id);
+      setAppointments(data);
     } catch (error) {
       console.error('Failed to load appointments:', error);
       // Fallback to empty array
