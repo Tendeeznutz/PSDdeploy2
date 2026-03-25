@@ -15,10 +15,11 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Customers, Technicians, TelegramLinkToken
+from ..utils.audit_log import log_admin_action
 from ..utils.telegram_bot import send_telegram_message, get_deep_link_url
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def telegram_webhook(request):
     """
     # Verify webhook secret
     received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if WEBHOOK_SECRET and received_secret != WEBHOOK_SECRET:
+    if not WEBHOOK_SECRET or received_secret != WEBHOOK_SECRET:
         return JsonResponse({"ok": False}, status=403)
 
     try:
@@ -170,7 +171,7 @@ def _handle_unlink(chat_id):
 # ============================================================
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def generate_link_token(request):
     """
     Generate a one-time token for Telegram account linking.
@@ -183,6 +184,11 @@ def generate_link_token(request):
 
     if user_type not in ("customer", "technician") or not user_id:
         return Response({"error": "userType and userId required"}, status=400)
+
+    # Verify the caller owns this account
+    jwt_user_id = getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+    if str(user_id) != jwt_user_id:
+        return Response({"error": "Access denied"}, status=403)
 
     # Verify user exists
     if user_type == "customer":
@@ -221,7 +227,7 @@ def generate_link_token(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def check_telegram_status(request):
     """
     Check if a user has linked their Telegram account.
@@ -231,6 +237,11 @@ def check_telegram_status(request):
     """
     user_type = request.query_params.get("userType")
     user_id = request.query_params.get("userId")
+
+    # Verify the caller owns this account
+    jwt_user_id = getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+    if str(user_id) != jwt_user_id:
+        return Response({"error": "Access denied"}, status=403)
 
     if user_type == "customer":
         customer = Customers.objects.filter(id=user_id).first()
@@ -245,15 +256,20 @@ def check_telegram_status(request):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def unlink_telegram(request):
     """
     Unlink Telegram from a user account.
 
     Body: { "userType": "customer"|"technician", "userId": "<uuid>" }
     """
-    user_type = request.data.get("userType")
+    # Verify the caller owns this account
+    jwt_user_id = getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
     user_id = request.data.get("userId")
+    if str(user_id) != jwt_user_id:
+        return Response({"error": "Access denied"}, status=403)
+
+    user_type = request.data.get("userType")
 
     if user_type == "customer":
         customer = Customers.objects.filter(id=user_id).first()
@@ -265,6 +281,7 @@ def unlink_telegram(request):
                 old_chat_id,
                 "Your AirServe account has been unlinked from Telegram.",
             )
+            log_admin_action(request, "telegram_unlink", user_type, str(user_id))
             return Response({"success": True})
     elif user_type == "technician":
         technician = Technicians.objects.filter(id=user_id).first()
@@ -276,6 +293,7 @@ def unlink_telegram(request):
                 old_chat_id,
                 "Your AirServe account has been unlinked from Telegram.",
             )
+            log_admin_action(request, "telegram_unlink", user_type, str(user_id))
             return Response({"success": True})
 
     return Response({"error": "Not linked or user not found"}, status=400)

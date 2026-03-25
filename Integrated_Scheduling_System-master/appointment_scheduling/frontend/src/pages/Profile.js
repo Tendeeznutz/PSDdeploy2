@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
 import { Button, Popconfirm, Progress, DatePicker, Rate } from 'antd';
@@ -47,6 +47,8 @@ function Profile() {
     const [telegramLinked, setTelegramLinked] = useState(false);
     const [telegramDeepLink, setTelegramDeepLink] = useState('');
     const [telegramLoading, setTelegramLoading] = useState(false);
+    const telegramPollRef = useRef(null);
+    const telegramTimeoutRef = useRef(null);
 
     const fetchUserData = async () => {
         try {
@@ -89,19 +91,25 @@ function Profile() {
             });
             setTelegramDeepLink(response.data.deepLink);
             // Poll for link completion every 3 seconds for up to 10 minutes
-            const pollInterval = setInterval(async () => {
+            if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+            if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+            telegramPollRef.current = setInterval(async () => {
                 try {
                     const statusResp = await api.get(`/api/telegram/status/?userType=customer&userId=${customer_id}`);
                     if (statusResp.data.linked) {
                         setTelegramLinked(true);
                         setTelegramDeepLink('');
-                        clearInterval(pollInterval);
+                        clearInterval(telegramPollRef.current);
+                        telegramPollRef.current = null;
                     }
                 } catch (err) {
                     console.error('Polling error:', err);
                 }
             }, 3000);
-            setTimeout(() => clearInterval(pollInterval), 600000);
+            telegramTimeoutRef.current = setTimeout(() => {
+                if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+                telegramPollRef.current = null;
+            }, 600000);
         } catch (error) {
             console.error('Error generating Telegram link:', error);
         }
@@ -395,6 +403,13 @@ function Profile() {
             fetchUserAirconData().then(userAircondata => setUserAirconList(userAircondata));
             fetchTelegramStatus();
         }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+            if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+        };
     }, []);
 
     return (

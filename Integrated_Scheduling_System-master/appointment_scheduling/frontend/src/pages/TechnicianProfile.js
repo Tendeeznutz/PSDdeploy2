@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {Link, useNavigate} from 'react-router-dom';
 import api from "../axiosConfig";
 import { Rate, Popconfirm } from 'antd';
@@ -45,6 +45,8 @@ function TechnicianProfile() {
     const [telegramLinked, setTelegramLinked] = useState(false);
     const [telegramDeepLink, setTelegramDeepLink] = useState('');
     const [telegramLoading, setTelegramLoading] = useState(false);
+    const telegramPollRef = useRef(null);
+    const telegramTimeoutRef = useRef(null);
 
     const fetchTelegramStatus = async () => {
         try {
@@ -63,19 +65,25 @@ function TechnicianProfile() {
                 userId: technician_id,
             });
             setTelegramDeepLink(response.data.deepLink);
-            const pollInterval = setInterval(async () => {
+            if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+            if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+            telegramPollRef.current = setInterval(async () => {
                 try {
                     const statusResp = await api.get(`/api/telegram/status/?userType=technician&userId=${technician_id}`);
                     if (statusResp.data.linked) {
                         setTelegramLinked(true);
                         setTelegramDeepLink('');
-                        clearInterval(pollInterval);
+                        clearInterval(telegramPollRef.current);
+                        telegramPollRef.current = null;
                     }
                 } catch (err) {
                     console.error('Polling error:', err);
                 }
             }, 3000);
-            setTimeout(() => clearInterval(pollInterval), 600000);
+            telegramTimeoutRef.current = setTimeout(() => {
+                if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+                telegramPollRef.current = null;
+            }, 600000);
         } catch (error) {
             console.error('Error generating Telegram link:', error);
         }
@@ -122,6 +130,13 @@ function TechnicianProfile() {
                 console.error('There was an error!', error);
             });
         fetchTelegramStatus();
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (telegramPollRef.current) clearInterval(telegramPollRef.current);
+            if (telegramTimeoutRef.current) clearTimeout(telegramTimeoutRef.current);
+        };
     }, []);
 
     const handleEditToggle = () => {

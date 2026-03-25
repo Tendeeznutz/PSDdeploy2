@@ -5,6 +5,9 @@ Sends both email and Telegram notifications (if the user has linked Telegram).
 
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+SGT = ZoneInfo("Asia/Singapore")
 
 from .sendMail import send_email
 from .telegram_bot import send_telegram_message
@@ -22,7 +25,7 @@ def format_timestamp_to_readable(timestamp):
     Returns:
         Formatted datetime string (e.g., "Monday, 15 January 2024 at 2:30 PM")
     """
-    dt = datetime.fromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp, tz=SGT)
     return dt.strftime("%A, %d %B %Y at %I:%M %p")
 
 
