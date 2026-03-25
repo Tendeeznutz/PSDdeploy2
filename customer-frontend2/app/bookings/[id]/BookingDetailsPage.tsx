@@ -21,6 +21,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -44,6 +45,9 @@ function BookingDetailsContent() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [penaltyStatus, setPenaltyStatus] = useState<any>(null);
+  const [penaltyLoading, setPenaltyLoading] = useState(false);
+  const [penaltyAcknowledged, setPenaltyAcknowledged] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -77,12 +81,35 @@ function BookingDetailsContent() {
     }
   };
 
+  const fetchPenaltyStatus = async () => {
+    if (!customer) return;
+    try {
+      setPenaltyLoading(true);
+      const data = await appointmentApi.getPenaltyStatus(customer.id);
+      setPenaltyStatus(data);
+    } catch (error) {
+      console.error('Failed to fetch penalty status:', error);
+    } finally {
+      setPenaltyLoading(false);
+    }
+  };
+
+  const openCancelModal = () => {
+    setShowCancelModal(true);
+    setPenaltyAcknowledged(false);
+    fetchPenaltyStatus();
+  };
+
   const handleCancel = async () => {
     if (!cancelReason.trim()) {
       alert('Please provide a cancellation reason');
       return;
     }
     if (!appointment) return;
+    if (penaltyStatus?.remaining_free_cancellations === 0 && !penaltyAcknowledged) {
+      alert('Please acknowledge the penalty fee before cancelling.');
+      return;
+    }
 
     try {
       setCancelling(true);
@@ -180,7 +207,7 @@ function BookingDetailsContent() {
                     </Link>
                     <Button
                       variant="outline"
-                      onClick={() => setShowCancelModal(true)}
+                      onClick={openCancelModal}
                       className="text-red-600 border-red-300 hover:bg-red-50"
                     >
                       Cancel Booking
@@ -339,6 +366,62 @@ function BookingDetailsContent() {
           <p className="text-gray-600">
             Are you sure you want to cancel this booking? Please provide a reason for cancellation.
           </p>
+
+          {penaltyLoading && (
+            <div className="flex items-center text-sm text-gray-500">
+              <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
+              Checking cancellation status...
+            </div>
+          )}
+
+          {penaltyStatus && !penaltyLoading && (
+            <>
+              {penaltyStatus.remaining_free_cancellations === 0 ? (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-red-800">
+                    You have used all free cancellations this month. This cancellation will incur a $20 penalty fee.
+                  </p>
+                </div>
+              ) : penaltyStatus.remaining_free_cancellations <= 2 ? (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-yellow-800">
+                    You have {penaltyStatus.remaining_free_cancellations} free cancellation{penaltyStatus.remaining_free_cancellations === 1 ? '' : 's'} remaining this month.
+                  </p>
+                </div>
+              ) : null}
+
+              {parseFloat(penaltyStatus.pending_penalty_fee) > 0 && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-yellow-800">
+                    You have a pending penalty of ${penaltyStatus.pending_penalty_fee} that will be added to your next appointment.
+                  </p>
+                </div>
+              )}
+
+              {penaltyStatus.warning_message && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-yellow-800">{penaltyStatus.warning_message}</p>
+                </div>
+              )}
+
+              {penaltyStatus.remaining_free_cancellations === 0 && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={penaltyAcknowledged}
+                    onChange={(e) => setPenaltyAcknowledged(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-700">I understand a $20 penalty fee will be applied</span>
+                </label>
+              )}
+            </>
+          )}
+
           <textarea
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}
@@ -354,6 +437,7 @@ function BookingDetailsContent() {
               variant="secondary"
               onClick={handleCancel}
               isLoading={cancelling}
+              disabled={penaltyStatus?.remaining_free_cancellations === 0 && !penaltyAcknowledged}
               className="bg-red-600 hover:bg-red-700"
             >
               Cancel Booking

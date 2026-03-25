@@ -12,14 +12,15 @@ import { SERVICES, ADD_ONS, TIME_SLOTS, TRAVEL_FEE, PAYMENT_METHODS } from '@/li
 import { appointmentApi, convertBookingToApiFormat, customerApi, airconDeviceApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import type { BookingFormData, CustomerAirconDevice } from '@/lib/types';
-import { 
-  Calendar, 
-  MapPin, 
-  User, 
-  CreditCard, 
+import {
+  Calendar,
+  MapPin,
+  User,
+  CreditCard,
   CheckCircle,
   Plus,
-  Trash2
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -42,6 +43,7 @@ function BookPageContent() {
   const [unavailableSlots, setUnavailableSlots] = useState<number[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState(false);
+  const [penaltyStatus, setPenaltyStatus] = useState<any>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<BookingFormData>({
     defaultValues: {
@@ -139,6 +141,15 @@ function BookPageContent() {
     fetchUnavailableSlots();
   }, [selectedDate, customer]);
 
+  // Fetch penalty status when reaching the review step
+  useEffect(() => {
+    if (currentStep === 5 && customer) {
+      appointmentApi.getPenaltyStatus(customer.id)
+        .then((data) => setPenaltyStatus(data))
+        .catch((err) => console.error('Failed to fetch penalty status:', err));
+    }
+  }, [currentStep, customer]);
+
   // Clear time slot selection if the selected time becomes unavailable after date change
   useEffect(() => {
     if (!selectedDate || !watchedValues.timeSlot) return;
@@ -167,16 +178,20 @@ function BookPageContent() {
   const calculateTotal = () => {
     const service = SERVICES.find(s => s.id === watchedValues.serviceType);
     if (!service) return 0;
-    
-    const serviceCost = service.basePrice > 0 
-      ? service.basePrice 
+
+    const serviceCost = service.basePrice > 0
+      ? service.basePrice
       : service.pricePerUnit * numberOfUnits;
-    
+
     const addOnsCost = ADD_ONS
       .filter(addon => watchedValues.addOns?.includes(addon.id))
       .reduce((sum, addon) => sum + addon.price, 0);
-    
-    return serviceCost + addOnsCost + TRAVEL_FEE;
+
+    const penaltyFee = penaltyStatus && parseFloat(penaltyStatus.pending_penalty_fee) > 0
+      ? parseFloat(penaltyStatus.pending_penalty_fee)
+      : 0;
+
+    return serviceCost + addOnsCost + TRAVEL_FEE + penaltyFee;
   };
 
   const onSubmit = async (data: BookingFormData) => {
@@ -682,12 +697,58 @@ function BookPageContent() {
                           <option value="cheque">Cheque</option>
                         </select>
                       </div>
-                      <div className="bg-primary-50 p-6 rounded-xl border-2 border-primary-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-base font-semibold text-gray-900">Total Estimated Cost</span>
-                          <span className="text-3xl font-bold text-primary-600">S${calculateTotal()}</span>
+                      {penaltyStatus && parseFloat(penaltyStatus.pending_penalty_fee) > 0 && (
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-sm text-yellow-800">
+                            Note: You have a pending penalty of ${penaltyStatus.pending_penalty_fee} from previous cancellations. This will be included in your total.
+                          </p>
                         </div>
-                        <p className="text-xs text-gray-600">* Final cost may vary based on actual service required</p>
+                      )}
+                      <div className="bg-primary-50 p-6 rounded-xl border-2 border-primary-200">
+                        {(() => {
+                          const service = SERVICES.find(s => s.id === watchedValues.serviceType);
+                          const serviceCost = service
+                            ? (service.basePrice > 0 ? service.basePrice : service.pricePerUnit * numberOfUnits)
+                            : 0;
+                          const addOnsCost = ADD_ONS
+                            .filter(addon => watchedValues.addOns?.includes(addon.id))
+                            .reduce((sum, addon) => sum + addon.price, 0);
+                          const penaltyFee = penaltyStatus && parseFloat(penaltyStatus.pending_penalty_fee) > 0
+                            ? parseFloat(penaltyStatus.pending_penalty_fee)
+                            : 0;
+                          return (
+                            <>
+                              <div className="space-y-1 text-sm mb-3">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Service cost</span>
+                                  <span className="text-gray-900">S${serviceCost}</span>
+                                </div>
+                                {addOnsCost > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Add-ons</span>
+                                    <span className="text-gray-900">S${addOnsCost}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Travel fee</span>
+                                  <span className="text-gray-900">S${TRAVEL_FEE}</span>
+                                </div>
+                                {penaltyFee > 0 && (
+                                  <div className="flex justify-between text-red-700">
+                                    <span>Penalty fee</span>
+                                    <span>S${penaltyFee.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="border-t border-primary-200 pt-2 flex justify-between items-center">
+                                <span className="text-base font-semibold text-gray-900">Total Estimated Cost</span>
+                                <span className="text-3xl font-bold text-primary-600">S${calculateTotal()}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
+                        <p className="text-xs text-gray-600 mt-2">* Final cost may vary based on actual service required</p>
                       </div>
                     </div>
                   </div>

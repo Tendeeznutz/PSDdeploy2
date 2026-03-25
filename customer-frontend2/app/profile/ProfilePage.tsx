@@ -101,6 +101,10 @@ export default function ProfilePage() {
   const [deleteConfirmDevice, setDeleteConfirmDevice] = useState<CustomerAirconDevice | null>(null);
   const [deviceDeleting, setDeviceDeleting] = useState(false);
 
+  // ── Sent Messages & Tab State ──
+  const [sentMessages, setSentMessages] = useState<any[]>([]);
+  const [messageTab, setMessageTab] = useState<'inbox' | 'sent'>('inbox');
+
   // ── Message Compose State ──
   const [composeModalOpen, setComposeModalOpen] = useState(false);
   const [composeForm, setComposeForm] = useState({ subject: '', body: '' });
@@ -131,20 +135,23 @@ export default function ProfilePage() {
         setAppointments(mockAppointments);
         setMessages(mockMessages);
         setUnreadCount(mockMessages.filter(m => !m.isRead).length);
+        setSentMessages([]);
       } else {
         // Try real API
-        const [profileData, devicesData, appointmentsData, messagesData, unreadData] = await Promise.all([
+        const [profileData, devicesData, appointmentsData, messagesData, unreadData, sentData] = await Promise.all([
           customerApi.getProfile(customer.id).catch(() => customer),
           airconDeviceApi.getDevices(customer.id).catch(() => []),
           appointmentApi.getAppointments(customer.id).catch(() => []),
           messageApi.getInbox(customer.id, 'customer').catch(() => []),
           messageApi.getUnreadCount(customer.id, 'customer').catch(() => 0),
+          messageApi.getSent(customer.id, 'customer').catch(() => []),
         ]);
         setProfile(profileData);
         setAirconDevices(devicesData);
         setAppointments(appointmentsData);
         setMessages(messagesData);
         setUnreadCount(unreadData);
+        setSentMessages(sentData);
       }
     } catch (error) {
       console.error('Failed to load profile data:', error);
@@ -172,12 +179,14 @@ export default function ProfilePage() {
     try {
       const isMockUser = customer.id === 'mock-customer-id-123' || customer.customerEmail === 'test@hotmail.com';
       if (!isMockUser) {
-        const [messagesData, unreadData] = await Promise.all([
+        const [messagesData, unreadData, sentData] = await Promise.all([
           messageApi.getInbox(customer.id, 'customer').catch(() => []),
           messageApi.getUnreadCount(customer.id, 'customer').catch(() => 0),
+          messageApi.getSent(customer.id, 'customer').catch(() => []),
         ]);
         setMessages(messagesData);
         setUnreadCount(unreadData);
+        setSentMessages(sentData);
       }
     } catch (error) {
       console.error('Failed to refresh messages:', error);
@@ -1083,6 +1092,30 @@ export default function ProfilePage() {
                   </Button>
                 </div>
 
+                {/* Inbox / Sent Sub-Tabs */}
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setMessageTab('inbox')}
+                    className={`px-4 py-1.5 text-sm rounded-full font-medium transition-colors ${
+                      messageTab === 'inbox'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Inbox ({unreadCount})
+                  </button>
+                  <button
+                    onClick={() => setMessageTab('sent')}
+                    className={`px-4 py-1.5 text-sm rounded-full font-medium transition-colors ${
+                      messageTab === 'sent'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Sent
+                  </button>
+                </div>
+
                 {/* Compose Feedback (outside modal) */}
                 {composeFeedback && !composeModalOpen && (
                   <div
@@ -1101,82 +1134,127 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                {messages.length === 0 ? (
-                  <div className="text-center py-12">
-                    <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-2">No messages yet</p>
-                    <p className="text-sm text-gray-500">You'll receive notifications about your appointments here</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
-                          !message.isRead ? 'bg-blue-50 border-blue-200' : ''
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-gray-900">{message.subject}</h3>
-                              {!message.isRead && (
-                                <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">New</span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-600">
-                              From: {message.senderName} ({message.senderType})
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {format(new Date(message.created_at), 'MMM d, yyyy h:mm a')}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {!message.isRead && (
-                              <button
-                                onClick={async () => {
-                                  const isMockUser = customer?.id === 'mock-customer-id-123' || customer?.customerEmail === 'test@hotmail.com';
-                                  if (isMockUser) {
-                                    setMessages(messages.map(m => m.id === message.id ? { ...m, isRead: true } : m));
-                                    setUnreadCount(Math.max(0, unreadCount - 1));
-                                  } else {
-                                    try {
-                                      await messageApi.markAsRead(message.id);
-                                      setMessages(messages.map(m => m.id === message.id ? { ...m, isRead: true } : m));
-                                      setUnreadCount(Math.max(0, unreadCount - 1));
-                                    } catch (error) {
-                                      console.error('Failed to mark as read:', error);
-                                    }
-                                  }
-                                }}
-                                className="text-xs text-primary-600 hover:text-primary-700"
-                              >
-                                Mark as read
-                              </button>
-                            )}
-                            <button
-                              onClick={() => openCompose(`RE: ${message.subject.replace(/^RE:\s*/i, '')}`)}
-                              className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
-                            >
-                              <Reply className="w-3.5 h-3.5" />
-                              Reply
-                            </button>
-                          </div>
-                        </div>
-                        <p className="text-gray-700 mt-3">{message.body}</p>
-                        {message.relatedAppointment && (
-                          <div className="mt-3 pt-3 border-t">
-                            <Link
-                              href={`/bookings/${message.relatedAppointment}`}
-                              className="text-sm text-primary-600 hover:text-primary-700"
-                            >
-                              View related appointment →
-                            </Link>
-                          </div>
-                        )}
+                {/* Inbox Tab */}
+                {messageTab === 'inbox' && (
+                  <>
+                    {messages.length === 0 ? (
+                      <div className="text-center py-12">
+                        <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600 mb-2">No messages yet</p>
+                        <p className="text-sm text-gray-500">You'll receive notifications about your appointments here</p>
                       </div>
-                    ))}
-                  </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {messages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
+                              !message.isRead ? 'bg-blue-50 border-blue-200' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-semibold text-gray-900">{message.subject}</h3>
+                                  {!message.isRead && (
+                                    <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">New</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-600">
+                                  From: {message.senderName} ({message.senderType})
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {format(new Date(message.created_at), 'MMM d, yyyy h:mm a')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {!message.isRead && (
+                                  <button
+                                    onClick={async () => {
+                                      const isMockUser = customer?.id === 'mock-customer-id-123' || customer?.customerEmail === 'test@hotmail.com';
+                                      if (isMockUser) {
+                                        setMessages(messages.map(m => m.id === message.id ? { ...m, isRead: true } : m));
+                                        setUnreadCount(Math.max(0, unreadCount - 1));
+                                      } else {
+                                        try {
+                                          await messageApi.markAsRead(message.id);
+                                          setMessages(messages.map(m => m.id === message.id ? { ...m, isRead: true } : m));
+                                          setUnreadCount(Math.max(0, unreadCount - 1));
+                                        } catch (error) {
+                                          console.error('Failed to mark as read:', error);
+                                        }
+                                      }
+                                    }}
+                                    className="text-xs text-primary-600 hover:text-primary-700"
+                                  >
+                                    Mark as read
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => openCompose(`RE: ${message.subject.replace(/^RE:\s*/i, '')}`)}
+                                  className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                                >
+                                  <Reply className="w-3.5 h-3.5" />
+                                  Reply
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-gray-700 mt-3">{message.body}</p>
+                            {message.relatedAppointment && (
+                              <div className="mt-3 pt-3 border-t">
+                                <Link
+                                  href={`/bookings/${message.relatedAppointment}`}
+                                  className="text-sm text-primary-600 hover:text-primary-700"
+                                >
+                                  View related appointment →
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Sent Tab */}
+                {messageTab === 'sent' && (
+                  <>
+                    {sentMessages.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Send className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600 mb-2">No sent messages yet</p>
+                        <Button size="sm" onClick={() => openCompose()} className="mt-3">
+                          <Send className="w-4 h-4 mr-1" />
+                          Compose
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {sentMessages.map((message) => (
+                          <div
+                            key={message.id}
+                            className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-semibold text-gray-900">{message.subject}</h3>
+                                </div>
+                                <p className="text-sm text-gray-600">
+                                  To: {message.recipientName} ({message.recipientType})
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {format(new Date(message.created_at), 'MMM d, yyyy h:mm a')}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="text-gray-700 mt-3 line-clamp-2">{message.body}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

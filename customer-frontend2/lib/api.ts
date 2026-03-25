@@ -67,6 +67,21 @@ export const customerApi = {
     const response = await api.patch(`/customers/${customerId}/`, data);
     return response.data;
   },
+
+  forgotPassword: async (email: string) => {
+    const response = await api.post('/customers/forgot-password/', { email });
+    return response.data;
+  },
+
+  validateResetToken: async (token: string) => {
+    const response = await api.get('/customers/validate-reset-token/', { params: { token } });
+    return response.data;
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const response = await api.post('/customers/reset-password/', { token, newPassword });
+    return response.data;
+  },
 };
 
 // Aircon Devices API
@@ -194,6 +209,11 @@ export const appointmentApi = {
 
   rateTechnician: async (appointmentId: string, data: { rating: number; customerId: string }) => {
     const response = await api.post(`/appointments/${appointmentId}/rate-technician/`, data);
+    return response.data;
+  },
+
+  getPenaltyStatus: async (customerId: string) => {
+    const response = await api.get('/appointments/penalty-status/', { params: { customerId } });
     return response.data;
   },
 };
