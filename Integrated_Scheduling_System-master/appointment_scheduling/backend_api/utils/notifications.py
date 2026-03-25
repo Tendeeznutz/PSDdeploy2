@@ -62,8 +62,10 @@ def send_appointment_confirmation(appointment, customer, technician=None):
     status_map = {"1": "Pending", "2": "Confirmed", "3": "Completed", "4": "Cancelled"}
     status = status_map.get(appointment.appointmentStatus, "Unknown")
 
-    # Get number of aircon units
-    num_aircons = len(appointment.airconToService) if appointment.airconToService else 0
+    # Get number of aircon units (sum actual numberOfUnits from each device)
+    from ..models import CustomerAirconDevices
+    aircon_devices = CustomerAirconDevices.objects.filter(id__in=appointment.airconToService) if appointment.airconToService else []
+    num_aircons = sum(d.numberOfUnits for d in aircon_devices) if aircon_devices else 0
 
     # Email to Customer
     customer_subject = f"Appointment Confirmation - AirServe"

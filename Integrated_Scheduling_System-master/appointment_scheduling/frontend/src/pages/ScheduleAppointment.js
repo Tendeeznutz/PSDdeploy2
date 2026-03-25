@@ -30,10 +30,18 @@ function ScheduleAppointment() {
         { value: 'paynow', label: 'PayLah/PayNow' },
     ];
 
+    // Calculate total units across all selected aircon devices
+    const getTotalUnits = () => {
+        return userAirconList
+            .filter(a => selectedAircons.includes(a.id))
+            .reduce((sum, a) => sum + (a.numberOfUnits || 1), 0);
+    };
+
     // Calculate total cost based on selected aircons
     const calculateTotalCost = () => {
-        if (selectedAircons.length === 0) return 0;
-        const serviceCost = selectedAircons.length * SERVICE_COST_PER_AIRCON;
+        const totalUnits = getTotalUnits();
+        if (totalUnits === 0) return 0;
+        const serviceCost = totalUnits * SERVICE_COST_PER_AIRCON;
         return serviceCost + TRAVEL_FEE;
     };
 
@@ -213,8 +221,8 @@ function ScheduleAppointment() {
                             <h3 className="text-sm font-bold text-blue-800 mb-2">Cost Summary</h3>
                             <div className="text-sm text-blue-700">
                                 <div className="flex justify-between mb-1">
-                                    <span>Service Fee ({selectedAircons.length} aircon{selectedAircons.length !== 1 ? 's' : ''} x ${SERVICE_COST_PER_AIRCON})</span>
-                                    <span>${selectedAircons.length * SERVICE_COST_PER_AIRCON}.00</span>
+                                    <span>Service Fee ({getTotalUnits()} unit{getTotalUnits() !== 1 ? 's' : ''} x ${SERVICE_COST_PER_AIRCON})</span>
+                                    <span>${getTotalUnits() * SERVICE_COST_PER_AIRCON}.00</span>
                                 </div>
                                 <div className="flex justify-between mb-1">
                                     <span>Travel Fee</span>

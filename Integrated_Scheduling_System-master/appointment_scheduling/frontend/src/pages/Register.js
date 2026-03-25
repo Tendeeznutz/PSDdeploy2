@@ -18,6 +18,7 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(true);
   const navigate = useNavigate();
 
@@ -64,8 +65,12 @@ const Register = () => {
 
       // Check the status code
       if (response.status === 201) {
-        // Successful registration
-        navigate('/login');
+        setSuccessMessage('Registration successful! Redirecting to login...');
+        setErrorMessage('');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+        return;
       } else {
         // Registration failed
         console.error('Registration failed:', response.data);
@@ -231,12 +236,17 @@ const Register = () => {
                 </p>
               )}
           </span>
+          {successMessage && (
+            <div className="mb-4 p-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg text-center">
+              {successMessage}
+            </div>
+          )}
           {errorMessage && <div className="mb-4 text-sm text-red-500">{errorMessage}</div>}
           <Button
             className="mt-6"
             fullWidth
             type="submit"
-            disabled={isSubmitDisabled}
+            disabled={isSubmitDisabled || !!successMessage}
           >
             Register
           </Button>

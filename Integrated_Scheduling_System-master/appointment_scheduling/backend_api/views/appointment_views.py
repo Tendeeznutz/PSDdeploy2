@@ -99,7 +99,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             # Get aircon details
             aircon_devices = CustomerAirconDevices.objects.filter(id__in=aircon_ids)
             aircon_names = [device.airconName for device in aircon_devices]
-            num_aircons = len(aircon_ids)
+            num_aircons = sum(device.numberOfUnits for device in aircon_devices)
 
             # Calculate costs
             service_cost = num_aircons * SERVICE_COST_PER_AIRCON
