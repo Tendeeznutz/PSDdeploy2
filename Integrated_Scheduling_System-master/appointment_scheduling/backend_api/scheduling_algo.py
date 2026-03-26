@@ -30,6 +30,9 @@ LUNCH_BREAK_DURATION = 60 * 60  # 1 hour in seconds
 # Fixed 30km range for all vehicle-based travel types across Singapore
 SEARCH_RANGE_METERS = 30000
 
+# Appointment statuses that block a technician's time (exclude Cancelled)
+APPOINTMENT_STATUSES_BLOCKING = ["1", "2", "3"]  # Pending, Confirmed, Completed
+
 
 def _get_technician_effective_location(technician, appointment_start_time):
     """
@@ -56,7 +59,7 @@ def _get_technician_effective_location(technician, appointment_start_time):
         technicianId=technician.id,
         appointmentStartTime__gte=day_start_ts,
         appointmentStartTime__lt=appointment_start_time,
-        appointmentStatus__in=["1", "2", "3"],  # Not cancelled
+        appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,  # Not cancelled
     ).order_by("-appointmentStartTime").first()
 
     if prior_appointment:
@@ -196,10 +199,16 @@ def get_common_unavailable_time(nearby_technicians) -> list[Any]:
     """
     # if there exist technician with no appointments, return empty list
     for technician in nearby_technicians:
-        if len(Appointments.objects.filter(technicianId=technician)) == 0:
+        if Appointments.objects.filter(
+            technicianId=technician,
+            appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
+        ).count() == 0:
             return []
 
-    appointments = Appointments.objects.filter(technicianId__in=nearby_technicians)
+    appointments = Appointments.objects.filter(
+        technicianId__in=nearby_technicians,
+        appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
+    )
     return find_common_timerange(appointments)
 
 
@@ -358,7 +367,8 @@ def get_technician_to_assign(
         and current_technician_id in nearby_technicians
     ):
         technician_appointments = Appointments.objects.filter(
-            technicianId=current_technician_id
+            technicianId=current_technician_id,
+            appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
         )
         if (
             current_appointment is not None
@@ -377,7 +387,10 @@ def get_technician_to_assign(
 
     # Iterate through technicians in distance order (closest first) and return the first available
     for technician in nearby_technicians:
-        technician_appointments = Appointments.objects.filter(technicianId=technician)
+        technician_appointments = Appointments.objects.filter(
+            technicianId=technician,
+            appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
+        )
         if (
             current_appointment is not None
             and current_appointment in technician_appointments
@@ -453,6 +466,7 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
         technicianId=technician_id,
         appointmentStartTime__gte=day_start_timestamp,
         appointmentStartTime__lt=day_end_timestamp,
+        appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
     ).order_by("appointmentStartTime")
 
     # Generate available slots
