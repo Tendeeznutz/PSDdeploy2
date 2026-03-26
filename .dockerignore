@@ -43,6 +43,6 @@ audit.log
 docker-compose*.yml
 infra/caddy/
 
-# Claude Code
+# Temp files
 .claude/
 tmpclaude-*
