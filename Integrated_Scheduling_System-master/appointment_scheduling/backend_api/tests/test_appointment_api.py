@@ -37,6 +37,8 @@ _THROTTLE_OVERRIDE = {
 @patch('backend_api.views.customer_views.geo.get_location_from_postal', return_value='1.3521,103.8198')
 class AppointmentAPITests(APITestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         from rest_framework.throttling import SimpleRateThrottle
         SimpleRateThrottle.THROTTLE_RATES = {
             'anon': '1000/minute', 'user': '1000/minute',
@@ -532,7 +534,7 @@ class AppointmentAPITests(APITestCase):
         }
         response = self.client.post(f'{self.base_url}guest-booking/', payload, format='json')
         self.assertEqual(response.status_code, 400)
-        self.assertIn('Missing required fields', str(response.data))
+        self.assertIn('error', response.data)
 
     # 12f. Guest booking missing phone returns 400
     def test_guest_booking_missing_phone(self, *mocks):
@@ -613,3 +615,187 @@ class AppointmentAPITests(APITestCase):
         self.assertEqual(response.status_code, 201)
         # send_email is called for guest booking
         mock_send_email.assert_called()
+
+
+@override_settings(REST_FRAMEWORK={**_THROTTLE_OVERRIDE})
+@patch('backend_api.views.appointment_views.geo_onemap.get_location_from_postal', return_value='1.3521,103.8198')
+@patch('backend_api.views.appointment_views.sendMail.send_email')
+@patch('backend_api.views.appointment_views.send_appointment_confirmation')
+@patch('backend_api.views.appointment_views.send_appointment_cancellation')
+@patch('backend_api.views.appointment_views.get_nearby_technicians', return_value=[])
+@patch('backend_api.views.appointment_views.get_technician_to_assign', return_value=None)
+@patch('backend_api.views.appointment_views.check_and_apply_penalty', return_value={'penalty_applied': False})
+@patch('backend_api.views.customer_views.geo.get_location_from_postal', return_value='1.3521,103.8198')
+class GuestBookingMultiDeviceTests(APITestCase):
+    """Tests for multi-AC guest booking via airconDevices array."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        from rest_framework.throttling import SimpleRateThrottle
+        SimpleRateThrottle.THROTTLE_RATES = {
+            'anon': '1000/minute', 'user': '1000/minute',
+            'login': '1000/minute', 'guest_booking': '1000/minute',
+        }
+
+        self.client = APIClient()
+        self.base_url = '/api/appointments/'
+
+        self.technician = Technicians.objects.create(
+            technicianName='Multi Tech',
+            technicianPostalCode='654321',
+            technicianAddress='2 Tech Road',
+            technicianPhone='81234567',
+            technicianEmail='tech@example.com',
+            technicianPassword=make_password('techpass'),
+            technicianStatus='1',
+            technicianLocation='1.3522,103.8199',
+        )
+
+    def _future_start(self, offset=86400):
+        return int(time.time()) + offset
+
+    # ─── Multi-device tests ──────────────────────────────────────────
+
+    def test_multi_device_creates_multiple_aircon_records(self, *mocks):
+        """Sending airconDevices array should create multiple CustomerAirconDevices."""
+        start = self._future_start()
+        initial_device_count = CustomerAirconDevices.objects.count()
+        payload = {
+            'customerName': 'Guest User',
+            'customerPhone': '91234567',
+            'customerEmail': 'guest@test.com',
+            'customerAddress': '123 Test Street',
+            'customerPostalCode': '123456',
+            'appointmentStartTime': start,
+            'paymentMethod': 'cash',
+            'airconDevices': [
+                {'brand': 'Daikin', 'model': 'Inverter', 'units': 2},
+                {'brand': 'Mitsubishi', 'model': 'Standard', 'units': 1},
+            ],
+        }
+        response = self.client.post(
+            f'{self.base_url}guest-booking/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, 201)
+        # Two new device records should have been created
+        self.assertEqual(
+            CustomerAirconDevices.objects.count(), initial_device_count + 2
+        )
+
+    def test_multi_device_aircon_to_service_has_all_ids(self, *mocks):
+        """Appointment's airconToService should contain all device IDs."""
+        start = self._future_start()
+        payload = {
+            'customerName': 'Guest IDs',
+            'customerPhone': '91234568',
+            'customerEmail': 'guestids@test.com',
+            'customerAddress': '123 Test Street',
+            'customerPostalCode': '123456',
+            'appointmentStartTime': start,
+            'paymentMethod': 'cash',
+            'airconDevices': [
+                {'brand': 'Daikin', 'model': 'Inverter', 'units': 2},
+                {'brand': 'Mitsubishi', 'model': 'Standard', 'units': 1},
+            ],
+        }
+        response = self.client.post(
+            f'{self.base_url}guest-booking/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, 201)
+        appt_id = response.data['appointment']['id']
+        appt = Appointments.objects.get(id=appt_id)
+        # airconToService should have 2 device IDs
+        self.assertEqual(len(appt.airconToService), 2)
+
+    def test_multi_device_end_time_uses_total_units(self, *mocks):
+        """End time should be start + (total_units * 3600)."""
+        start = self._future_start()
+        payload = {
+            'customerName': 'Guest EndTime',
+            'customerPhone': '91234569',
+            'customerEmail': 'guestend@test.com',
+            'customerAddress': '123 Test Street',
+            'customerPostalCode': '123456',
+            'appointmentStartTime': start,
+            'paymentMethod': 'cash',
+            'airconDevices': [
+                {'brand': 'Daikin', 'model': 'Inverter', 'units': 2},
+                {'brand': 'Mitsubishi', 'model': 'Standard', 'units': 1},
+            ],
+        }
+        response = self.client.post(
+            f'{self.base_url}guest-booking/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, 201)
+        appt_id = response.data['appointment']['id']
+        appt = Appointments.objects.get(id=appt_id)
+        # total_units = 2 + 1 = 3, so end_time = start + 3*3600
+        expected_end = start + (3 * 3600)
+        self.assertEqual(appt.appointmentEndTime, expected_end)
+
+    def test_single_device_backward_compat(self, *mocks):
+        """Legacy single-device format should still work."""
+        start = self._future_start()
+        payload = {
+            'customerName': 'Guest Legacy',
+            'customerPhone': '91234570',
+            'customerEmail': 'guestlegacy@test.com',
+            'customerAddress': '456 Test Street',
+            'customerPostalCode': '123456',
+            'airconBrand': 'Daikin',
+            'airconModel': 'Split',
+            'numberOfUnits': 2,
+            'appointmentStartTime': start,
+            'paymentMethod': 'cash',
+        }
+        response = self.client.post(
+            f'{self.base_url}guest-booking/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_multi_device_missing_brand_rejected(self, *mocks):
+        """Device without brand should return 400."""
+        start = self._future_start()
+        payload = {
+            'customerName': 'Guest NoBrand',
+            'customerPhone': '91234571',
+            'customerEmail': 'guestnobrand@test.com',
+            'customerAddress': '789 Test Street',
+            'customerPostalCode': '123456',
+            'appointmentStartTime': start,
+            'paymentMethod': 'cash',
+            'airconDevices': [
+                {'model': 'Inverter', 'units': 1},  # Missing brand
+            ],
+        }
+        response = self.client.post(
+            f'{self.base_url}guest-booking/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_multi_device_correct_aircon_type(self, *mocks):
+        """Device brand should map to correct airconType (not hardcoded 'split')."""
+        start = self._future_start()
+        payload = {
+            'customerName': 'Guest Type',
+            'customerPhone': '91234572',
+            'customerEmail': 'guesttype@test.com',
+            'customerAddress': '321 Test Street',
+            'customerPostalCode': '123456',
+            'appointmentStartTime': start,
+            'paymentMethod': 'cash',
+            'airconDevices': [
+                {'brand': 'Mitsubishi', 'model': 'Standard', 'units': 1},
+            ],
+        }
+        response = self.client.post(
+            f'{self.base_url}guest-booking/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, 201)
+        # Find the created device — should have airconType 'mitsubishi', not 'split'
+        appt_id = response.data['appointment']['id']
+        appt = Appointments.objects.get(id=appt_id)
+        device_id = appt.airconToService[0]
+        device = CustomerAirconDevices.objects.get(id=device_id)
+        self.assertEqual(device.airconType, 'mitsubishi')

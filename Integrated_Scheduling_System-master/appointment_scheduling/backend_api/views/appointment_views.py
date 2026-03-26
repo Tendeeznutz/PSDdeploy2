@@ -933,8 +933,10 @@ AirServe Team
         - customerEmail
         - customerAddress
         - customerPostalCode
-        - airconBrand
-        - airconModel (optional)
+        - airconBrand (legacy single-device)
+        - airconModel (optional, legacy single-device)
+        - numberOfUnits (optional, legacy single-device)
+        - airconDevices (new multi-device format: [{"brand": "...", "model": "...", "units": N}, ...])
         - appointmentStartTime
         - paymentMethod
         """
@@ -948,11 +950,37 @@ AirServe Team
             email = request.data.get("customerEmail")
             address = request.data.get("customerAddress")
             postal_code = request.data.get("customerPostalCode")
-            aircon_brand = request.data.get("airconBrand")
-            aircon_model = request.data.get("airconModel", "Standard")
-            number_of_units = int(request.data.get("numberOfUnits", 1))
             appointment_time = request.data.get("appointmentStartTime")
             payment_method = request.data.get("paymentMethod", "cash")
+
+            # Parse aircon devices — support both new multi-device and legacy single-device format
+            aircon_devices_data = request.data.get("airconDevices", None)
+
+            if aircon_devices_data and isinstance(aircon_devices_data, list):
+                # New multi-device format
+                devices = aircon_devices_data
+            else:
+                # Legacy single-device format (backward compat)
+                devices = [{
+                    "brand": request.data.get("airconBrand", ""),
+                    "model": request.data.get("airconModel", "Standard"),
+                    "units": int(request.data.get("numberOfUnits", 1))
+                }]
+
+            # Validate devices
+            if not devices or len(devices) == 0:
+                return Response({"error": "At least one aircon device is required"}, status=400)
+
+            for device in devices:
+                if not device.get("brand"):
+                    return Response({"error": "Aircon brand is required for each device"}, status=400)
+                if int(device.get("units", 1)) < 1:
+                    return Response({"error": "Number of units must be at least 1"}, status=400)
+
+            total_units = sum(int(d.get("units", 1)) for d in devices)
+
+            # Use first device brand for technician assignment and backward-compat references
+            aircon_brand = devices[0].get("brand", "") if devices else ""
 
             # Validate required fields
             if not all(
@@ -1004,15 +1032,31 @@ AirServe Team
                     ),  # Hashed random password for guest
                 )
 
-            # Create a temporary aircon device for this booking
+            # Create aircon device records for this booking
             # Add timestamp to make the name unique for each booking
             booking_timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
-            aircon_device = CustomerAirconDevices.objects.create(
-                customerId=customer,
-                airconName=f"{aircon_brand} - {aircon_model} (Booking {booking_timestamp})",
-                numberOfUnits=number_of_units,
-                airconType="split",  # Default type for guest bookings
-            )
+
+            # Map brand name to airconType choice
+            brand_to_type = {
+                "Daikin": "daikin", "Mitsubishi": "mitsubishi", "Panasonic": "panasonic",
+                "LG": "lg", "Samsung": "samsung", "Fujitsu": "fujitsu", "Sharp": "sharp",
+                "Toshiba": "toshiba", "Hitachi": "hitachi", "York": "york",
+            }
+
+            aircon_device_ids = []
+            for device in devices:
+                brand = device.get("brand", "")
+                model = device.get("model", "Standard")
+                units = int(device.get("units", 1))
+                aircon_type = brand_to_type.get(brand, "other")
+
+                aircon_device = CustomerAirconDevices.objects.create(
+                    customerId=customer,
+                    airconName=f"{brand} - {model} (Booking {booking_timestamp})",
+                    numberOfUnits=units,
+                    airconType=aircon_type,
+                )
+                aircon_device_ids.append(str(aircon_device.id))
 
             # Get nearby technicians and find available slot (prioritize specialists for this brand)
             nearby_technicians = get_nearby_technicians(
@@ -1021,7 +1065,7 @@ AirServe Team
                 appointment_start_time=appointment_time,
             )
             appointment_end_time = appointment_time + (
-                3600 * number_of_units
+                3600 * total_units
             )  # 1 hour per aircon unit
 
             # Try to assign a technician
@@ -1056,8 +1100,8 @@ AirServe Team
                 paymentMethod=payment_method,
             )
 
-            # Link the aircon device to the appointment (airconToService is a JSONField list of IDs)
-            appointment.airconToService = [str(aircon_device.id)]
+            # Link all aircon devices to the appointment (airconToService is a JSONField list of IDs)
+            appointment.airconToService = aircon_device_ids
             appointment.save()
 
             # Send email confirmation directly to guest's email
@@ -1065,9 +1109,20 @@ AirServe Team
             formatted_time = appointment_datetime.strftime("%B %d, %Y at %I:%M %p")
 
             # Calculate costs
-            service_fee = 50 * number_of_units  # $50 per unit
+            service_fee = 50 * total_units  # $50 per unit
             travel_fee = 10
             total_cost = service_fee + travel_fee
+
+            # Build device listing for emails
+            if len(devices) == 1:
+                device_summary = f"Aircon: {devices[0].get('brand', '')} - {devices[0].get('model', 'Standard')}"
+                device_detail = f"Number of Units: {total_units}"
+            else:
+                device_lines = []
+                for i, d in enumerate(devices, 1):
+                    device_lines.append(f"  {i}. {d.get('brand', '')} - {d.get('model', 'Standard')} ({int(d.get('units', 1))} unit(s))")
+                device_summary = "Aircon Devices:\n" + "\n".join(device_lines)
+                device_detail = f"Total Units: {total_units}"
 
             # Build technician info for customer email
             technician_note = ""
@@ -1097,13 +1152,13 @@ APPOINTMENT DETAILS
 ===================
 Booking Reference: {str(appointment.id)[:8].upper()}
 Date & Time: {formatted_time}
-Aircon: {aircon_brand} - {aircon_model}
-Number of Units: {number_of_units}
+{device_summary}
+{device_detail}
 Address: {address}, Singapore {postal_code}
 {technician_note}
 COST BREAKDOWN
 ==============
-Service Fee ({number_of_units} unit(s) x $50):  ${service_fee:.2f}
+Service Fee ({total_units} unit(s) x $50):  ${service_fee:.2f}
 Travel Fee:                       $10.00
 -------------------------------------------
 TOTAL AMOUNT:                     ${total_cost:.2f}
@@ -1149,9 +1204,9 @@ Address: {address}, Singapore {postal_code}
 
 SERVICE DETAILS
 ===============
-Aircon: {aircon_brand} - {aircon_model}
-Number of Units: {number_of_units}
-Estimated Duration: {number_of_units} hour(s)
+{device_summary}
+{device_detail}
+Estimated Duration: {total_units} hour(s)
 
 ACTION REQUIRED
 ===============
@@ -1214,8 +1269,8 @@ Address: {address}, Singapore {postal_code}
 
 SERVICE DETAILS
 ===============
-Aircon: {aircon_brand} - {aircon_model}
-Number of Units: {number_of_units}
+{device_summary}
+{device_detail}
 Payment Method: {payment_method.replace("_", " ").title()}
 Estimated Cost: ${total_cost:.2f}
 
@@ -1251,6 +1306,9 @@ AirServe Scheduling System
                     "appointment": response_data,
                     "customerId": str(customer.id),
                     "isGuestBooking": not existing_customer,
+                    "totalUnits": total_units,
+                    "numberOfDevices": len(devices),
+                    "airconDeviceIds": aircon_device_ids,
                 },
                 status=201,
             )

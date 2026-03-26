@@ -16,8 +16,16 @@ logger = logging.getLogger(__name__)
 
 SGT = ZoneInfo("Asia/Singapore")
 
-# Service and travel time buffer in seconds (2.5 hours)
-TIME_BUFFER_SECONDS = 2.5 * 60 * 60  # 9000 seconds
+# Travel buffer between appointments in seconds (30 minutes)
+# Service duration is already included in appointment end time,
+# so this buffer only accounts for travel/transition time.
+TRAVEL_BUFFER_SECONDS = 30 * 60  # 1800 seconds
+TIME_BUFFER_SECONDS = TRAVEL_BUFFER_SECONDS  # backward compat alias
+
+# Lunch break period (12:00 - 13:00 SGT)
+LUNCH_BREAK_START = "12:00"
+LUNCH_BREAK_END = "13:00"
+LUNCH_BREAK_DURATION = 60 * 60  # 1 hour in seconds
 
 # Fixed 30km range for all vehicle-based travel types across Singapore
 SEARCH_RANGE_METERS = 30000
@@ -271,6 +279,18 @@ def is_technician_available_on_day(technician_id, appointment_timestamp) -> bool
     return True
 
 
+def _overlaps_lunch_break(start_timestamp, end_timestamp):
+    """Check if a time window overlaps with the lunch break (12:00-13:00 SGT)."""
+    dt_start = datetime.fromtimestamp(start_timestamp, tz=SGT)
+    dt_end = datetime.fromtimestamp(end_timestamp, tz=SGT)
+
+    lunch_start = dt_start.replace(hour=12, minute=0, second=0, microsecond=0)
+    lunch_end = dt_start.replace(hour=13, minute=0, second=0, microsecond=0)
+
+    # Overlap exists if appointment starts before lunch ends AND ends after lunch starts
+    return dt_start < lunch_end and dt_end > lunch_start
+
+
 def is_slot_available(
     appointment_start_time,
     appointment_end_time,
@@ -278,7 +298,8 @@ def is_slot_available(
     technician_id=None,
 ) -> bool:
     """
-    Check if a time slot is available for a technician, considering 2.5 hour buffer for each appointment.
+    Check if a time slot is available for a technician, considering travel buffer
+    and lunch break (12:00-13:00 SGT) for each appointment.
     :param appointment_start_time: Unix timestamp of appointment start
     :param appointment_end_time: Unix timestamp of appointment end
     :param technician_appointments: Queryset of existing appointments for the technician
@@ -290,13 +311,18 @@ def is_slot_available(
         if not is_technician_available_on_day(technician_id, appointment_start_time):
             return False
 
+    # Check lunch break overlap
+    if _overlaps_lunch_break(appointment_start_time, appointment_end_time):
+        logger.info("[AVAIL] -> Slot rejected (overlaps lunch break 12:00-13:00)")
+        return False
+
     for technician_appointment in technician_appointments:
-        # Apply 2.5 hour buffer to existing appointments
+        # Apply travel buffer to existing appointments
         buffered_start = technician_appointment.appointmentStartTime
-        buffered_end = technician_appointment.appointmentEndTime + TIME_BUFFER_SECONDS
+        buffered_end = technician_appointment.appointmentEndTime + TRAVEL_BUFFER_SECONDS
 
         # Check if the new appointment (with its own buffer) conflicts with existing appointment
-        new_appointment_end_with_buffer = appointment_end_time + TIME_BUFFER_SECONDS
+        new_appointment_end_with_buffer = appointment_end_time + TRAVEL_BUFFER_SECONDS
 
         if (
             appointment_start_time < buffered_end
@@ -433,7 +459,7 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
     available_slots = []
     current_time = work_start
     duration_delta = timedelta(hours=duration_hours)
-    buffer_delta = timedelta(seconds=TIME_BUFFER_SECONDS)
+    buffer_delta = timedelta(seconds=TRAVEL_BUFFER_SECONDS)
 
     for appointment in existing_appointments:
         appointment_start = datetime.fromtimestamp(appointment.appointmentStartTime, tz=SGT)
@@ -443,9 +469,13 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
 
         # Check if there's a slot before this appointment
         while current_time + duration_delta + buffer_delta <= appointment_start:
-            slot_start = int(current_time.timestamp())
-            slot_end = int((current_time + duration_delta).timestamp())
-            available_slots.append((slot_start, slot_end))
+            # Skip slots that overlap with lunch break
+            slot_start_ts = int(current_time.timestamp())
+            slot_end_ts = int((current_time + duration_delta).timestamp())
+            if _overlaps_lunch_break(slot_start_ts, slot_end_ts):
+                current_time += timedelta(minutes=30)
+                continue
+            available_slots.append((slot_start_ts, slot_end_ts))
             current_time += timedelta(minutes=30)  # 30-minute intervals
 
         # Move past this appointment
@@ -453,9 +483,13 @@ def get_available_time_slots(technician_id, date_str, duration_hours=1):
 
     # Check remaining time after last appointment
     while current_time + duration_delta + buffer_delta <= work_end:
-        slot_start = int(current_time.timestamp())
-        slot_end = int((current_time + duration_delta).timestamp())
-        available_slots.append((slot_start, slot_end))
+        # Skip slots that overlap with lunch break
+        slot_start_ts = int(current_time.timestamp())
+        slot_end_ts = int((current_time + duration_delta).timestamp())
+        if _overlaps_lunch_break(slot_start_ts, slot_end_ts):
+            current_time += timedelta(minutes=30)
+            continue
+        available_slots.append((slot_start_ts, slot_end_ts))
         current_time += timedelta(minutes=30)
 
     return available_slots

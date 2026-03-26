@@ -14,7 +14,12 @@ from backend_api.models import (
 )
 from backend_api.scheduling_algo import (
     TIME_BUFFER_SECONDS,
+    TRAVEL_BUFFER_SECONDS,
+    LUNCH_BREAK_START,
+    LUNCH_BREAK_END,
     SEARCH_RANGE_METERS,
+    SGT,
+    _overlaps_lunch_break,
     find_common_timerange,
     get_available_time_slots,
     get_common_unavailable_time,
@@ -364,7 +369,7 @@ class GetAvailableTimeSlotsTests(TestCase):
         )
         slots = get_available_time_slots(self.tech.id, "2025-01-06", 1)
         self.assertIsInstance(slots, list)
-        # With 8-hr window, 1-hr slots + 2.5-hr buffer → multiple slots
+        # With 8-hr window, 1-hr slots + 30-min buffer → multiple slots
         self.assertGreater(len(slots), 0)
         for start, end in slots:
             self.assertGreater(end, start)
@@ -418,10 +423,10 @@ class GetAvailableTimeSlotsTests(TestCase):
 
 
 class TimeBufferTests(TestCase):
-    """Tests for the 2.5-hour buffer between appointments."""
+    """Tests for the travel buffer between appointments."""
 
-    def test_buffer_is_9000_seconds(self):
-        self.assertEqual(TIME_BUFFER_SECONDS, 9000)
+    def test_buffer_is_1800_seconds(self):
+        self.assertEqual(TIME_BUFFER_SECONDS, 1800)
 
     def test_slot_available_after_buffer(self):
         """A slot starting exactly at end + buffer should be available."""
@@ -440,11 +445,11 @@ class TimeBufferTests(TestCase):
 
     def test_slot_before_existing_respects_new_buffer(self):
         """New appointment's buffer must not overlap with existing start."""
-        existing = _MockAppt(20000, 23600)
-        # New appointment ends at 11001, buffer would go to 11001+9000=20001
-        # This overlaps with the existing start at 20000
-        new_start = 7401
-        new_end = 11001
+        existing = _MockAppt(5000, 8600)
+        # New appointment ends at 3500, buffer would go to 3500+1800=5300
+        # This overlaps with the existing start at 5000
+        new_start = 0
+        new_end = 3500
         self.assertFalse(is_slot_available(new_start, new_end, [existing]))
 
     def test_multiple_existing_appointments_respected(self):
@@ -526,3 +531,95 @@ class IsTechnicianAvailableEdgeCaseTests(TestCase):
         )
         ts_9am = int(datetime(2025, 1, 6, 9, 0, 0).timestamp())
         self.assertTrue(is_technician_available_on_day(self.tech.id, ts_9am))
+
+
+class TravelBufferTests(TestCase):
+    """Tests for the renamed TRAVEL_BUFFER_SECONDS constant."""
+
+    def test_travel_buffer_is_30_minutes(self):
+        """Buffer should be 30 minutes (1800 seconds), not 2.5 hours."""
+        self.assertEqual(TRAVEL_BUFFER_SECONDS, 1800)
+
+    def test_backward_compat_alias(self):
+        """TIME_BUFFER_SECONDS should equal TRAVEL_BUFFER_SECONDS."""
+        self.assertEqual(TIME_BUFFER_SECONDS, TRAVEL_BUFFER_SECONDS)
+
+
+class LunchBreakTests(TestCase):
+    """Tests for the lunch break constraint (12:00-13:00 SGT)."""
+
+    def setUp(self):
+        self.tech = Technicians.objects.create(
+            technicianName="LunchTech",
+            technicianPostalCode="123456",
+            technicianAddress="a",
+            technicianPhone="91234567",
+            technicianPassword=make_password("p"),
+            technicianLocation="1,1",
+        )
+        TechnicianAvailability.objects.create(
+            technicianId=self.tech,
+            dayOfWeek="monday",
+            startTime="09:00",
+            endTime="18:00",
+            isAvailable=True,
+        )
+        # Use a known Monday in SGT
+        self._monday = datetime(2025, 1, 6, tzinfo=SGT)
+
+    def _ts(self, hour, minute=0):
+        """Return a Unix timestamp for the test Monday at the given SGT hour."""
+        dt = self._monday.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return int(dt.timestamp())
+
+    def test_slot_overlapping_lunch_rejected(self):
+        """An appointment from 11:30-12:30 should be rejected (overlaps lunch)."""
+        start = self._ts(11, 30)
+        end = self._ts(12, 30)
+        self.assertTrue(_overlaps_lunch_break(start, end))
+
+    def test_slot_before_lunch_accepted(self):
+        """An appointment from 10:00-11:00 should be accepted (no overlap)."""
+        start = self._ts(10)
+        end = self._ts(11)
+        self.assertFalse(_overlaps_lunch_break(start, end))
+
+    def test_slot_after_lunch_accepted(self):
+        """An appointment from 13:00-14:00 should be accepted."""
+        start = self._ts(13)
+        end = self._ts(14)
+        self.assertFalse(_overlaps_lunch_break(start, end))
+
+    def test_slot_during_lunch_rejected(self):
+        """An appointment from 12:00-13:00 should be rejected."""
+        start = self._ts(12)
+        end = self._ts(13)
+        self.assertTrue(_overlaps_lunch_break(start, end))
+
+    def test_slot_ending_at_lunch_start_accepted(self):
+        """An appointment from 11:00-12:00 should be accepted (ends exactly at lunch start)."""
+        start = self._ts(11)
+        end = self._ts(12)
+        self.assertFalse(_overlaps_lunch_break(start, end))
+
+    def test_slot_starting_at_lunch_end_accepted(self):
+        """An appointment from 13:00-14:00 should be accepted (starts exactly at lunch end)."""
+        start = self._ts(13)
+        end = self._ts(14)
+        self.assertFalse(_overlaps_lunch_break(start, end))
+
+    def test_available_time_slots_excludes_lunch(self):
+        """get_available_time_slots should not return slots during lunch."""
+        slots = get_available_time_slots(self.tech.id, "2025-01-06", 1)
+        self.assertGreater(len(slots), 0)
+        for slot_start, slot_end in slots:
+            dt_start = datetime.fromtimestamp(slot_start, tz=SGT)
+            dt_end = datetime.fromtimestamp(slot_end, tz=SGT)
+            # No slot should overlap with 12:00-13:00 SGT
+            lunch_start = dt_start.replace(hour=12, minute=0, second=0, microsecond=0)
+            lunch_end = dt_start.replace(hour=13, minute=0, second=0, microsecond=0)
+            overlaps = dt_start < lunch_end and dt_end > lunch_start
+            self.assertFalse(
+                overlaps,
+                f"Slot {dt_start.strftime('%H:%M')}-{dt_end.strftime('%H:%M')} overlaps lunch break",
+            )

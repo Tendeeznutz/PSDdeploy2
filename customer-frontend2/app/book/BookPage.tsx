@@ -26,8 +26,9 @@ import { format } from 'date-fns';
 
 const STEPS = ['Service', 'Address', 'Schedule', 'Contact', 'Review'];
 
-// Buffer used by the backend (2.5 hours in seconds)
-const UNAVAILABLE_BUFFER = 9000;
+// Travel buffer between appointments in seconds (30 minutes)
+// Service time is already included in appointment end times (1hr per AC unit)
+const UNAVAILABLE_BUFFER = 1800;
 
 function BookPageContent() {
   const router = useRouter();

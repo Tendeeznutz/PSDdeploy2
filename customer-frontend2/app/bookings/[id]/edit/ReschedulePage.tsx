@@ -15,8 +15,9 @@ import type { Appointment } from '@/lib/types';
 import { Calendar, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
-// Buffer used by the backend (2.5 hours in seconds)
-const UNAVAILABLE_BUFFER = 9000;
+// Travel buffer between appointments in seconds (30 minutes)
+// Service time is already included in appointment end times (1hr per AC unit)
+const UNAVAILABLE_BUFFER = 1800;
 
 function RescheduleContent() {
   const router = useRouter();
