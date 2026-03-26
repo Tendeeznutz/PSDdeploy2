@@ -17,6 +17,10 @@ requests==2.31.0
 randomname>=0.2.1
 schedule>=1.2.0
 
+# S3-compatible object storage (MinIO in staging, AWS S3 in production)
+django-storages[s3]>=1.14.0
+boto3>=1.34.0
+
 # Production
 gunicorn==21.2.0
 psycopg2-binary>=2.9.9
