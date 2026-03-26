@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../axiosConfig';
-import { StatusBadge } from '../components/StatusBadge';
-
-const FF = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+import api from "../axiosConfig";
+import { Button } from "antd";
 
 function CoordinatorAppointmentView() {
-    const [appointment, setAppointment] = useState([]);
+    const [appointment, setAppointment] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [airconData, setAirconData] = useState([]);
-    const [customerName, setCustomerName] = useState('');
-    const [technicianName, setTechnicianName] = useState('');
-    const [appointmentStatus, setAppointmentStatus] = useState('');
+    const [error, setError] = useState('');
     const apptId = new URLSearchParams(window.location.search).get('id');
     const navigate = useNavigate();
 
@@ -20,140 +15,137 @@ function CoordinatorAppointmentView() {
             try {
                 const response = await api.get(`/api/appointments/${apptId}/`);
                 setAppointment(response.data);
-            } catch (error) {
-                console.error('Error fetching appointment data:', error);
+            } catch (err) {
+                console.error('Error fetching appointment data:', err);
+                setError('Failed to load appointment details.');
             } finally {
                 setLoading(false);
             }
         };
+
         fetchAppointments();
     }, []);
 
     function formatUnixTimestamp(unixTimestamp) {
-        const date = new Date(unixTimestamp * 1000);
+        const date = new Date(unixTimestamp*1000);
         return date.toLocaleString();
     }
 
-    const renderLoading = () => (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', fontFamily: FF }}>
-            <div style={{ textAlign: 'center' }}>
-                <div style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid #4F81BD', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-                <p style={{ color: '#9ca3af', fontSize: 14 }}>Loading appointment…</p>
-            </div>
-        </div>
-    );
+    const renderLoading = () => <p>Loading...</p>;
 
-    const InfoRow = ({ label, value }) => (
-        <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>{label}</div>
-            <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 400, padding: '9px 14px', background: '#f9fafb', borderRadius: 8, border: '1px solid #f3f4f6' }}>{value || '—'}</div>
-        </div>
-    );
-
-    const SectionLabel = ({ children }) => (
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16, paddingBottom: 10, borderBottom: '1px solid #f3f4f6' }}>
-            {children}
+    const renderError = () => (
+        <div className="text-center">
+            <p className="text-red-600">{error}</p>
+            <Button onClick={() => navigate('/coordinator/home')} className="mt-4">Back</Button>
         </div>
     );
 
     const renderAppointmentDetails = () => (
-        <div style={{ maxWidth: 700, margin: '40px auto', padding: '0 24px', fontFamily: FF }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-                <button
-                    onClick={() => navigate('/coordinator/home')}
-                    style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#6b7280', cursor: 'pointer', fontFamily: FF, display: 'flex', alignItems: 'center', gap: 6 }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                >
-                    ← Back
-                </button>
-                <div>
-                    <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em', margin: 0 }}>Appointment Details</h1>
-                    <p style={{ fontSize: 13, color: '#9ca3af', margin: 0, marginTop: 2 }}>ID #{apptId}</p>
-                </div>
-                <div style={{ marginLeft: 'auto' }}>
-                    <StatusBadge status={appointment.display?.appointmentStatus} />
-                </div>
-            </div>
+        <div className="flex p-5 items-center justify-center">
+            <div className="p-6 m-40 bg-white rounded-xl shadow-md w-4/5">
+                <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Appointment Details</h2>
+                <form>
+                    <div className="mb-4 flex w-full content-beween">
+                        <div className="w-3/6 mr-2">
+                            <label className="block mb-2 text-sm font-bold text-gray-700">
+                                Customer:
+                            </label>
+                            <input
+                                type="text"
+                                value={appointment.display?.customerName || ''}
+                                className="w-full p-2 text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                disabled
+                            />
+                        </div>
 
-            {/* Main card */}
-            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-
-                {/* People section */}
-                <div style={{ padding: '28px 32px', borderBottom: '1px solid #f3f4f6' }}>
-                    <SectionLabel>People</SectionLabel>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                        <InfoRow label="Customer" value={appointment.display?.customerName} />
-                        <InfoRow label="Technician" value={appointment.display?.technicianName || 'No technician assigned'} />
+                        <div className="w-3/6">
+                            <label className='block mb-2 text-sm font-bold text-gray-700'>
+                                Technician:
+                            </label>
+                            <input
+                                type="text"
+                                value={appointment.display?.technicianName || ''}
+                                className="w-full p-2 text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                disabled
+                            />
+                        </div>
                     </div>
-                </div>
 
-                {/* Scheduling section */}
-                <div style={{ padding: '28px 32px', borderBottom: '1px solid #f3f4f6' }}>
-                    <SectionLabel>Scheduling</SectionLabel>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                        <InfoRow label="Date & Time" value={formatUnixTimestamp(appointment.appointmentStartTime)} />
-                        <InfoRow label="Payment Method" value={appointment.display?.paymentMethod} />
+                    {/* Render appointment status and datetime section */}
+                    <div className="mb-4 flex w-full content-between">
+                        <div className="w-4/6 mr-2">
+                            <label className='block mb-2 text-sm font-bold text-gray-700'>
+                                Appointment Status:
+                            </label>
+                            <input
+                                type="text"
+                                value={appointment.display?.appointmentStatus || ''}
+                                className="w-full p-2 leading-tight text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                disabled
+                            />
+                        </div>
+                        <div className="w-2/6">
+                            <label className="block mb-2 text-sm font-bold text-gray-700" htmlFor="date-time">
+                                Date/Time
+                            </label>
+                            <input
+                                className="w-full p-2 leading-tight text-sm text-gray-500 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                                id="date-time"
+                                type="text"
+                                value={formatUnixTimestamp(appointment.appointmentStartTime)}
+                                disabled
+                            />
+                        </div>
                     </div>
-                </div>
 
-                {/* Aircons section */}
-                <div style={{ padding: '28px 32px', borderBottom: '1px solid #f3f4f6' }}>
-                    <SectionLabel>Aircons to Service</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {appointment.display?.airconBrand?.map((aircon, index) => (
-                            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f3f4f6' }}>
-                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#4F81BD', flexShrink: 0 }} />
-                                <div>
-                                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>
-                                        {appointment.display?.airconToService?.[index] || aircon}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
-                                        {aircon} {appointment.display?.airconModel?.[index] ? `· ${appointment.display.airconModel[index]}` : ''}
-                                    </div>
-                                </div>
+                    {/*/!* Render selected aircon section *!/*/}
+                    <fieldset className="mb-4">
+                        <legend className="block mb-2 text-sm font-bold text-gray-700">Aircons to service</legend>
+                        {(appointment.display?.airconBrand || []).map((aircon, index) => (
+                            <div key={index} className="mb-2 text-gray-900 text-sm">
+                                <input
+                                    type="checkbox"
+                                    id={aircon}
+                                    value={aircon}
+                                    className="mr-2"
+                                    checked
+                                    disabled
+                                />
+                                <label htmlFor={aircon} className="text-sm text-gray-700">
+                                    {aircon} [{appointment.display?.airconBrand?.[index]} | {appointment.display?.airconModel?.[index]}]
+                                </label>
                             </div>
                         ))}
-                    </div>
-                </div>
+                    </fieldset>
 
-                {/* Feedback section */}
-                <div style={{ padding: '28px 32px' }}>
-                    <SectionLabel>Customer Feedback</SectionLabel>
-                    <div style={{ padding: '12px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f3f4f6', fontSize: 14, color: appointment.customerFeedback ? '#374151' : '#9ca3af', fontStyle: appointment.customerFeedback ? 'normal' : 'italic', lineHeight: 1.6 }}>
-                        {appointment.customerFeedback || 'No feedback provided'}
+                    {/* Render feedback section */}
+                    <div className="mb-4">
+                        <label className="block mb-2 text-sm font-bold text-gray-700" htmlFor="feedback">
+                            Feedback
+                        </label>
+                        <textarea
+                            className="w-full p-2 leading-tight text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                            id="feedback"
+                            type="text"
+                            placeholder="Feedback"
+                            value={appointment.customerFeedback || ''}
+                            disabled
+                        />
                     </div>
-                </div>
-            </div>
-
-            {/* Action row */}
-            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button
-                    onClick={() => window.location.href = '/coordinator/appointmentUpdate?id=' + apptId}
-                    style={{ background: '#4F81BD', color: 'white', border: 'none', borderRadius: 10, padding: '11px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FF }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#3b6fa8'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#4F81BD'}
-                >
-                    ✏️ Edit Appointment
-                </button>
-                <button
-                    onClick={() => navigate('/coordinator/home')}
-                    style={{ background: 'white', color: '#374151', border: '1.5px solid #e5e7eb', borderRadius: 10, padding: '11px 24px', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: FF }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'white'}
-                >
-                    Back to Dashboard
-                </button>
+                    <Button onClick={() => navigate('/coordinator/home')}>Back</Button>
+                </form>
             </div>
         </div>
     );
 
     return (
-        <div style={{ background: '#fafafa', minHeight: '100vh' }}>
-            {loading ? renderLoading() : renderAppointmentDetails()}
+        <div className="w-full h-full bg-gray-100">
+            <div className="flex p-5 items-center justify-center">
+                {loading ? renderLoading() : error ? renderError() : renderAppointmentDetails()}
+            </div>
         </div>
     );
+
 }
 
 export default CoordinatorAppointmentView;

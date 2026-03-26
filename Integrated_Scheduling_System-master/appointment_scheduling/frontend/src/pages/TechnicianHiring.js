@@ -1,22 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Tabs, message } from 'antd';
-
+import PersonalDetailsForm from '../components/hiring/PersonalDetailsForm';
 import BankInfoForm from '../components/hiring/BankInfoForm';
 import CoordinatorApprovalForm from '../components/hiring/CoordinatorApprovalForm';
-import PersonalDetailsForm from '../components/hiring/PersonalDetailsForm';
-import OwnedCard from '../components/ui/OwnedCard';
-import OwnedPageHeader from '../components/ui/OwnedPageHeader';
-import OwnedPageShell from '../components/ui/OwnedPageShell';
 
-const stages = [
-    { key: '1', title: 'Personal details', copy: 'Identity, contact, qualifications, and required uploads.' },
-    { key: '2', title: 'Bank information', copy: 'Salary payment details and final confirmation.' },
-    { key: '3', title: 'Coordinator review', copy: 'Final review, pay rate, and hiring decision.' },
-];
+const { TabPane } = Tabs;
 
-function TechnicianHiring({ isSelfApply = false }) {
+function TechnicianHiring() {
     const [activeTab, setActiveTab] = useState('1');
     const [applicationData, setApplicationData] = useState({
+        // Stage 1: Personal Details
         applicantName: '',
         nric: '',
         citizenship: '',
@@ -30,146 +23,108 @@ function TechnicianHiring({ isSelfApply = false }) {
         hasCriminalRecord: false,
         criminalRecordDetails: '',
         personalDetailsConfirmed: false,
+
+        // Stage 2: Bank Info
         bankName: '',
         bankAccountNumber: '',
         bankAccountHolderName: '',
         bankInfoConfirmed: false,
+
+        // Stage 3: Coordinator Approval
         payRate: '',
         coordinatorId: '',
         coordinatorNotes: '',
         coordinatorApproved: false,
+
+        // Application ID (set after creation)
         id: null,
-        applicationStatus: 'personal_details',
+        applicationStatus: 'personal_details'
     });
 
-    const stageIndex = useMemo(
-        () => stages.findIndex((stage) => stage.key === activeTab),
-        [activeTab],
-    );
-
     const handleTabChange = (key) => {
-        if (applicationData.bankInfoConfirmed && parseInt(key, 10) < 3) {
-            message.warning('Cannot go back once application is submitted for coordinator review.');
+        // Prevent going back once bank info is confirmed (coordinator review stage)
+        if (applicationData.bankInfoConfirmed && parseInt(key) < 3) {
+            message.warning('Cannot go back once application is submitted for coordinator review');
             return;
         }
 
+        // Validate before allowing tab change forward
         if (key === '2' && !applicationData.personalDetailsConfirmed) {
-            message.warning('Please confirm personal details first.');
+            message.warning('Please confirm personal details first');
             return;
         }
-
         if (key === '3' && !applicationData.bankInfoConfirmed) {
-            message.warning('Please confirm bank information first.');
+            message.warning('Please confirm bank information first');
             return;
         }
-
         setActiveTab(key);
     };
 
     const updateApplicationData = (newData) => {
-        setApplicationData((current) => ({ ...current, ...newData }));
+        setApplicationData(prev => ({ ...prev, ...newData }));
     };
 
     const moveToNextTab = () => {
-        setActiveTab((current) => (parseInt(current, 10) + 1).toString());
+        const nextTab = (parseInt(activeTab) + 1).toString();
+        setActiveTab(nextTab);
     };
 
     const moveToPreviousTab = () => {
+        // Only allow going back if bank info is not yet confirmed
         if (applicationData.bankInfoConfirmed) {
-            message.warning('Cannot go back once application is submitted for coordinator review.');
+            message.warning('Cannot go back once application is submitted for coordinator review');
             return;
         }
-
-        setActiveTab((current) => (parseInt(current, 10) - 1).toString());
+        const prevTab = (parseInt(activeTab) - 1).toString();
+        setActiveTab(prevTab);
     };
 
-    const headerDescription = isSelfApply
-        ? 'Use the same hiring flow as the coordinator process. Complete each section in order and submit your details for review.'
-        : 'Review and process technician applications through the existing three-stage workflow without changing the underlying approval logic.';
-
     return (
-        <div className="min-h-screen bg-[#F8F9FA]">
-            <OwnedPageShell>
-                <OwnedPageHeader
-                    eyebrow={isSelfApply ? 'Technician application' : 'Hiring'}
-                    title={isSelfApply ? 'Apply as a technician' : 'Technician hiring'}
-                    description={headerDescription}
-                />
+        <div className="container mx-auto p-6">
+            <h1 className="text-3xl font-bold mb-6">Technician Hiring Application</h1>
 
-                <OwnedCard className="p-5 md:p-6 mb-6">
-                    <div className="owned-step-row">
-                        {stages.map((stage, index) => (
-                            <div
-                                key={stage.key}
-                                className={`owned-step${index === stageIndex ? ' owned-step--active' : ''}`}
-                            >
-                                <span className="owned-step__index">{index + 1}</span>
-                                <p className="owned-step__title">{stage.title}</p>
-                                <p className="owned-step__copy">{stage.copy}</p>
-                            </div>
-                        ))}
-                    </div>
-                </OwnedCard>
-
-                <OwnedCard className="p-5 md:p-6">
-                    <div className="owned-inline-note mb-6">
-                        {isSelfApply
-                            ? 'Your application stays in the same real system flow: personal details, bank information, then coordinator review.'
-                            : 'This page keeps the current coordinator hiring flow intact while improving readability and stage clarity.'}
-                    </div>
-
-                    <Tabs
-                        activeKey={activeTab}
-                        onChange={handleTabChange}
-                        items={[
-                            {
-                                key: '1',
-                                label: '1. Personal details',
-                                children: (
-                                    <PersonalDetailsForm
-                                        applicationData={applicationData}
-                                        updateApplicationData={updateApplicationData}
-                                        moveToNextTab={moveToNextTab}
-                                        isSelfApply={isSelfApply}
-                                    />
-                                ),
-                            },
-                            {
-                                key: '2',
-                                label: '2. Bank information',
-                                disabled: !applicationData.personalDetailsConfirmed,
-                                children: (
-                                    <BankInfoForm
-                                        applicationData={applicationData}
-                                        updateApplicationData={updateApplicationData}
-                                        moveToNextTab={moveToNextTab}
-                                        moveToPreviousTab={moveToPreviousTab}
-                                        isSelfApply={isSelfApply}
-                                    />
-                                ),
-                            },
-                            {
-                                key: '3',
-                                label: '3. Coordinator review',
-                                disabled: !applicationData.bankInfoConfirmed,
-                                children: isSelfApply ? (
-                                    <OwnedCard className="p-5 md:p-6">
-                                        <h3 className="owned-section-title">Submitted for coordinator review</h3>
-                                        <p className="owned-section-copy">
-                                            Your application has moved into the coordinator review stage. This page does not expose the approval actions because those stay in the coordinator-only workflow.
-                                        </p>
-                                        <div className="owned-inline-note mt-6">
-                                            The coordinator will review your documents, bank details, and qualifications before deciding whether to create the technician account.
-                                        </div>
-                                    </OwnedCard>
-                                ) : (
-                                    <CoordinatorApprovalForm applicationData={applicationData} />
-                                ),
-                            },
-                        ]}
+            <Tabs
+                activeKey={activeTab}
+                onChange={handleTabChange}
+                type="card"
+                size="large"
+            >
+                <TabPane
+                    tab="1. Personal Details"
+                    key="1"
+                    disabled={false}
+                >
+                    <PersonalDetailsForm
+                        applicationData={applicationData}
+                        updateApplicationData={updateApplicationData}
+                        moveToNextTab={moveToNextTab}
                     />
-                </OwnedCard>
-            </OwnedPageShell>
+                </TabPane>
+
+                <TabPane
+                    tab="2. Bank Information"
+                    key="2"
+                    disabled={!applicationData.personalDetailsConfirmed}
+                >
+                    <BankInfoForm
+                        applicationData={applicationData}
+                        updateApplicationData={updateApplicationData}
+                        moveToNextTab={moveToNextTab}
+                        moveToPreviousTab={moveToPreviousTab}
+                    />
+                </TabPane>
+
+                <TabPane
+                    tab="3. Coordinator Approval"
+                    key="3"
+                    disabled={!applicationData.bankInfoConfirmed}
+                >
+                    <CoordinatorApprovalForm
+                        applicationData={applicationData}
+                        updateApplicationData={updateApplicationData}
+                    />
+                </TabPane>
+            </Tabs>
         </div>
     );
 }

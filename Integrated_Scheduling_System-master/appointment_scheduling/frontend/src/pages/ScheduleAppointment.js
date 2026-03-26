@@ -1,26 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Progress } from 'antd';
+import api from "../axiosConfig";
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { Spin } from 'antd';
 
-import api from '../axiosConfig';
-import OwnedCard from '../components/ui/OwnedCard';
-import OwnedPageHeader from '../components/ui/OwnedPageHeader';
-import OwnedPageShell from '../components/ui/OwnedPageShell';
-
-const SERVICE_COST_PER_AIRCON = 50;
-const TRAVEL_FEE = 10;
+// Pricing constants
+const SERVICE_COST_PER_AIRCON = 50; // $50 per aircon serviced
+const TRAVEL_FEE = 10; // $10 standard travel fee
 
 function ScheduleAppointment() {
-    const customerId = localStorage.getItem('customers_id');
-    const [dateTime, setDateTime] = useState(null);
+    const customer_id = localStorage.getItem("customers_id");
+    const [dateTime, setDateTime] = useState('');
     const [timeSelected, setTimeSelected] = useState(false);
     const [selectedAircons, setSelectedAircons] = useState([]);
     const [paymentMethod, setPaymentMethod] = useState('cash');
     const [error, setError] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
-    const [progress, setProgress] = useState(0);
     const [showProgress, setShowProgress] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
@@ -28,9 +24,9 @@ function ScheduleAppointment() {
     const paymentMethods = [
         { value: 'cash', label: 'Cash' },
         { value: 'cheque', label: 'Cheque' },
-        { value: 'card', label: 'Credit / Debit Card' },
+        { value: 'card', label: 'Credit/Debit Card' },
         { value: 'bank_transfer', label: 'Bank Transfer' },
-        { value: 'paynow', label: 'PayLah / PayNow' },
+        { value: 'paynow', label: 'PayLah/PayNow' },
     ];
 
     // Calculate total units from selected aircon devices
@@ -49,282 +45,225 @@ function ScheduleAppointment() {
         return serviceCost + TRAVEL_FEE;
     };
 
-    useEffect(() => {
-        const fetchUserAirconData = async () => {
-            try {
-                const userAirconResponse = await api.get(`/api/customeraircondevices/?customerId=${customerId}`);
-                setUserAirconList(userAirconResponse.data || []);
-            } catch (fetchError) {
-                console.error('Error fetching aircon data:', fetchError);
-            }
-        };
-
-        fetchUserAirconData();
-    }, [customerId]);
-
-    const handleAirconChange = (airconId) => {
-        setSelectedAircons((currentSelectedAircons) => (
-            currentSelectedAircons.includes(airconId)
-                ? currentSelectedAircons.filter((id) => id !== airconId)
-                : [...currentSelectedAircons, airconId]
-        ));
+    const fetchUserAirconData = async () => {
+        try {
+            const userAirconResponse = await api.get(`/api/customeraircondevices/?customerId=${customer_id}`);
+            return userAirconResponse.data;
+        } catch (error) {
+            console.error('Error fetching aircon data:', error);
+        }
     };
 
-    const handleSubmit = async (event) => {
-        event.preventDefault();
+    useEffect(() => {
+        fetchUserAirconData().then((response) => { setUserAirconList(response || []) });
+    }, []);
+
+    const handleAirconChange = (airconName) => {
+        console.log('Aircon changed:', airconName);
+        setSelectedAircons(prevSelectedAircons => {
+            if (prevSelectedAircons.includes(airconName)) {
+                return prevSelectedAircons.filter(name => name !== airconName);
+            } else {
+                return [...prevSelectedAircons, airconName];
+            }
+        });
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
         setError('');
 
-        if (isSubmitting) {
-            return;
-        }
+        // Prevent double submission
+        if (isSubmitting) return;
 
         try {
             if (!dateTime || selectedAircons.length === 0) {
-                throw new Error('Please choose at least one aircon unit and an appointment date.');
+                throw new Error('Please fill in all fields.');
             }
 
             if (!timeSelected) {
-                throw new Error('Please select a specific time from the date and time picker.');
+                throw new Error('Please select a time for your appointment.');
             }
 
+            // Validate the selected time is within working hours (8 AM - 8 PM)
             const selectedHour = dateTime.getHours();
             if (selectedHour < 8 || selectedHour >= 20) {
                 throw new Error('Please select a time between 8:00 AM and 8:00 PM.');
             }
 
-            const appointmentStartTime = Math.floor(dateTime.getTime() / 1000);
-            if (appointmentStartTime <= Math.floor(Date.now() / 1000)) {
-                throw new Error('Please select an appointment time in the future.');
-            }
-
             setIsSubmitting(true);
             setShowProgress(true);
-            setProgress(35);
 
-            const endpoint = '/api/appointments/';
-            const payload = {
-                customerId,
-                appointmentStartTime,
-                airconToService: selectedAircons.map((id) => String(id)),
-                paymentMethod,
-            };
+            const singaporeDateTimeUnix = dateTime.getTime() / 1000;
 
-            console.log('Booking payload:', JSON.stringify(payload, null, 2));
-            console.log('Posting to:', endpoint);
-
-            const response = await api.post(endpoint, payload);
+            const response = await api.post(`/api/appointments/`, {
+                customerId: customer_id,
+                appointmentStartTime : singaporeDateTimeUnix,
+                airconToService : selectedAircons,
+                paymentMethod: paymentMethod
+            });
 
             if (response.status === 201) {
-                setProgress(100);
-                setTimeout(() => {
-                    navigate('/customer/home');
-                }, 900);
+                navigate('/customer/home');
             }
-        } catch (submitError) {
+
+        }
+        catch (error) {
             setIsSubmitting(false);
             setShowProgress(false);
-            console.error('HTTP Status:', submitError.response?.status);
-            console.error('Backend said:', JSON.stringify(submitError.response?.data));
-
-            const backendMessage =
-                submitError.response?.data?.message
-                || submitError.response?.data?.error
-                || submitError.response?.data?.appointmentStartTime?.[0]
-                || submitError.response?.data?.airconToService?.[0]
-                || submitError.response?.data?.customerId?.[0]
-                || submitError.response?.data;
-
-            const msg = typeof backendMessage === 'string'
-                ? backendMessage
-                : submitError.message || 'Booking failed. Please try again.';
-
-            setError(msg);
+            console.error('Error scheduling appointment:', error.response);
+            if (error.message === 'Please fill in all fields.' ||
+                error.message === 'Please select a time for your appointment.' ||
+                error.message === 'Please select a time between 8:00 AM and 8:00 PM.')
+            {
+                setError(error.message);
+            } else if (error.response?.data?.error) {
+                setError(error.response.data.error);
+            } else if (error.response?.data?.appointmentStartTime) {
+                setError("Scheduled Date cannot be past or present.");
+            } else if (error.status === 500) {
+                setError("An error have occured at the server. Please try again.");
+            } else {
+                setError("An error occurred. Please try again.");
+            }
         }
+
     };
 
+
     return (
-        <div className="min-h-screen bg-[#F8F9FA]">
-            <OwnedPageShell>
-                <OwnedPageHeader
-                    eyebrow="Booking"
-                    title="Book your service"
-                    description="Choose the units to service, confirm your preferred appointment slot, and review the total before submitting."
-                />
+        <div className="w-full h-full bg-gray-100">
 
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_340px]">
-                    <OwnedCard className="p-5 md:p-6">
-                        <form onSubmit={handleSubmit} className="space-y-8">
-                            <section className="space-y-4">
-                                <div>
-                                    <h2 className="owned-section-title">Select the aircon units to service</h2>
-                                    <p className="owned-section-copy">Use the saved devices from your profile. You can select more than one unit in the same booking.</p>
-                                </div>
-
-                                {userAirconList.length > 0 ? (
-                                    <div className="grid gap-3">
-                                        {userAirconList.map((aircon) => {
-                                            const isSelected = selectedAircons.includes(aircon.id);
-                                            return (
-                                                <button
-                                                    key={aircon.id}
-                                                    type="button"
-                                                    onClick={() => handleAirconChange(aircon.id)}
-                                                    className={`text-left rounded-xl border px-4 py-4 transition ${isSelected ? 'border-[#4F81BD] bg-[#EEF4FB] shadow-sm' : 'border-[#E5E7EB] bg-white hover:border-[#B8C7DA]'}`}
-                                                >
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div>
-                                                            <p className="font-semibold text-[#22252E]">{aircon.airconName}</p>
-                                                            <p className="mt-1 text-sm text-[#6B7280]">
-                                                                {aircon.airconType ? `${aircon.airconType} • ` : ''}{aircon.numberOfUnits} unit{aircon.numberOfUnits > 1 ? 's' : ''}
-                                                            </p>
-                                                        </div>
-                                                        <span className={`owned-badge ${isSelected ? 'owned-badge--info' : ''}`}>
-                                                            {isSelected ? 'Selected' : 'Tap to select'}
-                                                        </span>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="owned-inline-note">
-                                        You do not have any saved aircon devices yet. Add your units in your profile before creating a booking.
-                                    </div>
-                                )}
-                            </section>
-
-                            <section className="space-y-4">
-                                <div>
-                                    <h2 className="owned-section-title">Choose a preferred appointment time</h2>
-                                    <p className="owned-section-copy">Appointments can only be booked between 8:00 AM and 8:00 PM.</p>
-                                </div>
-
-                                <div className="owned-form-grid">
-                                    <div className="owned-field">
-                                        <label className="owned-field__label" htmlFor="customer-booking-datetime">Date and time</label>
-                                        <DatePicker
-                                            id="customer-booking-datetime"
-                                            selected={dateTime}
-                                            onChange={(date) => {
-                                                if (date) {
-                                                    if (dateTime instanceof Date) {
-                                                        const dateChanged = date.toDateString() !== dateTime.toDateString();
-                                                        const timeChanged = date.getHours() !== dateTime.getHours() || date.getMinutes() !== dateTime.getMinutes();
-
-                                                        if (timeChanged && !dateChanged) {
-                                                            setTimeSelected(true);
-                                                        }
-
-                                                        if (dateChanged) {
-                                                            setTimeSelected(false);
-                                                        }
-                                                    }
-                                                }
-
-                                                setDateTime(date);
-                                            }}
-                                            showTimeSelect
-                                            timeFormat="HH:mm"
-                                            timeIntervals={30}
-                                            timeCaption="time"
-                                            dateFormat="MMM d, yyyy h:mm aa"
-                                            minDate={new Date()}
-                                            minTime={new Date(new Date().setHours(8, 0, 0))}
-                                            maxTime={new Date(new Date().setHours(20, 0, 0))}
-                                            className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border"
+            {/* Schedule Appointment Form */}
+            <div className="flex p-5 items-center justify-center">
+                <div className="p-6 m-40 bg-white rounded-xl shadow-md">
+                    <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Schedule Appointment</h2>
+                    <form onSubmit={handleSubmit}>
+                        <div className="mb-4">
+                            <label className="block mb-2 text-sm font-bold text-gray-700" htmlFor="date-time">
+                                Date/Time
+                            </label>
+                            <DatePicker
+                                id="date-time"
+                                selected={dateTime}
+                                onChange={(date) => {
+                                    if (date) {
+                                        // Check if the user clicked a time slot (hours/minutes changed from previous value)
+                                        if (dateTime && dateTime instanceof Date) {
+                                            const dateChanged = date.toDateString() !== dateTime.toDateString();
+                                            const timeChanged = date.getHours() !== dateTime.getHours() || date.getMinutes() !== dateTime.getMinutes();
+                                            if (timeChanged && !dateChanged) {
+                                                setTimeSelected(true);
+                                            }
+                                            // If date changed, reset time selection requirement
+                                            if (dateChanged) {
+                                                setTimeSelected(false);
+                                            }
+                                        }
+                                    }
+                                    setDateTime(date);
+                                }}
+                                showTimeSelect
+                                timeFormat="HH:mm"
+                                timeIntervals={30}
+                                timeCaption="time"
+                                dateFormat="MMM d, yyyy h:mm aa"
+                                minTime={new Date(new Date().setHours(8, 0, 0))}
+                                maxTime={new Date(new Date().setHours(20, 0, 0))}
+                                className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            {dateTime && !timeSelected && (
+                                <p className="mt-1 text-xs text-amber-600">Please select a time from the time picker.</p>
+                            )}
+                        </div>
+                        <fieldset className="mb-4">
+                            <legend className="block mb-2 text-sm font-bold text-gray-700">Select Aircon(s)</legend>
+                            {userAirconList.length > 0 ? (
+                                userAirconList.map((aircon) => (
+                                    <div key={aircon.id} className="mb-2">
+                                        <input
+                                            type="checkbox"
+                                            id={aircon.airconName}
+                                            value={aircon.airconName}
+                                            checked={selectedAircons.includes(aircon.id)}
+                                            onChange={() => handleAirconChange(aircon.id)}
+                                            className="mr-2"
                                         />
-                                        {dateTime && !timeSelected ? (
-                                            <span className="owned-field__hint text-[#946b00]">After choosing a date, pick a specific time from the time list.</span>
-                                        ) : null}
+                                        <label htmlFor={aircon.airconName} className="text-sm text-gray-700">{aircon.airconName}</label>
                                     </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-700">User does not have any aircon</p>
+                            )}
+                        </fieldset>
+                        <div className="mb-4">
+                            <label className="block mb-2 text-sm font-bold text-gray-700" htmlFor="payment-method">
+                                Payment Method
+                            </label>
+                            <select
+                                id="payment-method"
+                                value={paymentMethod}
+                                onChange={(e) => setPaymentMethod(e.target.value)}
+                                className="w-full p-2 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                {paymentMethods.map((method) => (
+                                    <option key={method.value} value={method.value}>
+                                        {method.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Cost Summary */}
+                        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <h3 className="text-sm font-bold text-blue-800 mb-2">Cost Summary</h3>
+                            <div className="text-sm text-blue-700">
+                                <div className="flex justify-between mb-1">
+                                    <span>Service Fee ({getTotalUnits()} unit{getTotalUnits() !== 1 ? 's' : ''} x ${SERVICE_COST_PER_AIRCON})</span>
+                                    <span>${getTotalUnits() * SERVICE_COST_PER_AIRCON}.00</span>
                                 </div>
-                            </section>
-
-                            <section className="space-y-4">
-                                <div>
-                                    <h2 className="owned-section-title">Confirm payment preference</h2>
-                                    <p className="owned-section-copy">This keeps the booking flow clear for the assigned technician and coordinator.</p>
+                                <div className="flex justify-between mb-1">
+                                    <span>Travel Fee</span>
+                                    <span>${TRAVEL_FEE}.00</span>
                                 </div>
-
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    {paymentMethods.map((method) => {
-                                        const isActive = paymentMethod === method.value;
-                                        return (
-                                            <button
-                                                key={method.value}
-                                                type="button"
-                                                onClick={() => setPaymentMethod(method.value)}
-                                                className={`rounded-xl border px-4 py-4 text-left transition ${isActive ? 'border-[#4F81BD] bg-[#EEF4FB]' : 'border-[#E5E7EB] bg-white hover:border-[#B8C7DA]'}`}
-                                            >
-                                                <p className="font-semibold text-[#22252E]">{method.label}</p>
-                                                <p className="mt-1 text-sm text-[#6B7280]">{isActive ? 'Selected for this booking' : 'Tap to choose this option'}</p>
-                                            </button>
-                                        );
-                                    })}
+                                <hr className="my-2 border-blue-300" />
+                                <div className="flex justify-between font-bold text-blue-900">
+                                    <span>Total</span>
+                                    <span>${calculateTotalCost()}.00</span>
                                 </div>
-                            </section>
+                            </div>
+                            <p className="text-xs text-blue-600 mt-2">* A receipt will be sent to your mailbox upon booking confirmation</p>
+                        </div>
 
-                            {error ? (
-                                <div className="owned-inline-note border-red-200 bg-red-50 text-[#9F3A38]">{error}</div>
-                            ) : null}
-
-                            {showProgress ? <Progress className="mt-2" percent={progress} type="line" strokeColor="#4F81BD" /> : null}
-
-                            <div className="owned-action-row pt-2">
+                        <div className="flex items-center justify-center">
+                            {userAirconList.length > 0 ? (
                                 <button
-                                    type="button"
-                                    className="owned-secondary-button px-4 py-2"
-                                    onClick={() => navigate(userAirconList.length > 0 ? '/customer/home' : '/customer/profile')}
-                                >
-                                    {userAirconList.length > 0 ? 'Back to home' : 'Go to profile'}
-                                </button>
-                                <button
-                                    className={`owned-primary-button px-5 py-2.5 ${isSubmitting || userAirconList.length === 0 ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    className={`px-4 py-2 font-bold text-white rounded focus:outline-none focus:shadow-outline ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-700'}`}
                                     type="submit"
-                                    disabled={isSubmitting || userAirconList.length === 0}
+                                    disabled={isSubmitting}
                                 >
-                                    {isSubmitting ? 'Booking...' : 'Book appointment'}
+                                    {isSubmitting ? 'Booking...' : 'Book Appointment'}
                                 </button>
-                            </div>
-                        </form>
-                    </OwnedCard>
-
-                    <div className="space-y-6">
-                        <OwnedCard className="owned-summary-card">
-                            <p className="text-sm font-semibold uppercase tracking-wide text-[#4F81BD]">Booking summary</p>
-                            <div className="mt-4 space-y-3 text-sm text-[#6B7280]">
-                                <div className="flex items-center justify-between gap-4">
-                                    <span>Total units</span>
-                                    <span className="font-semibold text-[#22252E]">{getTotalUnits()} unit{getTotalUnits() !== 1 ? 's' : ''}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                    <span>Service fee ({getTotalUnits()} x ${SERVICE_COST_PER_AIRCON})</span>
-                                    <span className="font-semibold text-[#22252E]">${getTotalUnits() * SERVICE_COST_PER_AIRCON}.00</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                    <span>Travel fee</span>
-                                    <span className="font-semibold text-[#22252E]">${TRAVEL_FEE}.00</span>
-                                </div>
-                            </div>
-                            <div className="owned-divider my-4" />
-                            <p className="text-sm text-[#6B7280]">Estimated total</p>
-                            <p className="owned-summary-card__price">${calculateTotalCost()}.00</p>
-                            <p className="mt-3 text-sm leading-6 text-[#6B7280]">A receipt will be sent to your mailbox once the booking is confirmed.</p>
-                        </OwnedCard>
-
-                        <OwnedCard className="p-5">
-                            <p className="text-sm font-semibold text-[#22252E]">Before you submit</p>
-                            <ul className="mt-3 space-y-2 text-sm leading-6 text-[#6B7280]">
-                                <li>Make sure at least one unit is selected.</li>
-                                <li>Choose a date and then a specific appointment time.</li>
-                                <li>Bookings follow the validations already enforced by the system.</li>
-                            </ul>
-                        </OwnedCard>
-                    </div>
+                            ) : (
+                                <button
+                                    className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700 focus:outline-none focus:shadow-outline"
+                                    type="button"
+                                    onClick={() => navigate('/customer/profile')}
+                                >
+                                    To  profile
+                                </button>
+                            
+                            )}
+                        </div>
+                        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+                    </form>
+                    {showProgress && <div className="mt-3 text-center"><Spin tip="Scheduling your appointment..." /></div>}
                 </div>
-            </OwnedPageShell>
+            </div>
         </div>
     );
+
+
 }
 
 export default ScheduleAppointment;
