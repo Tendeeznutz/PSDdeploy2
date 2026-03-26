@@ -1,446 +1,320 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Input, Button as MTButton, Typography, Select, Option } from '@material-tailwind/react';
-import { DatePicker, TimePicker, message, Radio, InputNumber, Button } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { DatePicker, InputNumber, Radio, TimePicker, message } from 'antd';
 import dayjs from 'dayjs';
-import backgroundImage from '../asset/img/air_servicing.png';
 
-const GuestBooking = () => {
-  const [bookingData, setBookingData] = useState({
-    customerName: '',
-    customerPhone: '',
-    customerEmail: '',
-    customerAddress: '',
-    customerPostalCode: '',
-    paymentMethod: 'cash',
-  });
+import api from '../axiosConfig';
+import OwnedCard from '../components/ui/OwnedCard';
+import OwnedPageHeader from '../components/ui/OwnedPageHeader';
+import OwnedPageShell from '../components/ui/OwnedPageShell';
 
-  const [airconDevices, setAirconDevices] = useState([
-    { brand: '', model: '', units: 1 }
-  ]);
+function GuestBooking() {
+    const [bookingData, setBookingData] = useState({
+        customerName: '',
+        customerPhone: '',
+        customerEmail: '',
+        customerAddress: '',
+        customerPostalCode: '',
+        airconBrand: '',
+        airconModel: '',
+        numberOfUnits: 1,
+        paymentMethod: 'cash',
+    });
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [selectedTime, setSelectedTime] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const navigate = useNavigate();
 
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedTime, setSelectedTime] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const navigate = useNavigate();
+    const airconBrands = ['Daikin', 'Mitsubishi', 'Panasonic', 'LG', 'Samsung', 'Fujitsu', 'Sharp', 'Toshiba', 'Hitachi', 'York', 'Other'];
+    const paymentMethods = [
+        { value: 'cash', label: 'Cash' },
+        { value: 'cheque', label: 'Cheque' },
+        { value: 'card', label: 'Credit / Debit Card' },
+        { value: 'paynow', label: 'PayLah / PayNow' },
+        { value: 'bank_transfer', label: 'Bank Transfer' },
+    ];
 
-  const airconBrands = [
-    'Daikin', 'Mitsubishi', 'Panasonic', 'LG', 'Samsung',
-    'Fujitsu', 'Sharp', 'Toshiba', 'Hitachi', 'York', 'Other'
-  ];
+    const serviceFee = bookingData.numberOfUnits * 50;
+    const travelFee = 10;
+    const totalCost = serviceFee + travelFee;
 
-  // Device management functions
-  const addDevice = () => {
-    setAirconDevices([...airconDevices, { brand: '', model: '', units: 1 }]);
-  };
+    const handleInputChange = (field, value) => {
+        setBookingData((currentData) => ({ ...currentData, [field]: value }));
+        setErrorMessage('');
+    };
 
-  const removeDevice = (index) => {
-    if (airconDevices.length > 1) {
-      setAirconDevices(airconDevices.filter((_, i) => i !== index));
-    }
-  };
+    const validateForm = () => {
+        const {
+            customerName, customerPhone, customerEmail, customerAddress, customerPostalCode, airconBrand,
+        } = bookingData;
 
-  const updateDevice = (index, field, value) => {
-    const updated = [...airconDevices];
-    updated[index] = { ...updated[index], [field]: value };
-    setAirconDevices(updated);
-  };
+        if (!customerName || !customerPhone || !customerEmail || !customerAddress || !customerPostalCode || !airconBrand) {
+            setErrorMessage('Please fill in all required fields.');
+            return false;
+        }
 
-  // Cost calculation
-  const totalUnits = airconDevices.reduce((sum, d) => sum + d.units, 0);
-  const serviceFee = totalUnits * 50;
-  const travelFee = 10;
-  const totalCost = serviceFee + travelFee;
+        const phoneRegex = /^(6|8|9)\d{7}$/;
+        if (!phoneRegex.test(customerPhone)) {
+            setErrorMessage('Please enter a valid Singapore phone number.');
+            return false;
+        }
 
-  const handleInputChange = (field, value) => {
-    setBookingData({ ...bookingData, [field]: value });
-    setErrorMessage('');
-  };
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(customerEmail)) {
+            setErrorMessage('Please enter a valid email address.');
+            return false;
+        }
 
-  const validateForm = () => {
-    const { customerName, customerPhone, customerEmail, customerAddress, customerPostalCode } = bookingData;
+        const postalRegex = /^\d{6}$/;
+        if (!postalRegex.test(customerPostalCode)) {
+            setErrorMessage('Please enter a valid 6-digit Singapore postal code.');
+            return false;
+        }
 
-    if (!customerName || !customerPhone || !customerEmail || !customerAddress || !customerPostalCode) {
-      setErrorMessage('Please fill in all required fields');
-      return false;
-    }
+        if (!selectedDate || !selectedTime) {
+            setErrorMessage('Please select your preferred booking date and time.');
+            return false;
+        }
 
-    // Check each device has a brand selected
-    for (let i = 0; i < airconDevices.length; i++) {
-      if (!airconDevices[i].brand) {
-        setErrorMessage(`Please select a brand for AC Unit ${i + 1}`);
-        return false;
-      }
-    }
+        return true;
+    };
 
-    // Singapore phone number validation
-    const phoneRegex = /^(6|8|9)\d{7}$/;
-    if (!phoneRegex.test(customerPhone)) {
-      setErrorMessage('Please enter a valid Singapore phone number (8 digits starting with 6, 8, or 9)');
-      return false;
-    }
+    const handleSubmit = async (event) => {
+        event.preventDefault();
 
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerEmail)) {
-      setErrorMessage('Please enter a valid email address');
-      return false;
-    }
+        if (!validateForm()) {
+            return;
+        }
 
-    // Postal code validation (6 digits)
-    const postalRegex = /^\d{6}$/;
-    if (!postalRegex.test(customerPostalCode)) {
-      setErrorMessage('Please enter a valid Singapore postal code (6 digits)');
-      return false;
-    }
+        setLoading(true);
+        setErrorMessage('');
 
-    if (!selectedDate || !selectedTime) {
-      setErrorMessage('Please select appointment date and time');
-      return false;
-    }
+        try {
+            const appointmentTimestamp = dayjs(`${selectedDate.format('YYYY-MM-DD')} ${selectedTime.format('HH:mm')}`).unix();
+            const payload = {
+                customerName: bookingData.customerName,
+                customerPhone: bookingData.customerPhone,
+                customerEmail: bookingData.customerEmail,
+                customerAddress: bookingData.customerAddress,
+                customerPostalCode: bookingData.customerPostalCode,
+                airconBrand: bookingData.airconBrand,
+                airconModel: bookingData.airconModel || 'Standard',
+                numberOfUnits: bookingData.numberOfUnits,
+                appointmentStartTime: appointmentTimestamp,
+                paymentMethod: bookingData.paymentMethod,
+            };
 
-    return true;
-  };
+            const response = await api.post('/api/appointments/guest-booking/', payload);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+            if (response.status === 201) {
+                message.success('Booking created successfully. Check your email for confirmation.');
+                const bookingRef = response.data.appointment?.id?.substring(0, 8).toUpperCase();
+                if (bookingRef) {
+                    message.info(`Your booking reference is ${bookingRef}.`, 5);
+                }
 
-    if (!validateForm()) {
-      return;
-    }
+                setBookingData({
+                    customerName: '',
+                    customerPhone: '',
+                    customerEmail: '',
+                    customerAddress: '',
+                    customerPostalCode: '',
+                    airconBrand: '',
+                    airconModel: '',
+                    numberOfUnits: 1,
+                    paymentMethod: 'cash',
+                });
+                setSelectedDate(null);
+                setSelectedTime(null);
 
-    setLoading(true);
-    setErrorMessage('');
+                setTimeout(() => {
+                    navigate('/');
+                }, 2600);
+            }
+        } catch (submitError) {
+            console.error('Booking failed:', submitError);
+            if (submitError.response?.data?.error) {
+                setErrorMessage(submitError.response.data.error);
+            } else {
+                setErrorMessage('Failed to create booking. Please try again.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
 
-    try {
-      // Combine date and time into Unix timestamp
-      const dateTimeString = `${selectedDate.format('YYYY-MM-DD')} ${selectedTime.format('HH:mm')}`;
-      const appointmentTimestamp = dayjs(dateTimeString).unix();
+    const disabledDate = (current) => current && current < dayjs().startOf('day');
 
-      const payload = {
-        customerName: bookingData.customerName,
-        customerPhone: bookingData.customerPhone,
-        customerEmail: bookingData.customerEmail,
-        customerAddress: bookingData.customerAddress,
-        customerPostalCode: bookingData.customerPostalCode,
-        appointmentStartTime: appointmentTimestamp,
-        paymentMethod: bookingData.paymentMethod,
-        airconDevices: airconDevices.map(d => ({
-          brand: d.brand,
-          model: d.model || 'Standard',
-          units: d.units,
-        })),
-      };
+    return (
+        <div className="min-h-screen bg-[#F8F9FA]">
+            <OwnedPageShell>
+                <OwnedPageHeader
+                    eyebrow="Guest booking"
+                    title="Quick booking"
+                    description="Book a service without creating an account. We will use these details to coordinate your appointment and send your confirmation."
+                />
 
-      const response = await axios.post(
-        `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/appointments/guest-booking/`,
-        payload
-      );
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_320px]">
+                    <OwnedCard className="p-5 md:p-6">
+                        <form onSubmit={handleSubmit} className="space-y-8">
+                            <section className="space-y-4">
+                                <div>
+                                    <h2 className="owned-section-title">Your contact details</h2>
+                                    <p className="owned-section-copy">We use these details to confirm your booking and keep you updated.</p>
+                                </div>
+                                <div className="owned-form-grid">
+                                    <div className="owned-field">
+                                        <label className="owned-field__label" htmlFor="guest-name">Full name</label>
+                                        <input id="guest-name" value={bookingData.customerName} onChange={(event) => handleInputChange('customerName', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border" placeholder="John Doe" />
+                                    </div>
+                                    <div className="owned-field">
+                                        <label className="owned-field__label" htmlFor="guest-phone">Phone number</label>
+                                        <input id="guest-phone" value={bookingData.customerPhone} onChange={(event) => handleInputChange('customerPhone', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border" placeholder="91234567" />
+                                    </div>
+                                    <div className="owned-field">
+                                        <label className="owned-field__label" htmlFor="guest-email">Email address</label>
+                                        <input id="guest-email" type="email" value={bookingData.customerEmail} onChange={(event) => handleInputChange('customerEmail', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border" placeholder="name@email.com" />
+                                    </div>
+                                    <div className="owned-field">
+                                        <label className="owned-field__label" htmlFor="guest-postal">Postal code</label>
+                                        <input id="guest-postal" value={bookingData.customerPostalCode} onChange={(event) => handleInputChange('customerPostalCode', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border" placeholder="123456" />
+                                    </div>
+                                </div>
+                                <div className="owned-field">
+                                    <label className="owned-field__label" htmlFor="guest-address">Address</label>
+                                    <input id="guest-address" value={bookingData.customerAddress} onChange={(event) => handleInputChange('customerAddress', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border" placeholder="123 Main Street #01-01" />
+                                </div>
+                            </section>
 
-      if (response.status === 201) {
-        message.success('Booking created successfully! Check your email for confirmation.');
+                            <section className="space-y-4">
+                                <div>
+                                    <h2 className="owned-section-title">Service details</h2>
+                                    <p className="owned-section-copy">Tell us what kind of aircon unit needs attention.</p>
+                                </div>
+                                <div className="owned-form-grid">
+                                    <div className="owned-field">
+                                        <label className="owned-field__label" htmlFor="guest-brand">Aircon brand</label>
+                                        <select id="guest-brand" value={bookingData.airconBrand} onChange={(event) => handleInputChange('airconBrand', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border">
+                                            <option value="">Select a brand</option>
+                                            {airconBrands.map((brand) => (
+                                                <option key={brand} value={brand}>{brand}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="owned-field">
+                                        <label className="owned-field__label" htmlFor="guest-model">Aircon model</label>
+                                        <input id="guest-model" value={bookingData.airconModel} onChange={(event) => handleInputChange('airconModel', event.target.value)} className="owned-input w-full px-3 py-2 text-sm text-[#22252E] bg-white border" placeholder="Optional" />
+                                    </div>
+                                </div>
+                                <div className="owned-field">
+                                    <label className="owned-field__label" htmlFor="guest-units">Number of units</label>
+                                    <InputNumber
+                                        id="guest-units"
+                                        size="large"
+                                        min={1}
+                                        max={10}
+                                        value={bookingData.numberOfUnits}
+                                        onChange={(value) => handleInputChange('numberOfUnits', value || 1)}
+                                        className="owned-input w-full"
+                                        style={{ width: '100%' }}
+                                    />
+                                    <span className="owned-field__hint">$50 service fee per unit plus a standard $10 travel fee.</span>
+                                </div>
+                            </section>
 
-        // Show success message with booking details
-        const bookingRef = response.data.appointment?.id?.substring(0, 8).toUpperCase();
-        message.info(`Your booking reference is: ${bookingRef}`, 5);
+                            <section className="space-y-4">
+                                <div>
+                                    <h2 className="owned-section-title">Preferred schedule and payment</h2>
+                                    <p className="owned-section-copy">Choose a preferred slot. We will use it when coordinating the booking.</p>
+                                </div>
+                                <div className="owned-form-grid">
+                                    <div className="owned-field">
+                                        <label className="owned-field__label">Preferred date</label>
+                                        <DatePicker size="large" value={selectedDate} onChange={setSelectedDate} disabledDate={disabledDate} format="YYYY-MM-DD" className="owned-input w-full" placeholder="Select date" />
+                                    </div>
+                                    <div className="owned-field">
+                                        <label className="owned-field__label">Preferred time</label>
+                                        <TimePicker
+                                            size="large"
+                                            value={selectedTime}
+                                            onChange={setSelectedTime}
+                                            format="HH:mm"
+                                            className="owned-input w-full"
+                                            popupClassName="owned-time-picker-popup"
+                                            placeholder="Select time"
+                                            minuteStep={30}
+                                            disabledHours={() => [0, 1, 2, 3, 4, 5, 6, 7, 8, 19, 20, 21, 22, 23]}
+                                            hideDisabledOptions
+                                        />
+                                    </div>
+                                </div>
 
-        // Clear form
-        setBookingData({
-          customerName: '',
-          customerPhone: '',
-          customerEmail: '',
-          customerAddress: '',
-          customerPostalCode: '',
-          paymentMethod: 'cash',
-        });
-        setAirconDevices([{ brand: '', model: '', units: 1 }]);
-        setSelectedDate(null);
-        setSelectedTime(null);
+                                <div className="owned-field">
+                                    <label className="owned-field__label">Payment method</label>
+                                    <Radio.Group
+                                        value={bookingData.paymentMethod}
+                                        onChange={(event) => handleInputChange('paymentMethod', event.target.value)}
+                                        className="owned-radio-grid grid gap-3 sm:grid-cols-2"
+                                    >
+                                        {paymentMethods.map((method) => (
+                                            <Radio.Button key={method.value} value={method.value} className="text-left">
+                                                <span className="block font-semibold text-[#22252E]">{method.label}</span>
+                                                <span className="mt-1 block text-sm text-[#6B7280]">
+                                                    {bookingData.paymentMethod === method.value ? 'Selected for this booking' : 'Tap to choose this option'}
+                                                </span>
+                                            </Radio.Button>
+                                        ))}
+                                    </Radio.Group>
+                                </div>
+                            </section>
 
-        // Redirect after 3 seconds
-        setTimeout(() => {
-          navigate('/');
-        }, 3000);
-      }
-    } catch (error) {
-      console.error('Booking failed:', error);
-      if (error.response?.data?.error) {
-        setErrorMessage(error.response.data.error);
-      } else {
-        setErrorMessage('Failed to create booking. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+                            {errorMessage ? (
+                                <div className="owned-inline-note border-red-200 bg-red-50 text-[#9F3A38]">{errorMessage}</div>
+                            ) : null}
 
-  // Disable past dates
-  const disabledDate = (current) => {
-    return current && current < dayjs().startOf('day');
-  };
+                            <div className="owned-action-row pt-2">
+                                <button type="button" className="owned-secondary-button px-4 py-2" onClick={() => navigate('/login')}>
+                                    Back to login
+                                </button>
+                                <button type="submit" className={`owned-primary-button px-5 py-2.5 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`} disabled={loading}>
+                                    {loading ? 'Creating booking...' : 'Book appointment'}
+                                </button>
+                            </div>
+                        </form>
+                    </OwnedCard>
 
-  return (
-    <section className="m-8 flex">
-      <div className="w-2/5 h-full hidden lg:block">
-        <img
-          src={backgroundImage}
-          className="h-full w-full object-cover rounded-3xl"
-          alt="Air Servicing"
-        />
-      </div>
-      <div className="w-full lg:w-3/5 flex flex-col items-center justify-center">
-        <div className="text-center">
-          <Typography variant="h2" className="font-bold mb-1">Quick Booking</Typography>
-          <Typography variant="paragraph" color="blue-gray" className="text-lg font-normal">
-            Book an appointment without creating an account
-          </Typography>
+                    <div className="space-y-6">
+                        <OwnedCard className="owned-summary-card">
+                            <p className="text-sm font-semibold uppercase tracking-wide text-[#4F81BD]">Estimated total</p>
+                            <div className="mt-4 space-y-3 text-sm text-[#6B7280]">
+                                <div className="flex justify-between gap-4">
+                                    <span>Service fee</span>
+                                    <span className="font-semibold text-[#22252E]">${serviceFee.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span>Travel fee</span>
+                                    <span className="font-semibold text-[#22252E]">${travelFee.toFixed(2)}</span>
+                                </div>
+                            </div>
+                            <div className="owned-divider my-4" />
+                            <p className="owned-summary-card__price">${totalCost.toFixed(2)}</p>
+                            <p className="mt-3 text-sm leading-6 text-[#6B7280]">Your confirmation email will include the booking reference and appointment summary.</p>
+                        </OwnedCard>
+
+                        <OwnedCard className="p-5">
+                            <p className="text-sm font-semibold text-[#22252E]">Helpful notes</p>
+                            <ul className="mt-3 space-y-2 text-sm leading-6 text-[#6B7280]">
+                                <li>Choose a future date only.</li>
+                                <li>Select the closest aircon brand if you are unsure of the exact model.</li>
+                                <li>We keep this flow simple so you can finish the booking quickly.</li>
+                            </ul>
+                        </OwnedCard>
+                    </div>
+                </div>
+            </OwnedPageShell>
         </div>
-        <form className="mt-8 mb-2 mx-auto w-80 max-w-screen-lg lg:w-1/2" onSubmit={handleSubmit}>
-          <div className="mb-1 flex flex-col gap-6">
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Your Name *
-            </Typography>
-            <Input
-              size="lg"
-              placeholder="John Doe"
-              value={bookingData.customerName}
-              onChange={(e) => handleInputChange('customerName', e.target.value)}
-              className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-              labelProps={{
-                className: "before:content-none after:content-none",
-              }}
-            />
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Phone Number *
-            </Typography>
-            <Input
-              size="lg"
-              placeholder="91234567"
-              value={bookingData.customerPhone}
-              onChange={(e) => handleInputChange('customerPhone', e.target.value)}
-              className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-              labelProps={{
-                className: "before:content-none after:content-none",
-              }}
-            />
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Email Address *
-            </Typography>
-            <Input
-              size="lg"
-              placeholder="name@mail.com"
-              type="email"
-              value={bookingData.customerEmail}
-              onChange={(e) => handleInputChange('customerEmail', e.target.value)}
-              className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-              labelProps={{
-                className: "before:content-none after:content-none",
-              }}
-            />
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Address *
-            </Typography>
-            <Input
-              size="lg"
-              placeholder="123 Main Street #01-01"
-              value={bookingData.customerAddress}
-              onChange={(e) => handleInputChange('customerAddress', e.target.value)}
-              className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-              labelProps={{
-                className: "before:content-none after:content-none",
-              }}
-            />
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Postal Code *
-            </Typography>
-            <Input
-              size="lg"
-              placeholder="123456"
-              value={bookingData.customerPostalCode}
-              onChange={(e) => handleInputChange('customerPostalCode', e.target.value)}
-              className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-              labelProps={{
-                className: "before:content-none after:content-none",
-              }}
-            />
-
-            {/* AC Devices Section */}
-            <Typography variant="h6" color="blue-gray" className="font-semibold">
-              Aircon Units
-            </Typography>
-
-            {airconDevices.map((device, index) => (
-              <div
-                key={index}
-                className="border border-gray-300 rounded-lg p-4 relative"
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <Typography variant="small" color="blue-gray" className="font-semibold">
-                    AC Unit {index + 1}
-                  </Typography>
-                  <Button
-                    type="text"
-                    danger
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    disabled={airconDevices.length <= 1}
-                    onClick={() => removeDevice(index)}
-                  >
-                    Remove
-                  </Button>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                  <Typography variant="small" color="blue-gray" className="-mb-2 font-medium">
-                    Brand *
-                  </Typography>
-                  <Select
-                    size="lg"
-                    value={device.brand}
-                    onChange={(value) => updateDevice(index, 'brand', value)}
-                    className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-                    labelProps={{
-                      className: "before:content-none after:content-none",
-                    }}
-                  >
-                    {airconBrands.map((brand) => (
-                      <Option key={brand} value={brand}>
-                        {brand}
-                      </Option>
-                    ))}
-                  </Select>
-
-                  <Typography variant="small" color="blue-gray" className="-mb-2 font-medium">
-                    Model (Optional)
-                  </Typography>
-                  <Input
-                    size="lg"
-                    placeholder="e.g., Inverter 1.5HP"
-                    value={device.model}
-                    onChange={(e) => updateDevice(index, 'model', e.target.value)}
-                    className="!border-t-blue-gray-200 focus:!border-t-gray-900"
-                    labelProps={{
-                      className: "before:content-none after:content-none",
-                    }}
-                  />
-
-                  <Typography variant="small" color="blue-gray" className="-mb-2 font-medium">
-                    Number of Units *
-                  </Typography>
-                  <InputNumber
-                    size="large"
-                    min={1}
-                    max={10}
-                    value={device.units}
-                    onChange={(value) => updateDevice(index, 'units', value || 1)}
-                    className="w-full"
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              </div>
-            ))}
-
-            <Button
-              type="dashed"
-              onClick={addDevice}
-              block
-              icon={<PlusOutlined />}
-            >
-              Add Another AC Unit
-            </Button>
-
-            <Typography variant="small" color="blue-gray" className="text-center font-medium">
-              Total: {totalUnits} unit(s) across {airconDevices.length} device(s)
-            </Typography>
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Preferred Date *
-            </Typography>
-            <DatePicker
-              size="large"
-              value={selectedDate}
-              onChange={setSelectedDate}
-              disabledDate={disabledDate}
-              format="YYYY-MM-DD"
-              className="w-full"
-              placeholder="Select date"
-            />
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Preferred Time *
-            </Typography>
-            <TimePicker
-              size="large"
-              value={selectedTime}
-              onChange={setSelectedTime}
-              format="HH:mm"
-              className="w-full"
-              placeholder="Select time (09:00 - 18:00)"
-              minuteStep={30}
-              disabledHours={() => [0,1,2,3,4,5,6,7,8,19,20,21,22,23]}
-              hideDisabledOptions
-            />
-
-            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
-              Payment Method *
-            </Typography>
-            <Radio.Group
-              value={bookingData.paymentMethod}
-              onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
-              className="flex flex-col gap-2"
-            >
-              <Radio value="cash">Cash</Radio>
-              <Radio value="card">Credit/Debit Card</Radio>
-              <Radio value="paynow">PayLah/PayNow</Radio>
-              <Radio value="bank_transfer">Bank Transfer</Radio>
-            </Radio.Group>
-
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <Typography variant="small" color="blue-gray" className="font-semibold mb-2">
-                Cost Breakdown:
-              </Typography>
-              <Typography variant="small" color="blue-gray">
-                Service Fee ({totalUnits} unit{totalUnits > 1 ? 's' : ''} x $50): ${serviceFee.toFixed(2)}
-              </Typography>
-              <Typography variant="small" color="blue-gray">
-                Travel Fee: ${travelFee.toFixed(2)}
-              </Typography>
-              <Typography variant="small" color="blue-gray" className="font-bold mt-2">
-                Total: ${totalCost.toFixed(2)}
-              </Typography>
-            </div>
-          </div>
-
-          {errorMessage && (
-            <Typography variant="small" color="red" className="mt-4 text-center font-medium">
-              {errorMessage}
-            </Typography>
-          )}
-
-          <MTButton
-            className="mt-6"
-            fullWidth
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? 'Creating Booking...' : 'Book Appointment'}
-          </MTButton>
-
-          <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
-            Already have an account?{" "}
-            <a href="/login" className="text-gray-900 ml-1">Sign in</a>
-          </Typography>
-        </form>
-      </div>
-    </section>
-  );
-};
+    );
+}
 
 export default GuestBooking;

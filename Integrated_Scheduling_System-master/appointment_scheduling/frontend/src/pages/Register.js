@@ -18,7 +18,6 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(true);
   const navigate = useNavigate();
 
@@ -65,12 +64,8 @@ const Register = () => {
 
       // Check the status code
       if (response.status === 201) {
-        setSuccessMessage('Registration successful! Redirecting to login...');
-        setErrorMessage('');
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
-        return;
+        // Successful registration
+        navigate('/login/customer');
       } else {
         // Registration failed
         console.error('Registration failed:', response.data);
@@ -79,11 +74,15 @@ const Register = () => {
         setErrorMessage('Registration failed. Please try again.');
       }
     } catch (error) {
-      if (error.response && error.response.data && error.response.data.error) {
-        // Extract and log the specific error message
-        const errorMessage = error.response.data.error;
-        console.error('Registration failed:', errorMessage);
-        setErrorMessage(`Registration failed: ${errorMessage}. Please try again.`);
+      if (error.response?.data) {
+        const responseData = error.response.data;
+        const backendMessage = responseData.error
+          || responseData.customerEmail?.[0]
+          || responseData.customerPhone?.[0]
+          || responseData.customerPostalCode?.[0]
+          || responseData.customerPassword?.[0];
+        console.error('Registration failed:', backendMessage || responseData);
+        setErrorMessage(backendMessage || 'Registration failed. Please try again.');
       } else {
         // Handle other network errors or exceptions
         console.error('Registration failed:', error);
@@ -236,17 +235,12 @@ const Register = () => {
                 </p>
               )}
           </span>
-          {successMessage && (
-            <div className="mb-4 p-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg text-center">
-              {successMessage}
-            </div>
-          )}
           {errorMessage && <div className="mb-4 text-sm text-red-500">{errorMessage}</div>}
           <Button
             className="mt-6"
             fullWidth
             type="submit"
-            disabled={isSubmitDisabled || !!successMessage}
+            disabled={isSubmitDisabled}
           >
             Register
           </Button>

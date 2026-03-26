@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Typography } from "@material-tailwind/react";
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import axios from "axios";
+import { Link, useSearchParams } from 'react-router-dom';
+import api from "../axiosConfig";
 import backgroundImage from '../asset/img/air_servicing.png';
 
 function ResetPassword() {
     const [searchParams] = useSearchParams();
-    const navigate = useNavigate();
     const token = searchParams.get('token');
 
     const [newPassword, setNewPassword] = useState('');
@@ -30,10 +29,8 @@ function ResetPassword() {
                 return;
             }
 
-            const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
-
             try {
-                const response = await axios.get(`${baseUrl}/api/technicians/validate-reset-token/?token=${token}`);
+                const response = await api.get(`/api/technicians/validate-reset-token/?token=${token}`);
                 if (response.data.valid) {
                     setTokenValid(true);
                     setTechnicianName(response.data.technicianName || '');
@@ -95,10 +92,8 @@ function ResetPassword() {
 
         setLoading(true);
 
-        const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
-
         try {
-            const response = await axios.post(`${baseUrl}/api/technicians/reset-password/`, {
+            const response = await api.post(`/api/technicians/reset-password/`, {
                 token: token,
                 newPassword: newPassword
             });

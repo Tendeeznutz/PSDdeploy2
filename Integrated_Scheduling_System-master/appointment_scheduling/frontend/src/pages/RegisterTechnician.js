@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from "axios";
+import api from "../axiosConfig";
 
 function RegisterTechnician() {
     const [technicianObj, setTechnicianObj] = useState({
@@ -35,7 +35,7 @@ function RegisterTechnician() {
                     throw new Error("Please enter a valid Singapore phone number. Please try again.");
                 }
             } 
-            const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/technicians/`, {
+            const response = await api.post(`/api/technicians/`, {
                 technicianName: technicianObj.name,
                 technicianPostalCode: technicianObj.postalCode,
                 technicianAddress: technicianObj.address,
@@ -45,7 +45,7 @@ function RegisterTechnician() {
             });
 
             if (response.status === 201) {
-                navigate('/CoordinatorHome');
+                navigate('/coordinator/home');
             }
         } catch (error) {
             console.log(error)
@@ -156,7 +156,7 @@ function RegisterTechnician() {
                             >
                                 <option value="own_vehicle">Own Vehicle</option>
                                 <option value="company_vehicle">Company Vehicle</option>
-                                <option value="rental_van">Rental Van</option>
+                                <option value="rented_vehicle">Rented Vehicle</option>
                             </select>
                         </div>
 

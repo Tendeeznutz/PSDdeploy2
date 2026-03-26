@@ -5,7 +5,6 @@ import './index.css';
 import Navbar from './components/navbar';
 import CoordinatorNavbar from './components/CoordinatorNavbar';
 import InactivityTimer from './components/InactivityTimer';
-import reportWebVitals from './reportWebVitals';
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Register from "./pages/Register";
@@ -29,6 +28,9 @@ import GuestBooking from './pages/GuestBooking';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Error404 from './pages/Error404';
+import gsap from 'gsap';
+
+gsap.registerPlugin();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -44,6 +46,7 @@ root.render(
             <Route path='/login/coordinator' element={<Login/>}/>
             <Route path='/TechnicianLogin' element={<Navigate to="/login/technician" replace />}/>
             <Route path='/register' element={<Register/>}/>
+            <Route path='/register/customer' element={<Register/>}/>
             <Route path='/apply-technician' element={<ApplyTechnician/>}/>
             <Route path='/forgot-password' element={<ForgotPassword/>}/>
             <Route path='/reset-password' element={<ResetPassword/>}/>
@@ -78,4 +81,3 @@ root.render(
     </Router>
 );
 
-reportWebVitals();

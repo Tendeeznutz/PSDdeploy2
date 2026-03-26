@@ -3,7 +3,7 @@ import { Result } from 'antd';
 
 function Error404() {
     const navigate = useNavigate();
-    const customerId = localStorage.getItem('customer_id');
+    const customerId = localStorage.getItem('customers_id');
     const coordinatorId = localStorage.getItem('coordinators_id');
     const technicianId = localStorage.getItem('technicians_id');
 
