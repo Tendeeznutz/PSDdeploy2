@@ -31,9 +31,10 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # ── Git Pull ─────────────────────────────────────────────────
 do_pull() {
-    info "Pulling latest from origin/server-push..."
+    BRANCH=$(cd "$REPO_DIR" && git rev-parse --abbrev-ref HEAD)
+    info "Pulling latest from origin/$BRANCH..."
     cd "$REPO_DIR"
-    git pull origin server-push
+    git pull origin "$BRANCH"
     info "Pull complete."
 }
 
