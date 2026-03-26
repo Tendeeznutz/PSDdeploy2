@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
 
@@ -45,7 +45,7 @@ function RegisterTechnician() {
             });
 
             if (response.status === 201) {
-                navigate('/CoordinatorHome');
+                navigate('/coordinator/home');
             }
         } catch (error) {
             console.log(error)
@@ -156,7 +156,7 @@ function RegisterTechnician() {
                             >
                                 <option value="own_vehicle">Own Vehicle</option>
                                 <option value="company_vehicle">Company Vehicle</option>
-                                <option value="rental_van">Rental Van</option>
+                                <option value="rented_vehicle">Rented Vehicle</option>
                             </select>
                         </div>
 

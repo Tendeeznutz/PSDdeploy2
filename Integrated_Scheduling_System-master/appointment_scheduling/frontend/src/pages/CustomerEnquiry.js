@@ -1,121 +1,160 @@
-import React, {useEffect, useState} from 'react';
-import api from "../axiosConfig";
-import {message, Button} from "antd";
+import React, { useState } from 'react';
+import { Button, Input, message } from 'antd';
+import { ArrowLeftOutlined, SendOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 
-const CustomerEnquiry = () => {
-    const custId = new URLSearchParams(window.location.search).get('id');
-    const custName = new URLSearchParams(window.location.search).get('name');
+import api from '../axiosConfig';
+import OwnedCard from '../components/ui/OwnedCard';
+import OwnedPageHeader from '../components/ui/OwnedPageHeader';
+import OwnedPageShell from '../components/ui/OwnedPageShell';
+
+const { TextArea } = Input;
+
+function CustomerEnquiry() {
+    const navigate = useNavigate();
+    const customerId = new URLSearchParams(window.location.search).get('id');
+    const customerName = new URLSearchParams(window.location.search).get('name');
+    const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({
-        customerId: custId,
+        customerId,
         emailSubject: '',
         emailBody: '',
     });
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData((prevData) => ({
-            ...prevData,
-            [name]: value,
+    const handleFieldChange = (field, value) => {
+        setFormData((current) => ({
+            ...current,
+            [field]: value,
         }));
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (event) => {
+        event.preventDefault();
 
+        if (!formData.customerId || !customerName) {
+            message.error('Customer details are missing for this enquiry.');
+            return;
+        }
+
+        if (!formData.emailSubject.trim() || !formData.emailBody.trim()) {
+            message.warning('Please enter both a subject and a message.');
+            return;
+        }
+
+        setSubmitting(true);
         try {
-            // Get coordinator info from localStorage
-            const coordinatorId = localStorage.getItem("coordinators_id");
-            const coordinatorName = localStorage.getItem("coordinators_name");
+            const coordinatorId = localStorage.getItem('coordinators_id');
+            const coordinatorName = localStorage.getItem('coordinators_name');
 
-            // Send email (existing functionality)
-            await api.post(`/api/appointments/sendEnquiry/`, formData);
+            await api.post('/api/appointments/sendEnquiry/', formData);
 
-            // Save message to database for in-app messaging system
             if (coordinatorId && coordinatorName) {
-                await api.post(`/api/messages/`, {
+                await api.post('/api/messages/', {
                     senderId: coordinatorId,
                     senderType: 'coordinator',
                     senderName: coordinatorName,
                     recipientId: formData.customerId,
                     recipientType: 'customer',
-                    recipientName: custName,
-                    subject: formData.emailSubject,
-                    body: formData.emailBody
+                    recipientName: customerName,
+                    subject: formData.emailSubject.trim(),
+                    body: formData.emailBody.trim(),
                 });
             }
 
-            message.success('Enquiry sent successfully! Customer will receive email and message notification.');
+            message.success('Enquiry sent successfully. The customer will receive both the email and mailbox message.');
+            setFormData({
+                customerId,
+                emailSubject: '',
+                emailBody: '',
+            });
         } catch (error) {
-            // Handle error
-            console.error('Error submitting form:', error);
-            message.error('Error sending enquiry');
+            console.error('Error submitting enquiry:', error);
+            message.error('Error sending enquiry.');
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
-        <div className="w-full h-full bg-gray-100">
-            <div className="flex items-center justify-center p-5">
-                <div className="w-2/6 p-6 m-40 bg-white rounded-xl shadow-md">
-                    <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Customer Enquiry</h2>
-                    <form onSubmit={handleSubmit}>
-                        {/*Customer name*/}
-                        <div className="mb-4">
-                            <label htmlFor="customerName" className="block">Customer Name:</label>
-                            <input
-                                type="text"
-                                id="customerName"
-                                name="customerName"
-                                // value={formData.customerName}
-                                value={custName}
-                                onChange={handleChange}
-                                className="w-full px-4 py-2 border rounded-md"
-                                disabled={true}
-                            />
-                        </div>
-
-                        <div className="mb-4">
-                            <label htmlFor="emailSubject" className="block">Email Subject:</label>
-                            <input
-                                type="text"
-                                id="emailSubject"
-                                name="emailSubject"
-                                value={formData.emailSubject}
-                                onChange={handleChange}
-                                className="w-full px-4 py-2 border rounded-md"
-                            />
-                        </div>
-
-                        <div className="mb-4">
-                            <label htmlFor="emailBody" className="block">Email Body:</label>
-                            <textarea
-                                id="emailBody"
-                                name="emailBody"
-                                value={formData.emailBody}
-                                onChange={handleChange}
-                                className="w-full px-4 py-2 border rounded-md"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            className="w-full bg-green-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition duration-300"
-                        >
-                            Send Enquiry Email
-                        </button>
-                        {/*back button*/}
+        <div className="min-h-screen bg-[#F8F9FA]">
+            <OwnedPageShell narrow>
+                <OwnedPageHeader
+                    eyebrow="Customer enquiry"
+                    title="Send a customer update"
+                    description="Use a clear subject and concise message so the customer can quickly understand what action or update relates to their booking."
+                    actions={(
                         <Button
-                            href="/coordinator/home"
-                            type="primary"
-                            className="w-full mt-4"
+                            icon={<ArrowLeftOutlined />}
+                            className="owned-secondary-button"
+                            onClick={() => navigate('/coordinator/home')}
                         >
-                            Back
+                            Back to home
                         </Button>
+                    )}
+                />
+
+                <OwnedCard className="p-5 md:p-6">
+                    <div className="owned-inline-note mb-6">
+                        This sends the enquiry through the current email flow and also saves it to the in-app mailbox for easier follow-up.
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="owned-field">
+                            <label htmlFor="enquiry-customer" className="owned-field__label">Customer</label>
+                            <Input
+                                id="enquiry-customer"
+                                value={customerName || 'Unknown customer'}
+                                disabled
+                                className="owned-input"
+                            />
+                        </div>
+
+                        <div className="owned-field">
+                            <label htmlFor="enquiry-subject" className="owned-field__label">Subject</label>
+                            <Input
+                                id="enquiry-subject"
+                                value={formData.emailSubject}
+                                onChange={(event) => handleFieldChange('emailSubject', event.target.value)}
+                                placeholder="Enter a short subject line"
+                                maxLength={200}
+                                className="owned-input"
+                            />
+                        </div>
+
+                        <div className="owned-field">
+                            <label htmlFor="enquiry-body" className="owned-field__label">Message</label>
+                            <TextArea
+                                id="enquiry-body"
+                                value={formData.emailBody}
+                                onChange={(event) => handleFieldChange('emailBody', event.target.value)}
+                                placeholder="Explain the update, question, or action the customer should know about."
+                                rows={9}
+                                maxLength={2000}
+                                className="owned-input"
+                            />
+                        </div>
+
+                        <div className="owned-action-row pt-2">
+                            <Button
+                                className="owned-secondary-button"
+                                onClick={() => navigate('/coordinator/mailbox')}
+                            >
+                                Go to mailbox
+                            </Button>
+                            <Button
+                                htmlType="submit"
+                                className="owned-primary-button"
+                                icon={<SendOutlined />}
+                                loading={submitting}
+                            >
+                                Send enquiry
+                            </Button>
+                        </div>
                     </form>
-                </div>
-            </div>
+                </OwnedCard>
+            </OwnedPageShell>
         </div>
     );
-
-};
+}
 
 export default CustomerEnquiry;

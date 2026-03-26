@@ -18,30 +18,23 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitDisabled, setIsSubmitDisabled] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
   const navigate = useNavigate();
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isSubmitDisabled = !customerObject.customerName ||
-      !customerObject.customerAddress ||
-      !customerObject.customerPostalCode ||
-      !customerObject.customerPhone ||
-      !customerObject.customerEmail ||
-      !customerObject.customerPassword ||
-      !confirmPassword ||
-      !emailRegex.test(customerObject.customerEmail) ||
-      customerObject.customerPassword !== confirmPassword;
 
   const handleEmailChange = (e) => {
     const newEmail = e.target.value;
     setCustomerObject({ ...customerObject, customerEmail: newEmail });
 
     // Email validation
-    if (!emailRegex.test(newEmail)) {
-      setEmailError('Please enter a valid email address');
-    } else {
-      setEmailError('');
-    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        setEmailError('Please enter a valid email address');
+        setIsSubmitDisabled(true);
+      } else {
+        setEmailError('');
+        setIsSubmitDisabled(false);
+      }
   };
 
   const handleSubmit = async (event) => {
@@ -83,11 +76,15 @@ const Register = () => {
         setErrorMessage('Registration failed. Please try again.');
       }
     } catch (error) {
-      if (error.response && error.response.data && error.response.data.error) {
-        // Extract and log the specific error message
-        const errorMessage = error.response.data.error;
-        console.error('Registration failed:', errorMessage);
-        setErrorMessage(`Registration failed: ${errorMessage}. Please try again.`);
+      if (error.response?.data) {
+        const responseData = error.response.data;
+        const backendMessage = responseData.error
+          || responseData.customerEmail?.[0]
+          || responseData.customerPhone?.[0]
+          || responseData.customerPostalCode?.[0]
+          || responseData.customerPassword?.[0];
+        console.error('Registration failed:', backendMessage || responseData);
+        setErrorMessage(backendMessage || 'Registration failed. Please try again.');
       } else {
         // Handle other network errors or exceptions
         console.error('Registration failed:', error);

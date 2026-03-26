@@ -16,13 +16,9 @@ function InactivityTimer() {
     const warningTimeoutRef = useRef(null);
     const countdownRef = useRef(null);
 
-    // Check if user is logged in via session data (tokens are in HTTP-only cookies)
+    // Check if user is logged in (any type of user)
     const isLoggedIn = () => {
-        return !!(
-            localStorage.getItem('customers_id') ||
-            localStorage.getItem('technicians_id') ||
-            localStorage.getItem('coordinators_id')
-        );
+        return !!(localStorage.getItem('customers_id') || localStorage.getItem('technicians_id') || localStorage.getItem('coordinators_id'));
     };
 
     // Clear all auth data on logout
@@ -96,11 +92,11 @@ function InactivityTimer() {
         const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 
         // Throttle reset to avoid excessive calls
-        const lastResetRef = { current: Date.now() };
+        let lastReset = Date.now();
         const throttledReset = () => {
             const now = Date.now();
-            if (now - lastResetRef.current > 1000) { // Only reset every 1 second max
-                lastResetRef.current = now;
+            if (now - lastReset > 1000) { // Only reset every 1 second max
+                lastReset = now;
                 resetTimer();
             }
         };
