@@ -33,9 +33,20 @@ function ScheduleAppointment() {
         { value: 'paynow', label: 'PayLah / PayNow' },
     ];
 
+    // Calculate total units from selected aircon devices
+    const getTotalUnits = () => {
+        return selectedAircons.reduce((total, airconId) => {
+            const device = userAirconList.find(a => a.id === airconId);
+            return total + (device ? device.numberOfUnits : 1);
+        }, 0);
+    };
+
+    // Calculate total cost based on total units across selected devices
     const calculateTotalCost = () => {
-        if (selectedAircons.length === 0) return 0;
-        return (selectedAircons.length * SERVICE_COST_PER_AIRCON) + TRAVEL_FEE;
+        const totalUnits = getTotalUnits();
+        if (totalUnits === 0) return 0;
+        const serviceCost = totalUnits * SERVICE_COST_PER_AIRCON;
+        return serviceCost + TRAVEL_FEE;
     };
 
     useEffect(() => {
@@ -283,12 +294,12 @@ function ScheduleAppointment() {
                             <p className="text-sm font-semibold uppercase tracking-wide text-[#4F81BD]">Booking summary</p>
                             <div className="mt-4 space-y-3 text-sm text-[#6B7280]">
                                 <div className="flex items-center justify-between gap-4">
-                                    <span>Units selected</span>
-                                    <span className="font-semibold text-[#22252E]">{selectedAircons.length || 0}</span>
+                                    <span>Total units</span>
+                                    <span className="font-semibold text-[#22252E]">{getTotalUnits()} unit{getTotalUnits() !== 1 ? 's' : ''}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-4">
-                                    <span>Service fee</span>
-                                    <span className="font-semibold text-[#22252E]">${selectedAircons.length * SERVICE_COST_PER_AIRCON}.00</span>
+                                    <span>Service fee ({getTotalUnits()} x ${SERVICE_COST_PER_AIRCON})</span>
+                                    <span className="font-semibold text-[#22252E]">${getTotalUnits() * SERVICE_COST_PER_AIRCON}.00</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-4">
                                     <span>Travel fee</span>

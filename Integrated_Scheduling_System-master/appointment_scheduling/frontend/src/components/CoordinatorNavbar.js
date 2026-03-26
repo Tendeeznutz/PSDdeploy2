@@ -11,7 +11,7 @@ function CoordinatorNavbar() {
 
     if (!isCoordinator || !location.pathname.startsWith('/coordinator/')) return null;
 
-    const logout = async () => {
+    const handleLogout = async () => {
         await serverLogout();
         navigate('/');
     };
@@ -124,7 +124,7 @@ function CoordinatorNavbar() {
                         {name}
                     </span>
                     <button
-                        onClick={logout}
+                        onClick={handleLogout}
                         className="navbar-logout-btn"
                         style={{
                             background: 'none', border: '1px solid #e5e7eb',
@@ -184,7 +184,7 @@ function CoordinatorNavbar() {
                         );
                     })}
                     <button
-                        onClick={() => { setMenuOpen(false); logout(); }}
+                        onClick={() => { setMenuOpen(false); handleLogout(); }}
                         style={{
                             marginTop: 10, width: '100%',
                             background: '#fee2e2', color: '#b91c1c',

@@ -19,6 +19,7 @@ const Register = () => {
   const [emailError, setEmailError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(true);
+  const [showSuccess, setShowSuccess] = useState(false);
   const navigate = useNavigate();
 
   const handleEmailChange = (e) => {
@@ -64,8 +65,9 @@ const Register = () => {
 
       // Check the status code
       if (response.status === 201) {
-        // Successful registration
-        navigate('/login/customer');
+        // Successful registration — show confirmation popup
+        setShowSuccess(true);
+        return;
       } else {
         // Registration failed
         console.error('Registration failed:', response.data);
@@ -250,6 +252,24 @@ const Register = () => {
           </Typography>
         </form>
       </div>
+
+      {/* Registration Success Dialog */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 text-center">
+            <div className="text-5xl mb-4">&#10003;</div>
+            <Typography variant="h4" className="font-bold mb-2">
+              Registration Confirmed
+            </Typography>
+            <Typography variant="paragraph" color="blue-gray" className="mb-6">
+              Your account has been created successfully. Please head to the login page to sign in.
+            </Typography>
+            <Button fullWidth onClick={() => navigate('/login/customer')}>
+              Go to Login
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
     );
 };

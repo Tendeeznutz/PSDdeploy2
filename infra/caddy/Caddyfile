@@ -1,0 +1,38 @@
+# AirServe reverse proxy — scaffolded for future use
+# Not referenced in docker-compose.yml yet.
+#
+# To activate: add a caddy service to docker-compose.yml
+# and mount this file at /etc/caddy/Caddyfile
+#
+# Example docker-compose service:
+#   caddy:
+#     image: caddy:2-alpine
+#     restart: unless-stopped
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     volumes:
+#       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+#       - caddy_data:/data
+#       - caddy_config:/config
+#     networks:
+#       - airserve-net
+#     depends_on:
+#       backend:
+#         condition: service_healthy
+
+{$DOMAIN:localhost} {
+    reverse_proxy backend:8000
+
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

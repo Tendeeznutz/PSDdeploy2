@@ -14,9 +14,6 @@ const ROLES = [
 /* ─── Auth redirect ──────────────────────────────────────────────────────── */
 function useAuthRedirect(navigate) {
   useEffect(() => {
-    // Cookie JWT — check user info keys instead of token
-    const hasSession = localStorage.getItem('customers_id') || localStorage.getItem('technicians_id') || localStorage.getItem('coordinators_id');
-    if (!hasSession) return;
     if (localStorage.getItem('customers_id'))   { navigate('/customer/home');    return; }
     if (localStorage.getItem('technicians_id')) { navigate('/technician/home');  return; }
     if (localStorage.getItem('coordinators_id')){ navigate('/coordinator/home'); return; }
@@ -185,8 +182,110 @@ function RoleCard({ role, index, onClick }) {
   );
 }
 
+/* ─── Forgot password dialog ─────────────────────────────────────────────── */
+function ForgotPasswordDialog({ role, onClose }) {
+  const isPhone = role === 'technician';
+  const [value, setValue] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage('');
+    setError('');
+    setLoading(true);
+
+    try {
+      let endpoint, payload;
+      if (isPhone) {
+        endpoint = '/api/technicians/forgot-password/';
+        payload = { phone: value };
+      } else {
+        endpoint = '/api/customers/forgot-password/';
+        payload = { email: value };
+      }
+      const response = await api.post(endpoint, payload);
+      setMessage(response.data.message || 'If an account exists, a reset link has been sent.');
+      setSent(true);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send reset link. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Coordinators don't have self-service password reset
+  if (role === 'coordinator') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
+        <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 25px 50px rgba(0,0,0,0.15)', width: '100%', maxWidth: 420, margin: '0 16px', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Reset Password</div>
+            <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, color: '#9ca3af', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+          </div>
+          <div style={{ padding: 16, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', marginBottom: 16 }}>
+            <p style={{ fontSize: 14, color: '#374151', margin: 0 }}>Coordinator password resets must be performed by another coordinator from the admin panel.</p>
+          </div>
+          <button onClick={onClose} style={{ width: '100%', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to Login</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
+      <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 25px 50px rgba(0,0,0,0.15)', width: '100%', maxWidth: 420, margin: '0 16px', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Reset Password</div>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, color: '#9ca3af', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+        </div>
+
+        {!sent ? (
+          <form onSubmit={handleSubmit}>
+            <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 16 }}>
+              {isPhone
+                ? "Enter your phone number and we'll send a reset link to your registered email."
+                : "Enter your email address and we'll send you a password reset link."}
+            </p>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block' }}>
+                {isPhone ? 'Phone Number' : 'Email'} <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type={isPhone ? 'tel' : 'email'}
+                placeholder={isPhone ? 'e.g. 91234567' : 'name@mail.com'}
+                style={{ width: '100%', padding: '10px 14px', fontSize: 15, color: '#0f172a', background: 'white', border: '1.5px solid #d1d5db', borderRadius: 10, outline: 'none', boxSizing: 'border-box', marginTop: 8, fontFamily: 'inherit' }}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                required
+                {...(isPhone ? { pattern: '[0-9]{8}', title: 'Phone number must be 8 digits' } : {})}
+                autoFocus
+              />
+            </div>
+            {error && <p style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>{error}</p>}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button type="button" onClick={onClose} style={{ flex: 1, background: 'white', color: '#374151', border: '1.5px solid #d1d5db', borderRadius: 10, padding: '12px 24px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button type="submit" disabled={loading} style={{ flex: 1, background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? 0.7 : 1 }}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 10, border: '1px solid #bbf7d0', marginBottom: 16 }}>
+              <p style={{ fontSize: 14, color: '#15803d', margin: '0 0 8px' }}>{message}</p>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Please check your email for the password reset link.</p>
+            </div>
+            <button onClick={onClose} style={{ width: '100%', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to Login</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Login form (role selected) ─────────────────────────────────────────── */
-function LoginForm({ selectedRole, emailOrPhone, setEmailOrPhone, password, setPassword, errorMessage, handleSubmit, handleBackToRoleSelect }) {
+function LoginForm({ selectedRole, emailOrPhone, setEmailOrPhone, password, setPassword, errorMessage, handleSubmit, handleBackToRoleSelect, showForgotPassword, setShowForgotPassword }) {
   const isPhoneRole = selectedRole === 'technician';
   const inputLabel = isPhoneRole ? 'Phone' : 'Email';
   const inputPlaceholder = isPhoneRole ? 'e.g. 91234567' : 'name@mail.com';
@@ -234,8 +333,15 @@ function LoginForm({ selectedRole, emailOrPhone, setEmailOrPhone, password, setP
             Sign in as {ROLES.find(r => r.id === selectedRole)?.label}
           </motion.button>
         </form>
+        {/* Forgot Password link — shown for all roles */}
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <button type="button" onClick={() => setShowForgotPassword(true)}
+            style={{ fontSize: 13, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
+            Forgot Password?
+          </button>
+        </div>
         {selectedRole === 'customer' && (
-          <div style={{ marginTop: 20, textAlign: 'center' }}>
+          <div style={{ marginTop: 12, textAlign: 'center' }}>
             <p style={{ fontSize: 13, color: '#6b7280' }}>
               Not registered?{' '}
               <Link to="/register" style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>Create account</Link>
@@ -251,8 +357,7 @@ function LoginForm({ selectedRole, emailOrPhone, setEmailOrPhone, password, setP
           </div>
         )}
         {selectedRole === 'technician' && (
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-            <Link to="/forgot-password" style={{ fontSize: 13, color: '#2563eb', textDecoration: 'none' }}>Forgot Password?</Link>
+          <div style={{ marginTop: 8, textAlign: 'center' }}>
             <p style={{ fontSize: 13, color: '#6b7280', marginTop: 10 }}>
               Want to join as a technician?{' '}
               <Link to="/apply-technician" style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>Apply here</Link>
@@ -260,6 +365,13 @@ function LoginForm({ selectedRole, emailOrPhone, setEmailOrPhone, password, setP
           </div>
         )}
       </motion.div>
+      {/* Forgot Password Dialog */}
+      {showForgotPassword && (
+        <ForgotPasswordDialog
+          role={selectedRole}
+          onClose={() => setShowForgotPassword(false)}
+        />
+      )}
     </div>
   );
 }
@@ -273,6 +385,7 @@ function Login() {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
 
   useAuthRedirect(navigate);
@@ -296,11 +409,12 @@ function Login() {
     const roleToEndpoint = { customer: 'customers', technician: 'technicians', coordinator: 'coordinators' };
     const endpoint = `/api/${roleToEndpoint[selectedRole]}/login/`;
     try {
-      const response = await api.post(endpoint, { email: emailOrPhone, password });
-      // Clear previous session (JWT tokens are in HTTP-only cookies)
+      // Clear previous session data before login
       clearSessionData();
+      const response = await api.post(endpoint, { email: emailOrPhone, password });
       if (response.status === 200) {
-        // Only store user info — tokens are set as cookies by the server
+        // JWT tokens are set as HTTP-only cookies by the server.
+        // Only store non-sensitive user info for UI display.
         if (selectedRole === 'customer') {
           localStorage.setItem('customers_id', response.data.customer_id);
           localStorage.setItem('customers_name', response.data.customerName);
@@ -318,8 +432,15 @@ function Login() {
         }
       }
     } catch (error) {
-      const msg = error.response?.data?.error || error.response?.data?.detail || 'Login failed. Please try again.';
-      setErrorMessage(typeof msg === 'string' ? msg : 'Login failed. Please try again.');
+      if (!error.response) {
+        // No response at all — network error or backend cold start timeout
+        setErrorMessage('Server is starting up. Please wait a moment and try again.');
+      } else if (error.response.status >= 500) {
+        setErrorMessage('Server is temporarily unavailable. Please try again in a moment.');
+      } else {
+        const msg = error.response?.data?.error || error.response?.data?.detail || 'Login failed. Please try again.';
+        setErrorMessage(typeof msg === 'string' ? msg : 'Login failed. Please try again.');
+      }
     }
   };
 
@@ -332,6 +453,8 @@ function Login() {
         errorMessage={errorMessage}
         handleSubmit={handleSubmit}
         handleBackToRoleSelect={handleBackToRoleSelect}
+        showForgotPassword={showForgotPassword}
+        setShowForgotPassword={setShowForgotPassword}
       />
     );
   }

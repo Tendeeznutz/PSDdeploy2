@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Typography } from "@material-tailwind/react";
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from "../axiosConfig";
 import backgroundImage from '../asset/img/air_servicing.png';
 
 function ResetPassword() {
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const token = searchParams.get('token');
+    const userType = searchParams.get('userType') || 'technician';
 
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -15,11 +17,14 @@ function ResetPassword() {
     const [loading, setLoading] = useState(false);
     const [validatingToken, setValidatingToken] = useState(true);
     const [tokenValid, setTokenValid] = useState(false);
-    const [technicianName, setTechnicianName] = useState('');
+    const [userName, setUserName] = useState('');
     const [resetSuccess, setResetSuccess] = useState(false);
 
     // Password validation states
     const [passwordErrors, setPasswordErrors] = useState([]);
+
+    const roleEndpoint = userType === 'customer' ? 'customers' : 'technicians';
+    const loginPath = userType === 'customer' ? '/login/customer' : '/login/technician';
 
     useEffect(() => {
         const validateToken = async () => {
@@ -30,10 +35,10 @@ function ResetPassword() {
             }
 
             try {
-                const response = await api.get(`/api/technicians/validate-reset-token/?token=${token}`);
+                const response = await api.get(`/api/${roleEndpoint}/validate-reset-token/?token=${token}`);
                 if (response.data.valid) {
                     setTokenValid(true);
-                    setTechnicianName(response.data.technicianName || '');
+                    setUserName(response.data.technicianName || response.data.customerName || '');
                 } else {
                     setError(response.data.error || 'Invalid or expired token');
                 }
@@ -45,17 +50,13 @@ function ResetPassword() {
         };
 
         validateToken();
-    }, [token]);
+    }, [token, roleEndpoint]);
 
     const validatePassword = (password) => {
         const errors = [];
 
         if (password.length < 8) {
             errors.push('Password must be at least 8 characters long');
-        }
-
-        if (!/^[a-zA-Z0-9]+$/.test(password)) {
-            errors.push('Password must contain only alphanumeric characters (letters and numbers)');
         }
 
         const digitCount = (password.match(/\d/g) || []).length;
@@ -93,7 +94,7 @@ function ResetPassword() {
         setLoading(true);
 
         try {
-            const response = await api.post(`/api/technicians/reset-password/`, {
+            const response = await api.post(`/api/${roleEndpoint}/reset-password/`, {
                 token: token,
                 newPassword: newPassword
             });
@@ -123,9 +124,9 @@ function ResetPassword() {
             <div className="w-full lg:w-3/5 mt-24">
                 <div className="text-center">
                     <Typography variant="h2" className="font-bold mb-4">Reset Password</Typography>
-                    {tokenValid && technicianName && (
+                    {tokenValid && userName && (
                         <Typography variant="paragraph" color="blue-gray" className="text-lg font-normal">
-                            Resetting password for: <span className="font-semibold">{technicianName}</span>
+                            Resetting password for: <span className="font-semibold">{userName}</span>
                         </Typography>
                     )}
                 </div>
@@ -156,7 +157,7 @@ function ResetPassword() {
                                 You can now log in with your new password.
                             </Typography>
                         </div>
-                        <Link to="/login/technician">
+                        <Link to={loginPath}>
                             <Button fullWidth>
                                 Go to Login
                             </Button>
@@ -170,7 +171,6 @@ function ResetPassword() {
                             </Typography>
                             <ul className="list-disc list-inside text-sm text-blue-600 mt-2">
                                 <li>Minimum 8 characters</li>
-                                <li>Only alphanumeric characters (letters and numbers)</li>
                                 <li>At least 3 numbers</li>
                             </ul>
                         </div>
@@ -222,7 +222,7 @@ function ResetPassword() {
                         </Button>
 
                         <div className="text-center mt-4">
-                            <Link to="/login/technician" className="text-sm text-blue-600 hover:text-blue-800">
+                            <Link to={loginPath} className="text-sm text-blue-600 hover:text-blue-800">
                                 Cancel and return to login
                             </Link>
                         </div>

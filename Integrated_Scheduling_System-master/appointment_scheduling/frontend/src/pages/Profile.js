@@ -104,6 +104,12 @@ function Profile() {
     });
     const [editErrorMessage, setEditErrorMessage] = useState('');
     const [userAirconList, setUserAirconList] = useState([]);
+
+    // Telegram linking state
+    const [telegramLinked, setTelegramLinked] = useState(false);
+    const [telegramDeepLink, setTelegramDeepLink] = useState('');
+    const [telegramLoading, setTelegramLoading] = useState(false);
+
     const [airconName, setAirconName] = useState('');
     const [numberOfUnits, setNumberOfUnits] = useState(1);
     const [airconType, setAirconType] = useState('daikin');
@@ -124,6 +130,55 @@ function Profile() {
             const r = await api.get(`/api/customeraircondevices/?customerId=${customer_id}`);
             return r.data;
         } catch (err) { console.error('Error fetching aircon data:', err); }
+    };
+
+    // ---- Telegram linking functions ----
+    const fetchTelegramStatus = async () => {
+        try {
+            const response = await api.get(`/api/telegram/status/?userType=customer&userId=${customer_id}`);
+            setTelegramLinked(response.data.linked);
+        } catch (error) {
+            console.error('Error fetching Telegram status:', error);
+        }
+    };
+
+    const handleConnectTelegram = async () => {
+        setTelegramLoading(true);
+        try {
+            const response = await api.post('/api/telegram/generate-link/', {
+                userType: 'customer',
+                userId: customer_id,
+            });
+            setTelegramDeepLink(response.data.deepLink);
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusResp = await api.get(`/api/telegram/status/?userType=customer&userId=${customer_id}`);
+                    if (statusResp.data.linked) {
+                        setTelegramLinked(true);
+                        setTelegramDeepLink('');
+                        clearInterval(pollInterval);
+                    }
+                } catch (err) {
+                    console.error('Polling error:', err);
+                }
+            }, 3000);
+            setTimeout(() => clearInterval(pollInterval), 600000);
+        } catch (error) {
+            console.error('Error generating Telegram link:', error);
+        }
+        setTelegramLoading(false);
+    };
+
+    const handleUnlinkTelegram = async () => {
+        try {
+            await api.post('/api/telegram/unlink/', {
+                userType: 'customer',
+                userId: customer_id,
+            });
+            setTelegramLinked(false);
+        } catch (error) {
+            console.error('Error unlinking Telegram:', error);
+        }
     };
 
     const toggleModal = () => {
@@ -330,6 +385,7 @@ function Profile() {
                 });
             });
             fetchUserAirconData().then(d => setUserAirconList(d));
+            fetchTelegramStatus();
         }
     }, []);
 
@@ -417,6 +473,35 @@ function Profile() {
                         onMouseLeave={e => e.currentTarget.style.background = '#4F81BD'}>
                         Edit Profile
                     </button>
+
+                    {/* Telegram Notifications Section */}
+                    <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid #f3f4f6' }} />
+                    <div>
+                        <span style={S.infoLabel}>Telegram Notifications</span>
+                        {telegramLinked ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', padding: '10px 14px', borderRadius: 8, border: '1px solid #bbf7d0', marginTop: 8 }}>
+                                <span style={{ color: '#15803d', fontSize: 13, fontWeight: 500 }}>Connected -- notifications on Telegram</span>
+                                <button type="button" onClick={handleUnlinkTelegram}
+                                    style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
+                                    Unlink
+                                </button>
+                            </div>
+                        ) : telegramDeepLink ? (
+                            <div style={{ background: '#eff6ff', padding: '10px 14px', borderRadius: 8, border: '1px solid #bfdbfe', marginTop: 8 }}>
+                                <p style={{ fontSize: 13, color: '#374151', marginBottom: 8, marginTop: 0 }}>Click below to open Telegram and link your account:</p>
+                                <a href={telegramDeepLink} target="_blank" rel="noopener noreferrer"
+                                    style={{ display: 'inline-block', background: '#4F81BD', color: 'white', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                                    Open in Telegram
+                                </a>
+                                <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, marginBottom: 0 }}>Link expires in 10 minutes. Waiting for connection...</p>
+                            </div>
+                        ) : (
+                            <button type="button" onClick={handleConnectTelegram} disabled={telegramLoading}
+                                style={{ width: '100%', marginTop: 8, background: '#0ea5e9', color: 'white', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 13, fontWeight: 600, cursor: telegramLoading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                                {telegramLoading ? 'Generating link...' : 'Connect Telegram'}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* ── RIGHT: Aircon units ─────────────────────────────────── */}

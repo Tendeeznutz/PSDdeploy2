@@ -172,6 +172,10 @@ function CoordinatorHome() {
     const [toggleActiveTechnician, setToggleActiveTechnician] = useState(null);
     const [toggleActiveLoading, setToggleActiveLoading] = useState(false);
     const [deactivationReason, setDeactivationReason] = useState('');
+    const [showDeleteCustomerModal, setShowDeleteCustomerModal] = useState(false);
+    const [deleteCustomer, setDeleteCustomer] = useState(null);
+    const [deleteCustomerLoading, setDeleteCustomerLoading] = useState(false);
+    const [deleteCustomerConfirmText, setDeleteCustomerConfirmText] = useState('');
 
     /* ── New UI state ─────────────────────────────────────────────────── */
     const [apptPage, setApptPage] = useState(1);
@@ -305,6 +309,36 @@ function CoordinatorHome() {
             message.success(`${r.data.technicianName} is now ${r.data.technicianStatus === '1' ? 'Available' : 'Unavailable'}`);
             const tr = await api.get(`/api/technicians/`); setTechnicians(tr.data);
         } catch (e) { message.error('Failed to update technician status.'); }
+    };
+
+    const handleOpenDeleteCustomerModal = (customer) => {
+        setDeleteCustomer(customer);
+        setDeleteCustomerConfirmText('');
+        setShowDeleteCustomerModal(true);
+    };
+    const handleCancelDeleteCustomer = () => {
+        setShowDeleteCustomerModal(false);
+        setDeleteCustomer(null);
+        setDeleteCustomerConfirmText('');
+    };
+    const handleConfirmDeleteCustomer = async () => {
+        if (!deleteCustomer || deleteCustomerConfirmText !== 'DELETE') return;
+        setDeleteCustomerLoading(true);
+        try {
+            await api.delete(`/api/customers/${deleteCustomer.id}/`);
+            message.success(`Customer account for ${deleteCustomer.customerName} has been permanently deleted.`);
+            const custResponse = await api.get(`/api/customers/`);
+            setCustomers(custResponse.data);
+            fetchAppointments();
+            setShowDeleteCustomerModal(false);
+            setDeleteCustomer(null);
+            setDeleteCustomerConfirmText('');
+        } catch (e) {
+            console.error('Error deleting customer account:', e);
+            message.error('Failed to delete customer account. Please try again.');
+        } finally {
+            setDeleteCustomerLoading(false);
+        }
     };
 
     function formatUnixTimestamp(ts) {
@@ -824,6 +858,8 @@ function CoordinatorHome() {
                     return (
                         <div className="action-menu-container" style={{ ...dropStyle, minWidth: 190 }}>
                             <ActionItem icon="🔑" label="Reset Password" onClick={() => { handleOpenCustomerResetPasswordModal(cust); setOpenMenu(null); }} />
+                            <div style={{ height: 1, background: '#f3f4f6', margin: '4px 0' }} />
+                            <ActionItem icon="🗑" label="Delete Account" danger onClick={() => { handleOpenDeleteCustomerModal(cust); setOpenMenu(null); }} />
                         </div>
                     );
                 }
@@ -894,6 +930,31 @@ function CoordinatorHome() {
                     <div style={{ padding: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
                         <p style={{ fontSize: 13, color: '#92400e', margin: 0 }}>New password: <strong>password123</strong>. Email sent to {resetPasswordCustomer?.customerEmail}.</p>
                     </div>
+                </div>
+            </Modal>
+
+            <Modal title="Delete Customer Account" open={showDeleteCustomerModal}
+                onOk={handleConfirmDeleteCustomer} onCancel={handleCancelDeleteCustomer}
+                okText="Delete Permanently" okButtonProps={{ danger: true, loading: deleteCustomerLoading, disabled: deleteCustomerConfirmText !== 'DELETE' }}
+                cancelButtonProps={{ disabled: deleteCustomerLoading }}>
+                <div style={{ padding: '16px 0' }}>
+                    <p style={{ color: '#374151', marginBottom: 16 }}>
+                        Permanently delete <strong>{deleteCustomer?.customerName}</strong>'s account?
+                    </p>
+                    <div style={{ padding: 12, background: '#fff5f5', border: '1px solid #fecaca', borderRadius: 8, marginBottom: 16 }}>
+                        <p style={{ fontSize: 13, color: '#b91c1c', margin: 0 }}>
+                            This action cannot be undone. All customer data and associated appointments will be permanently removed.
+                        </p>
+                    </div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                        Type <strong>DELETE</strong> to confirm:
+                    </label>
+                    <input
+                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: FF, outline: 'none', boxSizing: 'border-box' }}
+                        value={deleteCustomerConfirmText}
+                        onChange={e => setDeleteCustomerConfirmText(e.target.value)}
+                        placeholder="DELETE"
+                    />
                 </div>
             </Modal>
         </div>

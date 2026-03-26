@@ -1,0 +1,48 @@
+# VCS
+.git
+.gitignore
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.venv
+**/venv
+**/env
+*.egg-info
+
+# Node (frontend not containerized here)
+**/node_modules
+**/frontend
+
+# IDE / OS
+.idea
+.vscode
+*.swp
+.DS_Store
+Thumbs.db
+
+# Docs and non-app files
+*.docx
+*.pptx
+*.tex
+*.gz
+*.md
+customer-frontend2/
+
+# Django dev artifacts
+**/db.sqlite3
+**/media
+**/staticfiles
+audit.log
+
+# Docker / CI
+.env
+.env.*
+!.env.example
+docker-compose*.yml
+infra/caddy/
+
+# Claude Code
+.claude/
+tmpclaude-*

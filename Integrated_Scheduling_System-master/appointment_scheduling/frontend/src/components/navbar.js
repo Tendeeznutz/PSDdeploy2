@@ -15,7 +15,7 @@ function Navbar() {
 
     if (!showForCustOrTech) return null;
 
-    const logout = async () => {
+    const handleLogout = async () => {
         await serverLogout();
         navigate('/');
     };
@@ -143,7 +143,7 @@ function Navbar() {
                         {name || role}
                     </span>
                     <button
-                        onClick={logout}
+                        onClick={handleLogout}
                         className="navbar-logout-btn"
                         style={{
                             background: 'none', border: '1px solid #e5e7eb',
@@ -203,7 +203,7 @@ function Navbar() {
                         );
                     })}
                     <button
-                        onClick={() => { setMenuOpen(false); logout(); }}
+                        onClick={() => { setMenuOpen(false); handleLogout(); }}
                         style={{
                             marginTop: 10, width: '100%',
                             background: '#fee2e2', color: '#b91c1c',
