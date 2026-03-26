@@ -317,7 +317,19 @@ class TechnicianAvailabilitySerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        """Validate that end time is after start time and check minimum working days"""
+        """Validate that end time is after start time, keep date/day consistent, and check minimum working days"""
+        # Keep specificDate and dayOfWeek consistent:
+        # For one-off dated availability, always derive dayOfWeek from the date.
+        instance = getattr(self, "instance", None)
+        specific_date = data.get("specificDate", getattr(instance, "specificDate", None))
+
+        if specific_date is not None:
+            derived_day = specific_date.strftime("%A").lower()
+            data["dayOfWeek"] = derived_day
+        elif instance and instance.specificDate and "dayOfWeek" in data:
+            derived_day = instance.specificDate.strftime("%A").lower()
+            data["dayOfWeek"] = derived_day
+
         start_time = data.get("startTime")
         end_time = data.get("endTime")
 

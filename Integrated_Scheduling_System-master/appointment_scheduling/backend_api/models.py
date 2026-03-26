@@ -130,7 +130,7 @@ class Technicians(models.Model):
     technicianPhone = models.CharField(max_length=50, unique=True, null=False, validators=[SG_PHONE_VALIDATOR])
     technicianEmail = models.CharField(max_length=50, unique=True, null=True, blank=True, validators=[validate_email], help_text='Email address for notifications')
     technicianPassword = models.CharField(max_length=128, null=False)
-    technicianStatus = models.CharField(default=1, choices=STATUS_CHOICES, max_length=1, null=False)
+    technicianStatus = models.CharField(default="1", choices=STATUS_CHOICES, max_length=1, null=False)
     specializations = models.JSONField(default=list, blank=True, help_text='List of AC brands the technician specializes in')
     technicianTravelType = models.CharField(max_length=20, choices=TRAVEL_TYPE_CHOICES, null=True, blank=True, default=None)
     technicianRating = models.DecimalField(max_digits=3, decimal_places=2, default=5.00, help_text='Average rating from customers (1-5), default 5')
@@ -219,7 +219,7 @@ class Appointments(TimeStampedModel):
     # validation should be done in serializer to check each entry exist in customerAirconDevices
     airconToService = models.JSONField(default=list, help_text='List of customerAirconDevices IDs')
     customerFeedback = models.TextField(default=None, null=True, max_length=500)
-    appointmentStatus = models.CharField(max_length=1, default=1, choices=STATUS_CHOICES)
+    appointmentStatus = models.CharField(max_length=1, default="1", choices=STATUS_CHOICES)
     paymentMethod = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, null=False, default='cash', help_text='Customer selected payment method')
     cancellationReason = models.TextField(default=None, null=True, blank=True, max_length=500, help_text='Reason for cancellation')
     cancelledBy = models.CharField(max_length=50, null=True, blank=True, help_text='Role of person who cancelled (technician/coordinator)')
