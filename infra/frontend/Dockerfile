@@ -39,7 +39,7 @@ RUN addgroup -g 1001 -S airserve && \
 # Standalone output: only the files needed to run the server (~30MB vs ~300MB)
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public 2>/dev/null || true
+COPY --from=builder /app/public ./public
 
 USER airserve
 
