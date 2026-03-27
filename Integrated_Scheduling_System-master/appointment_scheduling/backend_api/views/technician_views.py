@@ -3,6 +3,8 @@ import secrets
 import re
 from datetime import datetime, timedelta
 from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -123,14 +125,35 @@ class TechnicianViewSet(viewsets.ModelViewSet):
     # PATCH request
     def partial_update(self, request, pk):
         user_id = self._get_user_id(request)
-        if not self._require_role(request, ["coordinator"]) and str(pk) != user_id:
+        is_coordinator = self._require_role(request, ["coordinator"])
+        if not is_coordinator and str(pk) != user_id:
             return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
         item = get_object_or_404(Technicians.objects.all(), pk=pk)
-        serializer = self.serializer_class(item, data=request.data, partial=True)
+        request_data = request.data.copy()
+        current_password = request.data.get("currentPassword")
+        new_password = request_data.get("newPassword")
+
+        if new_password is not None and request_data.get("technicianPassword") is None:
+            request_data["technicianPassword"] = new_password
+        if "newPassword" in request_data:
+            del request_data["newPassword"]
+        if "currentPassword" in request_data:
+            del request_data["currentPassword"]
+
+        serializer = self.serializer_class(item, data=request_data, partial=True)
         if serializer.is_valid():
             # hash password
-            password = request.data.get("technicianPassword")
+            password = request_data.get("technicianPassword")
             if password is not None:
+                if not is_coordinator:
+                    if not current_password:
+                        return Response({"error": "Current password is required"}, status=status.HTTP_400_BAD_REQUEST)
+                    if not check_password(current_password, item.technicianPassword):
+                        return Response({"error": "Current password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    validate_password(password)
+                except ValidationError as e:
+                    return Response({"error": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
                 serializer.validated_data["technicianPassword"] = make_password(
                     password
                 )
