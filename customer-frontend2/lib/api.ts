@@ -63,7 +63,7 @@ export const customerApi = {
     return response.data;
   },
 
-  updateProfile: async (customerId: string, data: Partial<Customer>): Promise<Customer> => {
+  updateProfile: async (customerId: string, data: Partial<Customer> & Record<string, unknown>): Promise<Customer> => {
     const response = await api.patch(`/customers/${customerId}/`, data);
     return response.data;
   },

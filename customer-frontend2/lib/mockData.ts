@@ -37,7 +37,7 @@ export const mockAirconDevices: CustomerAirconDevice[] = [
     airconName: 'Guest Room',
     airconType: 'window',
     numberOfUnits: 1,
-    lastServiceMonth: null,
+    lastServiceMonth: undefined,
     remarks: 'Newly installed',
   },
 ];

@@ -187,7 +187,7 @@ function BookingSuccessContent() {
                   <td>${bookingData?.service}</td>
                   <td style="text-align: right;">${bookingData?.units || 1}</td>
                   <td style="text-align: right;">S$${SERVICES.find(s => s.name === bookingData?.service)?.pricePerUnit || SERVICES.find(s => s.name === bookingData?.service)?.basePrice || 50}</td>
-                  <td style="text-align: right;">S$${SERVICES.find(s => s.name === bookingData?.service)?.basePrice > 0 ? SERVICES.find(s => s.name === bookingData?.service)?.basePrice : (SERVICES.find(s => s.name === bookingData?.service)?.pricePerUnit || 50) * (bookingData?.units || 1)}</td>
+                  <td style="text-align: right;">S$${(SERVICES.find(s => s.name === bookingData?.service)?.basePrice || 0) > 0 ? SERVICES.find(s => s.name === bookingData?.service)?.basePrice : (SERVICES.find(s => s.name === bookingData?.service)?.pricePerUnit || 50) * (bookingData?.units || 1)}</td>
                 </tr>
                 ${bookingData?.addOns?.map((addon: string) => {
                   const addonObj = ADD_ONS.find(a => a.name === addon);
@@ -323,13 +323,13 @@ function BookingSuccessContent() {
                         </td>
                         <td className="text-right py-3 text-gray-600">{bookingData.units || 1}</td>
                         <td className="text-right py-3 text-gray-600">
-                          S${SERVICES.find(s => s.name === bookingData.service)?.basePrice > 0 
-                            ? SERVICES.find(s => s.name === bookingData.service)?.basePrice 
+                          S${(SERVICES.find(s => s.name === bookingData.service)?.basePrice || 0) > 0
+                            ? SERVICES.find(s => s.name === bookingData.service)?.basePrice
                             : SERVICES.find(s => s.name === bookingData.service)?.pricePerUnit || 50}
                         </td>
                         <td className="text-right py-3 font-medium text-gray-900">
-                          S${SERVICES.find(s => s.name === bookingData.service)?.basePrice > 0 
-                            ? SERVICES.find(s => s.name === bookingData.service)?.basePrice 
+                          S${(SERVICES.find(s => s.name === bookingData.service)?.basePrice || 0) > 0
+                            ? SERVICES.find(s => s.name === bookingData.service)?.basePrice
                             : (SERVICES.find(s => s.name === bookingData.service)?.pricePerUnit || 50) * (bookingData.units || 1)}
                         </td>
                       </tr>
