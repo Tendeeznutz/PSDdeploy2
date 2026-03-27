@@ -40,19 +40,14 @@ DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 # Validate secrets in production
 if not DEBUG:
-    if not SECRET_KEY or SECRET_KEY.startswith('django-insecure'):
+    if not SECRET_KEY or SECRET_KEY.startswith("django-insecure"):
         raise ValueError("SECRET_KEY must be set to a secure value in production")
 
+_default_hosts = ["127.0.0.1", "localhost"]
 _extra_hosts = [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
-ALLOWED_HOSTS = [
-    "23.97.71.0",
-    "integrated-scheduling.eastasia.cloudapp.azure.com",
-    "127.0.0.1",
-    "localhost",
-    "ay2526-tp-j.coding36.net",
-] + _extra_hosts
+ALLOWED_HOSTS = _extra_hosts or _default_hosts
 
 
 # Application definition
@@ -191,8 +186,7 @@ LOGGING = {
             "formatter": "verbose",
         },
         "audit_file": {
-            "class": "logging.FileHandler",
-            "filename": BASE_DIR / "audit.log",
+            "class": "logging.StreamHandler",
             "formatter": "audit_format",
         },
     },
@@ -203,7 +197,7 @@ LOGGING = {
             "propagate": False,
         },
         "audit": {
-            "handlers": ["console", "audit_file"],
+            "handlers": ["audit_file"],
             "level": "INFO",
             "propagate": False,
         },
@@ -279,9 +273,6 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
     # SSL redirect is handled by Apache, not Django
     SECURE_SSL_REDIRECT = False
-    if not DEBUG and not SECURE_SSL_REDIRECT:
-        import warnings
-        warnings.warn("SECURE_SSL_REDIRECT is False — ensure TLS is handled by the reverse proxy (Apache/Caddy)")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
@@ -296,8 +287,11 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
-if not DEBUG and not TELEGRAM_WEBHOOK_SECRET:
-    raise ValueError("TELEGRAM_WEBHOOK_SECRET must be set in production — webhook endpoint would be unprotected")
+TELEGRAM_ENABLED = bool(TELEGRAM_BOT_TOKEN)
+if TELEGRAM_ENABLED and not TELEGRAM_WEBHOOK_SECRET:
+    raise ValueError(
+        "TELEGRAM_WEBHOOK_SECRET must be set when TELEGRAM_BOT_TOKEN is configured"
+    )
 
 # ---------- Object Storage (MinIO / S3) ----------
 # When AWS_S3_ENDPOINT_URL is set (Docker/staging), use S3-compatible storage.
@@ -315,12 +309,23 @@ if _s3_endpoint:
     AWS_S3_ENDPOINT_URL = _s3_endpoint
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
-    AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "airserve-media")
+    AWS_STORAGE_BUCKET_NAME = os.environ.get(
+        "AWS_STORAGE_BUCKET_NAME", "airserve-media"
+    )
     AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "us-east-1")
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = True  # Signed URLs for private media
     AWS_S3_SIGNATURE_VERSION = "s3v4"
-    # For MinIO: disable custom domain, use path-style URLs
-    AWS_S3_CUSTOM_DOMAIN = None
+    # Media URLs: use the Caddy reverse proxy path so browsers can access files.
+    # MEDIA_PROXY_PATH is the external path prefix that Caddy proxies to MinIO.
+    _media_proxy_domain = os.environ.get(
+        "MEDIA_PROXY_DOMAIN"
+    )  # e.g., "ay2526-tp-j.coding36.net"
+    if _media_proxy_domain:
+        AWS_S3_CUSTOM_DOMAIN = (
+            f"{_media_proxy_domain}/storage/{AWS_STORAGE_BUCKET_NAME}"
+        )
+    else:
+        AWS_S3_CUSTOM_DOMAIN = None
     AWS_S3_ADDRESSING_STYLE = "path"
