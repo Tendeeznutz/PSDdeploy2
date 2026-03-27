@@ -171,13 +171,12 @@ else:
 
 ### 2. Aircon Device Creation
 ```python
-# Create temporary aircon device
+# Create temporary aircon device for each device in the booking
 aircon_device = CustomerAirconDevices.objects.create(
     customerId=customer,
-    airconName=f"{aircon_brand} - {aircon_model}",
-    airconBrand=aircon_brand,
-    airconModel=aircon_model,
-    isActive=True
+    airconName=f"{brand} - {model} (Booking {booking_timestamp})",
+    numberOfUnits=units,
+    airconType=aircon_type,
 )
 ```
 
@@ -200,7 +199,7 @@ aircon_device = CustomerAirconDevices.objects.create(
 - Travel Fee: $10
 - **Total: $60** (for 1 aircon unit)
 
-**Note:** Guest bookings are limited to 1 aircon unit. For multiple units, customers should create an account for better management.
+**Note:** Guest bookings support multiple aircon devices via the `airconDevices` request parameter (a list of `{brand, model, units}` objects). The legacy `numberOfUnits` parameter is also supported for single-device bookings.
 
 ## User Experience Benefits
 
@@ -269,11 +268,12 @@ Potential improvements:
 
 ## Security Considerations
 
-1. **Guest Passwords**: Random, non-guessable passwords prevent unauthorized access
-2. **Email Verification**: Confirmation sent to provided email validates ownership
-3. **Phone Validation**: Singapore number format ensures valid contact
-4. **Duplicate Prevention**: Checks existing customers to avoid account duplication
-5. **Data Privacy**: Guest accounts have same security as regular accounts
+1. **Rate Limiting**: Guest bookings are throttled to 10 requests per minute to prevent abuse
+2. **Guest Passwords**: Random, non-guessable passwords prevent unauthorized access
+3. **Email Verification**: Confirmation sent to provided email validates ownership
+4. **Phone Validation**: Singapore number format ensures valid contact
+5. **Duplicate Prevention**: Checks existing customers to avoid account duplication
+6. **Data Privacy**: Guest accounts have same security as regular accounts
 
 ## Support
 

@@ -6,7 +6,9 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Button from '@/components/Button';
-import Modal from '@/components/Modal';
+import dynamic from 'next/dynamic';
+
+const Modal = dynamic(() => import('@/components/Modal'));
 import { appointmentApi } from '@/lib/api';
 import { APP_CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/lib/store';

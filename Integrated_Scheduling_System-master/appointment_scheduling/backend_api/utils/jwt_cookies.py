@@ -20,13 +20,17 @@ _ACCESS_MAX_AGE = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds
 _REFRESH_MAX_AGE = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
 
+def _is_secure() -> bool:
+    """Use Secure cookies only when HTTPS is available."""
+    return getattr(settings, "CSRF_COOKIE_SECURE", not settings.DEBUG)
+
+
 def _cookie_kwargs(max_age: int) -> dict:
     """Base keyword arguments shared by set/delete helpers."""
-    secure = not settings.DEBUG
     return {
         "max_age": max_age,
         "httponly": True,
-        "secure": secure,
+        "secure": _is_secure(),
         "samesite": "Lax",
         "path": "/",
     }

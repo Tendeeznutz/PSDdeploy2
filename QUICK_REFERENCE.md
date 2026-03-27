@@ -2,9 +2,12 @@
 
 ## Key Concepts
 
-### 🕐 Time Buffer
-- **2.5 hours** blocked per appointment (service + travel time)
-- Example: 10:00-11:00 appointment blocks until 13:30
+### 🕐 Travel Buffer
+- **30 minutes** blocked after each appointment for travel
+- Example: 10:00-11:00 appointment blocks until 11:30
+
+### 🍽️ Lunch Break
+- **12:00-13:00 SGT** is blocked (no appointments during lunch)
 
 ### 📅 Minimum Working Days
 - Technicians must work **at least 5 days per week**
@@ -213,6 +216,6 @@ TechnicianAvailability.objects.filter(
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2024-01-22
-**Status**: ✅ Ready for Testing
+**Version**: 1.1.0
+**Last Updated**: March 2026
+**Status**: Production

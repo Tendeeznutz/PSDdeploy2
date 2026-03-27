@@ -87,10 +87,12 @@ GHCR_REPO_FRONTEND=tendeeznutz/airserve-frontend
 # ── Django Core ──────────────────────────────────────────────
 SECRET_KEY=$SECRET_KEY
 DEBUG=False
+USE_HTTPS=False
 
 ALLOWED_HOSTS=ay2526-tp-j.coding36.net,localhost,127.0.0.1
-CORS_ALLOWED_ORIGINS=https://ay2526-tp-j.coding36.net
-FRONTEND_BASE_URL=https://ay2526-tp-j.coding36.net
+CORS_ALLOWED_ORIGINS=http://ay2526-tp-j.coding36.net:8080
+CSRF_TRUSTED_ORIGINS=http://ay2526-tp-j.coding36.net:8080
+FRONTEND_BASE_URL=http://ay2526-tp-j.coding36.net:8080
 
 # ── Email (Gmail SMTP) ──────────────────────────────────────
 EMAIL_HOST_USER=

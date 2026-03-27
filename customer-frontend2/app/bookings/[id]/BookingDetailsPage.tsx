@@ -7,7 +7,9 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
-import Modal from '@/components/Modal';
+import dynamic from 'next/dynamic';
+
+const Modal = dynamic(() => import('@/components/Modal'));
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 
