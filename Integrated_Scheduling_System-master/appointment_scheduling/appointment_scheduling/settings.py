@@ -166,7 +166,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# When STORAGES dict is defined (S3/MinIO mode), it handles staticfiles too.
+# Only set the legacy setting when STORAGES is NOT used.
+if not os.environ.get("AWS_S3_ENDPOINT_URL"):
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Logging configuration
 LOGGING = {
