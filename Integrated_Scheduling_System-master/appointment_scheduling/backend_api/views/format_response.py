@@ -22,9 +22,17 @@ def prefetch_related_data(serialized_data_list):
     for data in serialized_data_list:
         if "id" in data and "customerName" not in data:
             appointment_ids.append(data["id"])
-        if "customerId" in data and data["customerId"] is not None and "customerName" not in data:
+        if (
+            "customerId" in data
+            and data["customerId"] is not None
+            and "customerName" not in data
+        ):
             customer_ids.add(data["customerId"])
-        if "technicianId" in data and data["technicianId"] is not None and "technicianName" not in data:
+        if (
+            "technicianId" in data
+            and data["technicianId"] is not None
+            and "technicianName" not in data
+        ):
             technician_ids.add(data["technicianId"])
         if "airconToService" in data and data["airconToService"] is not None:
             aircon_device_ids.update(data["airconToService"])
@@ -48,7 +56,9 @@ def prefetch_related_data(serialized_data_list):
     aircon_devices_map = {}
     catalog_ids = set()
     if aircon_device_ids:
-        for device in CustomerAirconDevices.objects.filter(id__in=aircon_device_ids).select_related("airconCatalogId"):
+        for device in CustomerAirconDevices.objects.filter(
+            id__in=aircon_device_ids
+        ).select_related("airconCatalogId"):
             aircon_devices_map[device.id] = device
             if device.airconCatalogId:
                 catalog_ids.add(device.airconCatalogId.id)
@@ -62,7 +72,9 @@ def prefetch_related_data(serialized_data_list):
     customer_ratings = set()
     technician_ratings = set()
     if appointment_ids:
-        for rating in AppointmentRating.objects.filter(appointment_id__in=appointment_ids).values_list("appointment_id", "ratedBy"):
+        for rating in AppointmentRating.objects.filter(
+            appointment_id__in=appointment_ids
+        ).values_list("appointment_id", "ratedBy"):
             if rating[1] == "customer":
                 customer_ratings.add(rating[0])
             elif rating[1] == "technician":
@@ -127,19 +139,27 @@ def include_all_info(data, request=None, prefetched=None):
         if prefetched:
             # Use prefetched rating sets
             if is_customer_context:
-                updates["display"]["hasRatedTechnician"] = appointment.id in customer_ratings
+                updates["display"]["hasRatedTechnician"] = (
+                    appointment.id in customer_ratings
+                )
             else:
-                updates["display"]["hasRatedCustomer"] = appointment.id in technician_ratings
+                updates["display"]["hasRatedCustomer"] = (
+                    appointment.id in technician_ratings
+                )
         else:
             # Fallback to individual queries
             if is_customer_context:
-                updates["display"]["hasRatedTechnician"] = AppointmentRating.objects.filter(
-                    appointment=appointment, ratedBy="customer"
-                ).exists()
+                updates["display"]["hasRatedTechnician"] = (
+                    AppointmentRating.objects.filter(
+                        appointment=appointment, ratedBy="customer"
+                    ).exists()
+                )
             else:
-                updates["display"]["hasRatedCustomer"] = AppointmentRating.objects.filter(
-                    appointment=appointment, ratedBy="technician"
-                ).exists()
+                updates["display"]["hasRatedCustomer"] = (
+                    AppointmentRating.objects.filter(
+                        appointment=appointment, ratedBy="technician"
+                    ).exists()
+                )
 
     if (
         "customerId" in data
@@ -157,6 +177,7 @@ def include_all_info(data, request=None, prefetched=None):
             updates["display"]["customerName"] = customer.customerName
             updates["display"]["customerPhone"] = customer.customerPhone
             updates["display"]["customerEmail"] = customer.customerEmail
+            updates["display"]["customerAddress"] = customer.customerAddress
             updates["display"]["customerPostalCode"] = customer.customerPostalCode
             if not is_customer_context:
                 updates["display"]["customerRating"] = float(customer.customerRating)
@@ -193,7 +214,9 @@ def include_all_info(data, request=None, prefetched=None):
             aircon = aircon_devices_map.get(customer_aircon_device_id)
             if aircon is None:
                 try:
-                    aircon = CustomerAirconDevices.objects.get(id=customer_aircon_device_id)
+                    aircon = CustomerAirconDevices.objects.get(
+                        id=customer_aircon_device_id
+                    )
                 except CustomerAirconDevices.DoesNotExist:
                     aircon = None
 
@@ -219,14 +242,22 @@ def include_all_info(data, request=None, prefetched=None):
                             aircon_catalog = None
 
                     if aircon_catalog:
-                        updates["display"]["airconBrand"].append(aircon_catalog.airconBrand)
-                        updates["display"]["airconModel"].append(aircon_catalog.airconModel)
+                        updates["display"]["airconBrand"].append(
+                            aircon_catalog.airconBrand
+                        )
+                        updates["display"]["airconModel"].append(
+                            aircon_catalog.airconModel
+                        )
                     else:
-                        updates["display"]["airconBrand"].append(aircon.get_airconType_display())
+                        updates["display"]["airconBrand"].append(
+                            aircon.get_airconType_display()
+                        )
                         updates["display"]["airconModel"].append("")
                 else:
                     # Use airconType as brand (e.g., 'daikin' -> 'Daikin')
-                    updates["display"]["airconBrand"].append(aircon.get_airconType_display())
+                    updates["display"]["airconBrand"].append(
+                        aircon.get_airconType_display()
+                    )
                     updates["display"]["airconModel"].append("")
 
     if "customerName" in data and data["customerName"] is not None:
@@ -253,7 +284,9 @@ def include_all_info(data, request=None, prefetched=None):
                 updates["display"]["airconBrand"].append(aircon_catalog.airconBrand)
                 updates["display"]["airconModel"].append(aircon_catalog.airconModel)
             else:
-                updates["display"]["airconBrand"].append(customer_aircon_device.get_airconType_display())
+                updates["display"]["airconBrand"].append(
+                    customer_aircon_device.get_airconType_display()
+                )
                 updates["display"]["airconModel"].append("")
 
     data.update(updates)
