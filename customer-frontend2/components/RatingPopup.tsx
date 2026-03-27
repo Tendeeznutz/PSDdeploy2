@@ -5,22 +5,11 @@ import { Star, X, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-
-interface UnratedAppointment {
-  id: string;
-  appointmentStartTime: number;
-  appointmentEndTime: number;
-  appointmentStatus: string;
-  display: {
-    technicianName: string;
-    airconToService: string[];
-    airconBrand: string[];
-  };
-}
+import type { Appointment } from '@/lib/types';
 
 export default function RatingPopup() {
   const { customer } = useAuthStore();
-  const [unrated, setUnrated] = useState<UnratedAppointment[]>([]);
+  const [unrated, setUnrated] = useState<Appointment[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [rating, setRating] = useState(0);
   const [hoveredStar, setHoveredStar] = useState(0);
@@ -142,19 +131,19 @@ export default function RatingPopup() {
               </div>
               <div className="flex justify-between">
                 <span className="font-medium text-slate-500">Technician</span>
-                <span className="text-slate-800">{currentAppointment.display.technicianName}</span>
+                <span className="text-slate-800">{currentAppointment.display?.technicianName ?? 'Unknown'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-medium text-slate-500">Service</span>
                 <span className="text-slate-800 text-right">
-                  {currentAppointment.display.airconToService.join(', ')}
+                  {currentAppointment.display?.airconToService?.join(', ') ?? 'N/A'}
                 </span>
               </div>
-              {currentAppointment.display.airconBrand.length > 0 && (
+              {(currentAppointment.display?.airconBrand?.length ?? 0) > 0 && (
                 <div className="flex justify-between">
                   <span className="font-medium text-slate-500">Brand</span>
                   <span className="text-slate-800">
-                    {currentAppointment.display.airconBrand.join(', ')}
+                    {currentAppointment.display?.airconBrand?.join(', ')}
                   </span>
                 </div>
               )}
