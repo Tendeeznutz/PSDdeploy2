@@ -49,10 +49,12 @@ def set_jwt_cookies(response, access: str, refresh: str):
 
 def clear_jwt_cookies(response):
     """Delete both JWT cookies from the browser."""
+    secure = not settings.DEBUG
     for name in (ACCESS_COOKIE, REFRESH_COOKIE):
         response.delete_cookie(
             name,
             path="/",
             samesite="Lax",
+            secure=secure,
         )
     return response

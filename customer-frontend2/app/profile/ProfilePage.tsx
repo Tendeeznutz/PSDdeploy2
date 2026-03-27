@@ -119,7 +119,7 @@ export default function ProfilePage() {
     }
     loadProfileData();
     fetchTelegramStatus();
-  }, [customer, isAuthenticated]);
+  }, [customer, isAuthenticated, router]);
 
   useEffect(() => {
     return () => {
@@ -321,6 +321,11 @@ export default function ProfilePage() {
       return;
     }
 
+    if (!/^\d{6}$/.test(editForm.customerPostalCode)) {
+      setEditFeedback({ type: 'error', message: 'Postal code must be exactly 6 digits.' });
+      return;
+    }
+
     // Validate password if changing
     if (showPasswordChange) {
       if (!passwordForm.currentPassword) {
@@ -341,25 +346,45 @@ export default function ProfilePage() {
     setEditFeedback(null);
 
     try {
-      const updateData: any = { ...editForm };
-      if (showPasswordChange && passwordForm.newPassword) {
-        updateData.currentPassword = passwordForm.currentPassword;
-        updateData.customerPassword = passwordForm.newPassword;
-      }
+      // Build a typed profile update payload (no password fields)
+      const profilePayload: {
+        customerName: string;
+        customerPhone: string;
+        customerAddress: string;
+        customerPostalCode: string;
+      } = {
+        customerName: editForm.customerName,
+        customerPhone: editForm.customerPhone,
+        customerAddress: editForm.customerAddress,
+        customerPostalCode: editForm.customerPostalCode,
+      };
 
-      const updatedProfile = await customerApi.updateProfile(customer.id, updateData);
+      const updatedProfile = await customerApi.updateProfile(customer.id, profilePayload);
       setProfile(updatedProfile);
 
       // Update Zustand store so navbar reflects changes
       login({ ...customer, ...updatedProfile });
+
+      // If password change is requested, make a separate API call
+      if (showPasswordChange && passwordForm.newPassword) {
+        const passwordPayload: {
+          currentPassword: string;
+          customerPassword: string;
+        } = {
+          currentPassword: passwordForm.currentPassword,
+          customerPassword: passwordForm.newPassword,
+        };
+        await customerApi.updateProfile(customer.id, passwordPayload);
+      }
 
       setEditFeedback({ type: 'success', message: 'Profile updated successfully!' });
       setTimeout(() => {
         setIsEditing(false);
         setEditFeedback(null);
       }, 1500);
-    } catch (error: any) {
-      const msg = error?.response?.data?.detail || error?.response?.data?.message || 'Failed to update profile. Please try again.';
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string; message?: string } } };
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to update profile. Please try again.';
       setEditFeedback({ type: 'error', message: msg });
     } finally {
       setEditSaving(false);

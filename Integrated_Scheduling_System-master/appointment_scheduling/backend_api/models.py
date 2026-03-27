@@ -1,6 +1,6 @@
 import uuid
 
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.core.validators import validate_email
 from django.db import models
 from django.db.models import CheckConstraint, UniqueConstraint, Index, Q, F
@@ -110,7 +110,7 @@ class CustomerAirconDevices(TimeStampedModel):
     def __str__(self):
         return self.airconName or f'Device {self.id}'
 
-class Technicians(models.Model):
+class Technicians(TimeStampedModel):
     STATUS_CHOICES = (
         ('1', 'Available'),
         ('2', 'Unavailable')
@@ -139,9 +139,6 @@ class Technicians(models.Model):
     telegramChatId = models.BigIntegerField(null=True, blank=True, default=None, help_text='Telegram chat ID for notifications')
     deactivatedAt = models.DateTimeField(null=True, blank=True, help_text='When the technician was deactivated')
     deactivationReason = models.TextField(null=True, blank=True, help_text='Reason for deactivation')
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
@@ -233,6 +230,12 @@ class Appointments(TimeStampedModel):
             CheckConstraint(check=Q(appointmentEndTime__gt=models.F('appointmentStartTime')),
                             name='appt_end_after_start')
         ]
+        indexes = [
+            models.Index(fields=['appointmentStatus'], name='appt_status_idx'),
+            models.Index(fields=['customerId', 'appointmentStatus'], name='appt_cust_status_idx'),
+            models.Index(fields=['technicianId', 'appointmentStatus'], name='appt_tech_status_idx'),
+            models.Index(fields=['appointmentStartTime'], name='appt_start_time_idx'),
+        ]
     def __str__(self):
         return f'Appt {self.id} ({self.appointmentStatus})'
 
@@ -257,11 +260,12 @@ class AppointmentRating(TimeStampedModel):
         null=False
     )
     ratedBy = models.CharField(max_length=20, choices=RATED_BY_CHOICES, null=False)
-    rating = models.IntegerField(null=False, help_text='1-5 stars')
+    rating = models.IntegerField(null=False, validators=[MinValueValidator(1), MaxValueValidator(5)], help_text='1-5 stars')
 
     class Meta:
         constraints = [
-            UniqueConstraint(fields=['appointment', 'ratedBy'], name='unique_rating_per_appointment_direction')
+            UniqueConstraint(fields=['appointment', 'ratedBy'], name='unique_rating_per_appointment_direction'),
+            models.CheckConstraint(check=models.Q(rating__gte=1) & models.Q(rating__lte=5), name='rating_1_to_5'),
         ]
         indexes = [Index(fields=['appointment']), Index(fields=['ratedBy'])]
 

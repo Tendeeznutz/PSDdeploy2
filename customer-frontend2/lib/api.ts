@@ -29,7 +29,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('customer');
+          localStorage.removeItem('customer-storage');
           window.location.href = '/login';
         }
         return Promise.reject(error);
@@ -74,7 +74,7 @@ export const customerApi = {
   },
 
   validateResetToken: async (token: string) => {
-    const response = await api.get('/customers/validate-reset-token/', { params: { token } });
+    const response = await api.post('/customers/validate-reset-token/', { token });
     return response.data;
   },
 
@@ -265,8 +265,8 @@ export const convertBookingToApiFormat = (
   airconToService: string[];
   paymentMethod: string;
 } => {
-  // Calculate start time from date and time slot
-  const date = formData.date!;
+  // Calculate start time from date and time slot (clone to avoid mutating the original)
+  const date = new Date(formData.date!.getTime());
   const [hours, minutes] = formData.timeSlot.split(':').map(Number);
   date.setHours(hours, minutes, 0, 0);
   const appointmentStartTime = Math.floor(date.getTime() / 1000);

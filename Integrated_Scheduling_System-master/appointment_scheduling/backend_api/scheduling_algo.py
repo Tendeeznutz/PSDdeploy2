@@ -197,14 +197,6 @@ def get_common_unavailable_time(nearby_technicians) -> list[Any]:
     :param nearby_technicians: list of available technicianIDs, obtain from get_nearby_technicians
     :return: list of unavailable timeslots for each technician
     """
-    # if there exist technician with no appointments, return empty list
-    for technician in nearby_technicians:
-        if Appointments.objects.filter(
-            technicianId=technician,
-            appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
-        ).count() == 0:
-            return []
-
     appointments = Appointments.objects.filter(
         technicianId__in=nearby_technicians,
         appointmentStatus__in=APPOINTMENT_STATUSES_BLOCKING,
@@ -326,11 +318,17 @@ def is_slot_available(
         return False
 
     for technician_appointment in technician_appointments:
-        # Apply travel buffer to existing appointments
+        # Travel buffer is applied AFTER each appointment's end time only (not before
+        # the start time). This is intentional: in an aircon servicing context, the
+        # buffer represents travel/transition time the technician needs AFTER finishing
+        # one job BEFORE arriving at the next customer's location. There is no
+        # pre-appointment buffer because the technician is assumed to already be at
+        # (or en-route to) the location by the appointment start time.
         buffered_start = technician_appointment.appointmentStartTime
         buffered_end = technician_appointment.appointmentEndTime + TRAVEL_BUFFER_SECONDS
 
-        # Check if the new appointment (with its own buffer) conflicts with existing appointment
+        # Similarly, the new appointment's end time gets a buffer so the technician
+        # has travel time before any subsequent booking.
         new_appointment_end_with_buffer = appointment_end_time + TRAVEL_BUFFER_SECONDS
 
         if (

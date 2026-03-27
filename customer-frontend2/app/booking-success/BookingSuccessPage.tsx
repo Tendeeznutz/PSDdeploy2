@@ -17,13 +17,18 @@ function BookingSuccessContent() {
   const [bookingData, setBookingData] = useState<any>(null);
 
   useEffect(() => {
-    // Get booking data from URL params or localStorage
-    const storedData = localStorage.getItem('lastBooking');
+    // Get booking data from URL params or sessionStorage (cleared when tab closes)
+    const storedData = sessionStorage.getItem('lastBooking');
     if (storedData) {
       const parsed = JSON.parse(storedData);
-      // Convert date string back to Date object
-      if (parsed.date) {
+      // Convert date string back to Date object (handle both old and new field names)
+      if (parsed.appointmentDate) {
+        parsed.date = new Date(parsed.appointmentDate);
+      } else if (parsed.date) {
         parsed.date = new Date(parsed.date);
+      }
+      if (parsed.appointmentTime) {
+        parsed.time = parsed.appointmentTime;
       }
       setBookingData(parsed);
     } else {

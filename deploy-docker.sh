@@ -11,7 +11,9 @@ echo "==========================================="
 # ── Step 1: Kill any existing Gunicorn on port 8000 ──
 echo ""
 echo "[INFO] Stopping any existing process on port 8000..."
-kill $(lsof -t -i:8000) 2>/dev/null && echo "[INFO] Killed existing process." || echo "[INFO] No existing process on port 8000."
+if command -v lsof &>/dev/null; then
+    kill "$(lsof -t -i:${BACKEND_PORT:-8000})" 2>/dev/null || true
+fi
 
 # ── Step 2: Create .env if it doesn't exist ──
 if [ ! -f "$ENV_FILE" ]; then
@@ -71,7 +73,7 @@ CYCLE_SEARCH_RANGE=3000
 CYCLE_INCREMENT=1500
 
 # ── Seed Control ─────────────────────────────────────────────
-RUN_SEED=true
+RUN_SEED=false
 ENVEOF
 
     echo "[INFO] .env created with auto-generated secrets."
@@ -93,21 +95,19 @@ docker compose up -d
 
 # ── Step 4: Wait and verify ──
 echo ""
-echo "[INFO] Waiting for services to come up..."
-sleep 10
+echo "[INFO] Waiting for backend to become healthy..."
+for i in $(seq 1 30); do
+    if curl -sf "http://localhost:${BACKEND_PORT:-8000}/api/health/" > /dev/null 2>&1; then
+        echo "[OK] Backend is healthy!"
+        break
+    fi
+    echo "[INFO] Waiting... ($i/30)"
+    sleep 3
+done
 
 echo ""
 echo "[INFO] Container status:"
 docker compose ps
-
-echo ""
-echo "[INFO] Testing health endpoint..."
-if curl -sf http://localhost:8000/api/health/ > /dev/null 2>&1; then
-    echo "[OK] Backend is healthy!"
-else
-    echo "[WARN] Health check failed — backend may still be starting."
-    echo "       Run: docker compose logs -f backend"
-fi
 
 echo ""
 echo "==========================================="

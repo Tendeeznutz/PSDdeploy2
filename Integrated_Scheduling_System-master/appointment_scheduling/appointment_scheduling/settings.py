@@ -276,6 +276,9 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
     # SSL redirect is handled by Apache, not Django
     SECURE_SSL_REDIRECT = False
+    if not DEBUG and not SECURE_SSL_REDIRECT:
+        import warnings
+        warnings.warn("SECURE_SSL_REDIRECT is False — ensure TLS is handled by the reverse proxy (Apache/Caddy)")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
@@ -291,8 +294,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 if not DEBUG and not TELEGRAM_WEBHOOK_SECRET:
-    import warnings
-    warnings.warn("TELEGRAM_WEBHOOK_SECRET is not set — webhook endpoint is unprotected")
+    raise ValueError("TELEGRAM_WEBHOOK_SECRET must be set in production — webhook endpoint would be unprotected")
 
 # ---------- Object Storage (MinIO / S3) ----------
 # When AWS_S3_ENDPOINT_URL is set (Docker/staging), use S3-compatible storage.

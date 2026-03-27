@@ -32,7 +32,7 @@ export default function DashboardPage() {
       return;
     }
     loadAppointments();
-  }, [customer, isAuthenticated]);
+  }, [customer, isAuthenticated, router]);
 
   const loadAppointments = async () => {
     if (!customer) return;

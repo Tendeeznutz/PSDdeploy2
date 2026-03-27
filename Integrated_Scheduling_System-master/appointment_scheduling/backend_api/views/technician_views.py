@@ -295,13 +295,12 @@ AirServe Team"""
                 status=status.HTTP_200_OK,
             )
 
-    @action(detail=False, methods=["get"], url_path="validate-reset-token")
+    @action(detail=False, methods=["post"], url_path="validate-reset-token")
     def validate_reset_token(self, request):
         """
         Validate if a password reset token is valid and not expired.
-        Query param: token
         """
-        token = request.query_params.get("token")
+        token = request.data.get("token")
         if not token:
             return Response(
                 {"valid": False, "error": "Token is required"},
@@ -360,9 +359,9 @@ AirServe Team"""
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not re.match(r"^[a-zA-Z0-9]+$", new_password):
+        if not re.search(r"[a-zA-Z]", new_password):
             return Response(
-                {"error": "Password must contain only alphanumeric characters"},
+                {"error": "Password must contain at least one letter"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

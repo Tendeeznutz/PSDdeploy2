@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import Navbar from '@/components/Navbar';
@@ -151,15 +151,7 @@ function BookPageContent() {
     }
   }, [currentStep, customer]);
 
-  // Clear time slot selection if the selected time becomes unavailable after date change
-  useEffect(() => {
-    if (!selectedDate || !watchedValues.timeSlot) return;
-    if (isSlotUnavailable(watchedValues.timeSlot)) {
-      setValue('timeSlot', '');
-    }
-  }, [unavailableSlots, selectedDate]);
-
-  const isSlotUnavailable = (slotTime: string): boolean => {
+  const isSlotUnavailable = useCallback((slotTime: string): boolean => {
     if (!selectedDate || unavailableSlots.length === 0) return false;
 
     const [hours, minutes] = slotTime.split(':').map(Number);
@@ -174,7 +166,15 @@ function BookPageContent() {
       const blockEnd = unavailableTime + UNAVAILABLE_BUFFER;
       return slotTimestamp >= blockStart && slotTimestamp <= blockEnd;
     });
-  };
+  }, [selectedDate, unavailableSlots]);
+
+  // Clear time slot selection if the selected time becomes unavailable after date change
+  useEffect(() => {
+    if (!selectedDate || !watchedValues.timeSlot) return;
+    if (isSlotUnavailable(watchedValues.timeSlot)) {
+      setValue('timeSlot', '');
+    }
+  }, [unavailableSlots, selectedDate, setValue, isSlotUnavailable]);
 
   const calculateTotal = () => {
     const service = SERVICES.find(s => s.id === watchedValues.serviceType);
@@ -220,7 +220,8 @@ function BookPageContent() {
 
       // If not logged in, create customer account
       if (!customerId) {
-        const tempPassword = `temp${Date.now()}`;
+        // TODO: Ideally this should trigger a password-set email flow so the user can set their own password
+        const tempPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
         const newCustomer = await customerApi.register({
           customerName: data.name,
           customerEmail: data.email,
@@ -267,7 +268,13 @@ function BookPageContent() {
 
       const appointment = await appointmentApi.createAppointment(bookingData);
       successData.bookingId = appointment.id?.slice(0, 8).toUpperCase() || successData.bookingId;
-      localStorage.setItem('lastBooking', JSON.stringify(successData));
+      const safeBookingData = {
+        bookingId: successData.bookingId,
+        appointmentDate: successData.date,
+        appointmentTime: successData.time,
+        status: 'confirmed',
+      };
+      sessionStorage.setItem('lastBooking', JSON.stringify(safeBookingData));
       router.push('/booking-success');
     } catch (err: any) {
       const msg = err.response?.data?.error || err.response?.data?.detail || 'Booking failed. Please try again.';

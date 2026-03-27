@@ -69,22 +69,23 @@ class AppointmentSerializer(serializers.ModelSerializer):
         ):
             return value
 
-        # value is a list of customerAirconDeviceId, check if all exist and belong to the same customer
-        for customerAirconDeviceId in value:
-            if not CustomerAirconDevices.objects.filter(
-                id=customerAirconDeviceId
-            ).exists():
-                raise serializers.ValidationError(
-                    "Customer aircon device does not exist"
-                )
-            if self.context["request"].method == "POST":
-                if CustomerAirconDevices.objects.get(
-                    id=customerAirconDeviceId
-                ).customerId.id != uuid.UUID(
+        if not value:
+            return value
+
+        # Bulk query to avoid N+1
+        devices = CustomerAirconDevices.objects.select_related('customerId').filter(id__in=value)
+        if devices.count() != len(value):
+            missing = set(value) - set(str(d.id) for d in devices)
+            raise serializers.ValidationError(
+                f"Customer aircon device(s) {missing} do not exist"
+            )
+        if self.context["request"].method == "POST":
+            for device in devices:
+                if device.customerId and str(device.customerId.id) != str(
                     self.context["request"].data.get("customerId")
                 ):
                     raise serializers.ValidationError(
-                        "Customer aircon device does not belong to the customer"
+                        f"Customer aircon device {device.id} does not belong to the customer"
                     )
         return value
 
@@ -156,7 +157,7 @@ class CustomerAirconDeviceSerializer(serializers.ModelSerializer):
 
     def validate_lastServiceDate(self, value):
         # Legacy field validation - kept for backward compatibility
-        if value is not None and value >= time.time():
+        if value is not None and value > time.time():
             raise serializers.ValidationError(
                 "Last service date must not be a present or future date"
             )

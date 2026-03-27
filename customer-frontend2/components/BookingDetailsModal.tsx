@@ -28,12 +28,10 @@ interface BookingDetailsModalProps {
 }
 
 const STATUS_STEPS = [
-  { id: '1', label: 'Requested', icon: AlertCircle },
+  { id: '1', label: 'Pending', icon: Clock },
   { id: '2', label: 'Confirmed', icon: CheckCircle },
-  { id: '3', label: 'Assigned', icon: User },
-  { id: '4', label: 'On The Way', icon: MapPin },
-  { id: '5', label: 'In Service', icon: Package },
-  { id: '6', label: 'Completed', icon: CheckCircle },
+  { id: '3', label: 'Completed', icon: CheckCircle },
+  { id: '4', label: 'Cancelled', icon: XCircle },
 ];
 
 export default function BookingDetailsModal({ appointment, isOpen, onClose }: BookingDetailsModalProps) {
@@ -47,9 +45,9 @@ export default function BookingDetailsModal({ appointment, isOpen, onClose }: Bo
 
   const getStatusStep = (status: string) => {
     switch (status) {
-      case '1': return 0; // Requested
+      case '1': return 0; // Pending
       case '2': return 1; // Confirmed
-      case '3': return 2; // Assigned (if technician assigned, show step 2)
+      case '3': return 2; // Completed
       case '4': return 3; // Cancelled
       default: return 0;
     }

@@ -70,13 +70,19 @@ class CookieLogoutView(APIView):
 
     def post(self, request, *args, **kwargs):
         raw_refresh = request.COOKIES.get(REFRESH_COOKIE)
+        logged_out = False
         if raw_refresh:
             try:
                 token = RefreshToken(raw_refresh)
                 token.blacklist()
+                logged_out = True
             except TokenError:
-                pass  # Token already invalid — still clear cookies
+                logged_out = False
 
-        response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
+        response = Response(status=status.HTTP_200_OK)
         clear_jwt_cookies(response)
+        if logged_out:
+            response.data = {"detail": "Successfully logged out."}
+        else:
+            response.data = {"detail": "No active session found."}
         return response

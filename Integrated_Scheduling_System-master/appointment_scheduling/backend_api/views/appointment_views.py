@@ -1,6 +1,6 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.hashers import make_password
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -16,7 +16,7 @@ SGT = ZoneInfo("Asia/Singapore")
 
 logger = logging.getLogger(__name__)
 
-from .format_response import include_all_info
+from .format_response import include_all_info, prefetch_related_data
 from ..scheduling_algo import *
 from ..sg_geo.src import geo_onemap
 from ..models import (
@@ -76,7 +76,7 @@ class GuestBookingThrottle(AnonRateThrottle):
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
-    queryset = Appointments.objects.all()
+    queryset = Appointments.objects.select_related('customerId', 'technicianId').all()
     serializer_class = AppointmentSerializer
 
     def get_permissions(self):
@@ -237,105 +237,70 @@ AirServe Team
     # GET request
     def list(self, request, *args, **kwargs):
         query_params = request.query_params
+        base_qs = Appointments.objects.select_related('customerId', 'technicianId')
+
         if "customerId" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    customerId__id__icontains=query_params["customerId"]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                customerId__id__icontains=query_params["customerId"]
             )
         elif "technicianId" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(technicianId=query_params["technicianId"]),
-                many=True,
-            )
+            qs = base_qs.filter(technicianId=query_params["technicianId"])
         elif "appointmentStatus" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    appointmentStatus=query_params["appointmentStatus"]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                appointmentStatus=query_params["appointmentStatus"]
             )
         elif "customerName" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    customerId__customerName__icontains=query_params["customerName"]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                customerId__customerName__icontains=query_params["customerName"]
             )
         elif "technicianName" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    technicianId__technicianName__icontains=query_params[
-                        "technicianName"
-                    ]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                technicianId__technicianName__icontains=query_params[
+                    "technicianName"
+                ]
             )
         elif "appointmentStartTime" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    appointmentStartTime__gte=query_params["appointmentStartTime"]
-                ),
-                many=True,
-            )
-        elif "appointmentStatus" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    appointmentStatus=query_params["appointmentStatus"]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                appointmentStartTime__gte=query_params["appointmentStartTime"]
             )
         elif "customerPhone" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    customerId__customerPhone__icontains=query_params["customerPhone"]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                customerId__customerPhone__icontains=query_params["customerPhone"]
             )
         elif "customerEmail" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    customerId__customerEmail__icontains=query_params["customerEmail"]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                customerId__customerEmail__icontains=query_params["customerEmail"]
             )
         elif "technicianPhone" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    technicianId__technicianPhone__icontains=query_params[
-                        "technicianPhone"
-                    ]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                technicianId__technicianPhone__icontains=query_params[
+                    "technicianPhone"
+                ]
             )
         elif "technicianPostalCode" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    technicianId__technicianPostalCode__icontains=query_params[
-                        "technicianPostalCode"
-                    ]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                technicianId__technicianPostalCode__icontains=query_params[
+                    "technicianPostalCode"
+                ]
             )
         elif "customerPostalCode" in query_params:
-            serializer = AppointmentSerializer(
-                Appointments.objects.filter(
-                    customerId__customerPostalCode__icontains=query_params[
-                        "customerPostalCode"
-                    ]
-                ),
-                many=True,
+            qs = base_qs.filter(
+                customerId__customerPostalCode__icontains=query_params[
+                    "customerPostalCode"
+                ]
             )
         elif request.GET:
             return Response(status=400)
         else:
-            serializer = AppointmentSerializer(Appointments.objects.all(), many=True)
+            qs = base_qs.all()
+
+        serializer = AppointmentSerializer(qs, many=True)
 
         serialized_data = serializer.data
         serialized_data_list = [dict(item) for item in serialized_data]
+        prefetched = prefetch_related_data(serialized_data_list)
         modified_data_list = [
-            include_all_info(data, request) for data in serialized_data_list
+            include_all_info(data, request, prefetched=prefetched) for data in serialized_data_list
         ]
 
         return Response(modified_data_list, status=200)
@@ -395,7 +360,28 @@ AirServe Team
             data=request.data, context={"request": request}
         )
         if serializer.is_valid():
-            appointment = serializer.save()
+            # Wrap technician assignment + save in a transaction to prevent race conditions
+            with transaction.atomic():
+                tech_id = request.data.get("technicianId")
+                if tech_id is not None:
+                    # Re-verify technician availability with select_for_update to lock conflicting rows
+                    conflicting = Appointments.objects.select_for_update().filter(
+                        technicianId=tech_id,
+                        appointmentStartTime__lt=request.data["appointmentEndTime"],
+                        appointmentEndTime__gt=request.data["appointmentStartTime"],
+                        appointmentStatus__in=["1", "2"],
+                    ).exists()
+                    if conflicting:
+                        # Technician was taken by a concurrent request, fall back to pending
+                        request.data["technicianId"] = None
+                        request.data["appointmentStatus"] = "1"
+                        serializer = AppointmentSerializer(
+                            data=request.data, context={"request": request}
+                        )
+                        if not serializer.is_valid():
+                            return Response(serializer.errors, status=400)
+
+                appointment = serializer.save()
 
             # Send confirmation email to customer and technician
             try:
@@ -537,7 +523,7 @@ AirServe Team
                 if request.data.get("appointmentStartTime") is not None:
                     return Response(
                         {
-                            "Changing the appointment time require reallocation of the technician."
+                            "error": "Changing the appointment time require reallocation of the technician."
                         },
                         status=400,
                     )
@@ -554,7 +540,7 @@ AirServe Team
                     else:
                         return Response(
                             {
-                                "Increasing the number of aircon to service require reallocation of the "
+                                "error": "Increasing the number of aircon to service require reallocation of the "
                                 "technician."
                             },
                             status=400,
@@ -586,89 +572,86 @@ AirServe Team
                 {"error": "Validation failed", "details": serializer.errors}, status=400
             )
 
-        if serializer.is_valid():
-            # Check if technician is being assigned for the first time
-            if serializer.validated_data.get("technicianId") is not None:
-                if item.technicianId is None:
-                    # Technician being assigned to previously unassigned appointment
-                    technician_newly_assigned = True
-                elif (
-                    item.technicianId.id
-                    != serializer.validated_data.get("technicianId").id
-                ):
-                    # Different technician being assigned
-                    technician_newly_assigned = True
-
-                # Only auto-set status if NOT a cancellation and NOT completed
-                if not is_cancellation and item.appointmentStatus != "3":
-                    serializer.validated_data["appointmentStatus"] = "2"
+        # Check if technician is being assigned for the first time
+        if serializer.validated_data.get("technicianId") is not None:
+            if item.technicianId is None:
+                # Technician being assigned to previously unassigned appointment
+                technician_newly_assigned = True
             elif (
-                serializer.validated_data.get("technicianId") is None
-                and not is_cancellation
-                and item.appointmentStatus != "3"
+                item.technicianId.id
+                != serializer.validated_data.get("technicianId").id
             ):
-                serializer.validated_data["appointmentStatus"] = "1"
+                # Different technician being assigned
+                technician_newly_assigned = True
 
-            updated_appointment = serializer.save()
+            # Only auto-set status if NOT a cancellation and NOT completed
+            if not is_cancellation and item.appointmentStatus != "3":
+                serializer.validated_data["appointmentStatus"] = "2"
+        elif (
+            serializer.validated_data.get("technicianId") is None
+            and not is_cancellation
+            and item.appointmentStatus != "3"
+        ):
+            serializer.validated_data["appointmentStatus"] = "1"
 
-            # Send confirmation email if technician was newly assigned
-            if technician_newly_assigned and not is_cancellation:
-                try:
-                    customer = Customers.objects.get(
-                        id=updated_appointment.customerId.id
-                    )
-                    technician = updated_appointment.technicianId
-                    send_appointment_confirmation(
-                        updated_appointment, customer, technician
-                    )
-                except Exception as e:
-                    logger.exception(
-                        "Failed to send technician assignment confirmation: %s", e
-                    )
+        # Fix B3: Check and apply penalty BEFORE saving the appointment
+        penalty_result = None
+        if is_cancellation and cancelled_by == "customer":
+            appt_start = getattr(item, "appointmentStartTime", None)
+            penalty_result = check_and_apply_penalty(
+                item.customerId.id, appointment_start_time_unix=appt_start
+            )
 
-            # Send cancellation email if this was a cancellation
-            if is_cancellation:
-                try:
-                    customer = Customers.objects.get(
-                        id=updated_appointment.customerId.id
-                    )
-                    technician = (
-                        updated_appointment.technicianId
-                        if updated_appointment.technicianId
-                        else None
-                    )
+        updated_appointment = serializer.save()
 
-                    # Check and apply penalty if customer is cancelling
-                    penalty_result = None
-                    if cancelled_by == "customer":
-                        appt_start = getattr(
-                            updated_appointment, "appointmentStartTime", None
+        # Send confirmation email if technician was newly assigned
+        if technician_newly_assigned and not is_cancellation:
+            try:
+                customer = Customers.objects.get(
+                    id=updated_appointment.customerId.id
+                )
+                technician = updated_appointment.technicianId
+                send_appointment_confirmation(
+                    updated_appointment, customer, technician
+                )
+            except Exception as e:
+                logger.exception(
+                    "Failed to send technician assignment confirmation: %s", e
+                )
+
+        # Send cancellation email if this was a cancellation
+        if is_cancellation:
+            try:
+                customer = Customers.objects.get(
+                    id=updated_appointment.customerId.id
+                )
+                technician = (
+                    updated_appointment.technicianId
+                    if updated_appointment.technicianId
+                    else None
+                )
+
+                send_appointment_cancellation(
+                    appointment=updated_appointment,
+                    customer=customer,
+                    technician=technician,
+                    cancelled_by=cancelled_by,
+                    cancellation_reason=cancellation_reason,
+                )
+
+                # Send penalty notification to customer if penalty was applied
+                if penalty_result and penalty_result["penalty_applied"]:
+                    penalty_reasons = []
+                    if penalty_result.get("short_notice_penalty"):
+                        penalty_reasons.append(
+                            "Short-notice cancellation (within 30 mins of appointment)"
                         )
-                        penalty_result = check_and_apply_penalty(
-                            customer.id, appointment_start_time_unix=appt_start
+                    if penalty_result.get("monthly_limit_penalty"):
+                        penalty_reasons.append(
+                            f"Exceeded monthly cancellation limit ({CANCELLATION_THRESHOLD} free per month)"
                         )
-
-                    send_appointment_cancellation(
-                        appointment=updated_appointment,
-                        customer=customer,
-                        technician=technician,
-                        cancelled_by=cancelled_by,
-                        cancellation_reason=cancellation_reason,
-                    )
-
-                    # Send penalty notification to customer if penalty was applied
-                    if penalty_result and penalty_result["penalty_applied"]:
-                        penalty_reasons = []
-                        if penalty_result.get("short_notice_penalty"):
-                            penalty_reasons.append(
-                                "Short-notice cancellation (within 30 mins of appointment)"
-                            )
-                        if penalty_result.get("monthly_limit_penalty"):
-                            penalty_reasons.append(
-                                f"Exceeded monthly cancellation limit ({CANCELLATION_THRESHOLD} free per month)"
-                            )
-                        reasons_text = "\n".join(f"• {r}" for r in penalty_reasons)
-                        penalty_message = f"""
+                    reasons_text = "\n".join(f"• {r}" for r in penalty_reasons)
+                    penalty_message = f"""
 Dear {customer.customerName},
 
 Your appointment has been cancelled. The following penalty(ies) have been applied:
@@ -690,31 +673,29 @@ If you have any questions, please contact us.
 Best regards,
 AirServe Team
 """
-                        Messages.objects.create(
-                            senderType="coordinator",
-                            senderId="00000000-0000-0000-0000-000000000000",
-                            senderName="AirServe System",
-                            recipientType="customer",
-                            recipientId=customer.id,
-                            recipientName=customer.customerName,
-                            subject="Cancellation Penalty Notice",
-                            body=penalty_message,
-                            isRead=False,
-                            relatedAppointment=updated_appointment,
-                        )
-
-                        # Send penalty notice via Telegram
-                        send_penalty_notification_telegram(customer, penalty_result)
-                except Exception as e:
-                    logger.exception(
-                        "Failed to process cancellation notification: %s", e
+                    Messages.objects.create(
+                        senderType="coordinator",
+                        senderId="00000000-0000-0000-0000-000000000000",
+                        senderName="AirServe System",
+                        recipientType="customer",
+                        recipientId=customer.id,
+                        recipientName=customer.customerName,
+                        subject="Cancellation Penalty Notice",
+                        body=penalty_message,
+                        isRead=False,
+                        relatedAppointment=updated_appointment,
                     )
 
-            serializer_data = dict(serializer.data)
-            modified_data = include_all_info(serializer_data, request)
-            return Response(modified_data, status=200)
+                    # Send penalty notice via Telegram
+                    send_penalty_notification_telegram(customer, penalty_result)
+            except Exception as e:
+                logger.exception(
+                    "Failed to process cancellation notification: %s", e
+                )
 
-        return Response(serializer.errors, status=400)
+        serializer_data = dict(serializer.data)
+        modified_data = include_all_info(serializer_data, request)
+        return Response(modified_data, status=200)
 
     # DELETE request
     def destroy(self, request, pk=None):
@@ -898,7 +879,8 @@ AirServe Team
 
         serializer = AppointmentSerializer(completed, many=True)
         serialized_data = [dict(item) for item in serializer.data]
-        modified_data = [include_all_info(data, request) for data in serialized_data]
+        prefetched = prefetch_related_data(serialized_data)
+        modified_data = [include_all_info(data, request, prefetched=prefetched) for data in serialized_data]
         return Response(modified_data, status=200)
 
     @action(detail=True, methods=["get"], url_path="ratings")
@@ -1007,17 +989,9 @@ AirServe Team
             ).first()
 
             if existing_customer:
-                # Use existing customer but update their details
+                # Use existing customer for association only — do NOT overwrite
+                # their verified profile fields from unverified guest input
                 customer = existing_customer
-                customer.customerName = name
-                customer.customerPhone = phone
-                customer.customerEmail = email
-                customer.customerAddress = address
-                customer.customerPostalCode = postal_code
-                customer.customerLocation = geo_onemap.get_location_from_postal(
-                    postal_code
-                )
-                customer.save()
             else:
                 # Create temporary guest customer with a default password
                 customer = Customers.objects.create(
@@ -1084,9 +1058,8 @@ AirServe Team
                     assigned_technician = technician
                     break
 
-            if not assigned_technician and nearby_technicians:
-                # Assign to first technician if no one is perfectly available
-                assigned_technician = Technicians.objects.get(id=nearby_technicians[0])
+            # If no technician is available, leave unassigned (status will be Pending)
+            # Do NOT force-assign a technician who has conflicts
 
             # Create the appointment
             # Set status to '2' (Confirmed) if technician is assigned, otherwise '1' (Pending)

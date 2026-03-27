@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .format_response import include_all_info
+from .format_response import include_all_info, prefetch_related_data
 from ..models import PasswordResetToken
 from ..scheduling_algo import *
 from ..serializers import CustomerSerializer
@@ -79,7 +79,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
         serializer = CustomerSerializer(queryset, many=True)
         serialized_data = serializer.data
         serialized_data_list = [dict(item) for item in serialized_data]
-        modified_data_list = [include_all_info(data) for data in serialized_data_list]
+        prefetched = prefetch_related_data(serialized_data_list)
+        modified_data_list = [include_all_info(data, prefetched=prefetched) for data in serialized_data_list]
         return Response(modified_data_list)
 
     # POST request
@@ -318,10 +319,10 @@ AirServe Team"""
 
         return Response(success_msg, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["get"], url_path="validate-reset-token")
+    @action(detail=False, methods=["post"], url_path="validate-reset-token")
     def validate_reset_token(self, request):
         """Validate if a password reset token is valid and not expired."""
-        token = request.query_params.get("token")
+        token = request.data.get("token")
         if not token:
             return Response({"valid": False, "error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -352,8 +353,8 @@ AirServe Team"""
         if len(new_password) < 8:
             return Response({"error": "Password must be at least 8 characters long"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not re.match(r"^[a-zA-Z0-9]+$", new_password):
-            return Response({"error": "Password must contain only alphanumeric characters"}, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r"[a-zA-Z]", new_password):
+            return Response({"error": "Password must contain at least one letter"}, status=status.HTTP_400_BAD_REQUEST)
 
         digit_count = sum(1 for c in new_password if c.isdigit())
         if digit_count < 3:

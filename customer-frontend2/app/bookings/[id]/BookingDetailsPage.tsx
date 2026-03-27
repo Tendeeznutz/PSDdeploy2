@@ -26,12 +26,10 @@ import {
 import { format } from 'date-fns';
 
 const STATUS_STEPS = [
-  { id: '1', label: 'Requested', icon: AlertCircle },
+  { id: '1', label: 'Pending', icon: Clock },
   { id: '2', label: 'Confirmed', icon: CheckCircle },
-  { id: '3', label: 'Assigned', icon: User },
-  { id: '4', label: 'On The Way', icon: MapPin },
-  { id: '5', label: 'In Service', icon: Package },
-  { id: '6', label: 'Completed', icon: CheckCircle },
+  { id: '3', label: 'Completed', icon: CheckCircle },
+  { id: '4', label: 'Cancelled', icon: XCircle },
 ];
 
 function BookingDetailsContent() {
@@ -149,10 +147,10 @@ function BookingDetailsContent() {
 
   const getCurrentStatusIndex = () => {
     const status = appointment.appointmentStatus;
-    if (status === '1') return 0;
-    if (status === '2') return appointment.technician ? 2 : 1;
-    if (status === '3') return 5;
-    if (status === '4') return -1;
+    if (status === '1') return 0; // Pending
+    if (status === '2') return 1; // Confirmed
+    if (status === '3') return 2; // Completed
+    if (status === '4') return 3; // Cancelled
     return 0;
   };
 
