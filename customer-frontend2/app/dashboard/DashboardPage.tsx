@@ -8,8 +8,10 @@ import Footer from '@/components/Footer';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import Button from '@/components/Button';
-import BookingDetailsModal from '@/components/BookingDetailsModal';
-import RatingPopup from '@/components/RatingPopup';
+import dynamic from 'next/dynamic';
+
+const BookingDetailsModal = dynamic(() => import('@/components/BookingDetailsModal'));
+const RatingPopup = dynamic(() => import('@/components/RatingPopup'));
 import { appointmentApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 

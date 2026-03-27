@@ -1,10 +1,13 @@
-import { Suspense } from 'react';
-import ResetPasswordPage from './ResetPasswordPage';
+import dynamic from 'next/dynamic';
+
+const ResetPasswordPage = dynamic(() => import('./ResetPasswordPage'), {
+  loading: () => (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+    </div>
+  ),
+});
 
 export default function Page() {
-  return (
-    <Suspense>
-      <ResetPasswordPage />
-    </Suspense>
-  );
+  return <ResetPasswordPage />;
 }
