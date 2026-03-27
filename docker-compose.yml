@@ -47,16 +47,16 @@ services:
       dockerfile: infra/frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: /api
-    image: ghcr.io/${GHCR_REPO:-your-org/airserve-frontend}:latest
+    image: ghcr.io/${GHCR_REPO_FRONTEND:-tendeeznutz/airserve-frontend}:latest
     restart: unless-stopped
     networks:
       - airserve-net
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
 
   # ── Caddy (reverse proxy + auto-HTTPS) ─────────────────────
   caddy:
