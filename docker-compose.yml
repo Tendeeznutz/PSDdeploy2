@@ -49,6 +49,8 @@ services:
         NEXT_PUBLIC_API_URL: /api
     image: ghcr.io/${GHCR_REPO_FRONTEND:-tendeeznutz/airserve-frontend}:latest
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
     networks:
       - airserve-net
     healthcheck:
@@ -97,6 +99,8 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_STORAGE_BUCKET_NAME: ${MINIO_BUCKET:-airserve-media}
+    ports:
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
