@@ -57,7 +57,7 @@ def extract_aircon_brand(aircon_to_service):
         if device.airconCatalogId:
             return device.airconCatalogId.airconBrand
         # Use airconType field (e.g., 'daikin' -> 'Daikin')
-        if device.airconType and device.airconType != 'other':
+        if device.airconType and device.airconType != "other":
             return device.get_airconType_display()
         # Parse from airconName (format: "Brand - Model (Booking ...)")
         if device.airconName and " - " in device.airconName:
@@ -76,7 +76,7 @@ class GuestBookingThrottle(AnonRateThrottle):
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
-    queryset = Appointments.objects.select_related('customerId', 'technicianId').all()
+    queryset = Appointments.objects.select_related("customerId", "technicianId").all()
     serializer_class = AppointmentSerializer
 
     def get_permissions(self):
@@ -84,12 +84,43 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def _role(self, request):
+        role = (
+            getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        )
+        return role or getattr(request.user, "role", None)
+
     def _require_role(self, request, allowed_roles):
-        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
-        return role in allowed_roles
+        return self._role(request) in allowed_roles
 
     def _get_user_id(self, request):
-        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+        user_id = (
+            getattr(request.auth, "payload", {}).get("user_id")
+            if request.auth
+            else None
+        )
+        if user_id is None:
+            user_id = getattr(request.user, "id", None) or getattr(
+                request.user, "pk", None
+            )
+        return str(user_id) if user_id is not None else None
+
+    def get_queryset(self):
+        qs = Appointments.objects.select_related("customerId", "technicianId")
+        request = getattr(self, "request", None)
+        if request is None:
+            return qs
+
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+
+        if role == "customer" and user_id:
+            return qs.filter(customerId=user_id)
+        if role == "technician" and user_id:
+            return qs.filter(technicianId=user_id)
+        if role == "coordinator":
+            return qs
+        return qs.none()
 
     def send_receipt_to_mailbox(self, appointment, customer, aircon_ids):
         """
@@ -110,7 +141,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             total_cost_with_penalty = total_cost + float(penalty_fee)
 
             # Format appointment time
-            appointment_time = datetime.fromtimestamp(appointment.appointmentStartTime, tz=SGT)
+            appointment_time = datetime.fromtimestamp(
+                appointment.appointmentStartTime, tz=SGT
+            )
             formatted_time = appointment_time.strftime("%B %d, %Y at %I:%M %p")
 
             # Get payment method display name
@@ -237,27 +270,21 @@ AirServe Team
     # GET request
     def list(self, request, *args, **kwargs):
         query_params = request.query_params
-        base_qs = Appointments.objects.select_related('customerId', 'technicianId')
+        base_qs = self.get_queryset()
 
         if "customerId" in query_params:
-            qs = base_qs.filter(
-                customerId__id__icontains=query_params["customerId"]
-            )
+            qs = base_qs.filter(customerId__id__icontains=query_params["customerId"])
         elif "technicianId" in query_params:
             qs = base_qs.filter(technicianId=query_params["technicianId"])
         elif "appointmentStatus" in query_params:
-            qs = base_qs.filter(
-                appointmentStatus=query_params["appointmentStatus"]
-            )
+            qs = base_qs.filter(appointmentStatus=query_params["appointmentStatus"])
         elif "customerName" in query_params:
             qs = base_qs.filter(
                 customerId__customerName__icontains=query_params["customerName"]
             )
         elif "technicianName" in query_params:
             qs = base_qs.filter(
-                technicianId__technicianName__icontains=query_params[
-                    "technicianName"
-                ]
+                technicianId__technicianName__icontains=query_params["technicianName"]
             )
         elif "appointmentStartTime" in query_params:
             qs = base_qs.filter(
@@ -273,9 +300,7 @@ AirServe Team
             )
         elif "technicianPhone" in query_params:
             qs = base_qs.filter(
-                technicianId__technicianPhone__icontains=query_params[
-                    "technicianPhone"
-                ]
+                technicianId__technicianPhone__icontains=query_params["technicianPhone"]
             )
         elif "technicianPostalCode" in query_params:
             qs = base_qs.filter(
@@ -300,7 +325,8 @@ AirServe Team
         serialized_data_list = [dict(item) for item in serialized_data]
         prefetched = prefetch_related_data(serialized_data_list)
         modified_data_list = [
-            include_all_info(data, request, prefetched=prefetched) for data in serialized_data_list
+            include_all_info(data, request, prefetched=prefetched)
+            for data in serialized_data_list
         ]
 
         return Response(modified_data_list, status=200)
@@ -339,9 +365,27 @@ AirServe Team
 
     # POST request
     def create(self, request, *args, **kwargs):
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+        customer_id = request.data.get("customerId")
+
+        if role not in ("customer", "coordinator"):
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not customer_id:
+            return Response({"customerId": ["This field is required."]}, status=400)
+
+        if role == "customer" and str(customer_id) != str(user_id):
+            return Response(
+                {"error": "Customers can only create appointments for themselves."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         aircon_brand = extract_aircon_brand(request.data.get("airconToService", []))
         nearby_technicians = get_nearby_technicians(
-            request.data["customerId"],
+            customer_id,
             aircon_brand=aircon_brand,
             appointment_start_time=request.data["appointmentStartTime"],
         )
@@ -365,12 +409,16 @@ AirServe Team
                 tech_id = request.data.get("technicianId")
                 if tech_id is not None:
                     # Re-verify technician availability with select_for_update to lock conflicting rows
-                    conflicting = Appointments.objects.select_for_update().filter(
-                        technicianId=tech_id,
-                        appointmentStartTime__lt=request.data["appointmentEndTime"],
-                        appointmentEndTime__gt=request.data["appointmentStartTime"],
-                        appointmentStatus__in=["1", "2"],
-                    ).exists()
+                    conflicting = (
+                        Appointments.objects.select_for_update()
+                        .filter(
+                            technicianId=tech_id,
+                            appointmentStartTime__lt=request.data["appointmentEndTime"],
+                            appointmentEndTime__gt=request.data["appointmentStartTime"],
+                            appointmentStatus__in=["1", "2"],
+                        )
+                        .exists()
+                    )
                     if conflicting:
                         # Technician was taken by a concurrent request, fall back to pending
                         request.data["technicianId"] = None
@@ -408,15 +456,57 @@ AirServe Team
 
     # GET request with primary key
     def retrieve(self, request, pk=None):
-        item = get_object_or_404(Appointments.objects.all(), pk=pk)
+        item = get_object_or_404(self.get_queryset(), pk=pk)
         serializer = AppointmentSerializer(item)
         serializer_data = dict(serializer.data)
         modified_data = include_all_info(serializer_data, request)
         return Response(modified_data)
 
     def update(self, request, pk=None):
-        # TODO: verify if this is sent by the coordinator
-        item = get_object_or_404(Appointments.objects.all(), pk=pk)
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+
+        if role not in ("coordinator", "technician"):
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        item = get_object_or_404(self.get_queryset(), pk=pk)
+
+        if role == "technician":
+            if not item.technicianId or str(item.technicianId.id) != str(user_id):
+                return Response(
+                    {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+                )
+            if request.data.get("customerId") and str(
+                request.data.get("customerId")
+            ) != str(item.customerId.id):
+                return Response(
+                    {
+                        "error": "Technicians cannot reassign appointments to another customer."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if request.data.get("technicianId") and str(
+                request.data.get("technicianId")
+            ) != str(item.technicianId.id):
+                return Response(
+                    {"error": "Technicians cannot reassign appointments."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # Block cancellation via PUT — must use PATCH for cancellations
+        if (
+            str(request.data.get("appointmentStatus")) == "4"
+            and str(item.appointmentStatus) != "4"
+        ):
+            return Response(
+                {
+                    "error": "Cancellations must use PATCH, not PUT, to enforce cancellation rules."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = AppointmentSerializer(
             item, data=request.data, context={"request": request}
         )
@@ -430,11 +520,82 @@ AirServe Team
     # PATCH request
     def partial_update(self, request, pk=None):
         # Coordinators can update any field; customers/technicians can only cancel their own
-        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        role = self._role(request)
+        user_id = self._get_user_id(request)
         if role not in ("coordinator", "customer", "technician"):
-            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
 
-        item = get_object_or_404(Appointments.objects.all(), pk=pk)
+        item = get_object_or_404(self.get_queryset(), pk=pk)
+
+        if role == "customer":
+            if str(item.customerId.id) != str(user_id):
+                return Response(
+                    {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+                )
+
+            is_cancel = request.data.get("appointmentStatus") in ("4", 4)
+            is_reschedule = (
+                "appointmentStartTime" in request.data
+                or "appointmentEndTime" in request.data
+            ) and "appointmentStatus" not in request.data
+
+            if not is_cancel and not is_reschedule:
+                return Response(
+                    {
+                        "error": "Customers can only cancel or reschedule their own appointments."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if is_cancel:
+                request.data["cancelledBy"] = "customer"
+
+            if is_reschedule:
+                # Only allow rescheduling pending or confirmed appointments
+                if item.appointmentStatus not in ("1", "2"):
+                    return Response(
+                        {
+                            "error": "Only pending or confirmed appointments can be rescheduled."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                # Restrict to only time fields for reschedule
+                allowed_fields = {"appointmentStartTime", "appointmentEndTime"}
+                disallowed = set(request.data.keys()) - allowed_fields
+                if disallowed:
+                    return Response(
+                        {
+                            "error": "Customers can only update appointment times during reschedule. "
+                            f"Disallowed fields: {disallowed}"
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+        if role == "technician":
+            if not item.technicianId or str(item.technicianId.id) != str(user_id):
+                return Response(
+                    {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+                )
+            if request.data.get("customerId") and str(
+                request.data.get("customerId")
+            ) != str(item.customerId.id):
+                return Response(
+                    {
+                        "error": "Technicians cannot reassign appointments to another customer."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if request.data.get("technicianId") not in (None, "", "null"):
+                current_technician_id = (
+                    str(item.technicianId.id) if item.technicianId else None
+                )
+                if str(request.data.get("technicianId")) != current_technician_id:
+                    return Response(
+                        {"error": "Technicians cannot reassign appointments."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         # Handle empty string technicianId (convert to None for proper validation)
         if (
@@ -479,7 +640,12 @@ AirServe Team
                 )
 
             # Determine who is cancelling — default to "customer" so penalty logic fires correctly
-            cancelled_by = request.data.get("cancelledBy", "customer")
+            if role == "customer":
+                cancelled_by = "customer"
+            elif role == "technician":
+                cancelled_by = "technician"
+            else:
+                cancelled_by = request.data.get("cancelledBy") or "coordinator"
 
             # Only check limit for technicians and coordinators, not customers
             if cancelled_by in ["technician", "coordinator"] and item.technicianId:
@@ -578,8 +744,7 @@ AirServe Team
                 # Technician being assigned to previously unassigned appointment
                 technician_newly_assigned = True
             elif (
-                item.technicianId.id
-                != serializer.validated_data.get("technicianId").id
+                item.technicianId.id != serializer.validated_data.get("technicianId").id
             ):
                 # Different technician being assigned
                 technician_newly_assigned = True
@@ -607,13 +772,9 @@ AirServe Team
         # Send confirmation email if technician was newly assigned
         if technician_newly_assigned and not is_cancellation:
             try:
-                customer = Customers.objects.get(
-                    id=updated_appointment.customerId.id
-                )
+                customer = Customers.objects.get(id=updated_appointment.customerId.id)
                 technician = updated_appointment.technicianId
-                send_appointment_confirmation(
-                    updated_appointment, customer, technician
-                )
+                send_appointment_confirmation(updated_appointment, customer, technician)
             except Exception as e:
                 logger.exception(
                     "Failed to send technician assignment confirmation: %s", e
@@ -622,9 +783,7 @@ AirServe Team
         # Send cancellation email if this was a cancellation
         if is_cancellation:
             try:
-                customer = Customers.objects.get(
-                    id=updated_appointment.customerId.id
-                )
+                customer = Customers.objects.get(id=updated_appointment.customerId.id)
                 technician = (
                     updated_appointment.technicianId
                     if updated_appointment.technicianId
@@ -689,9 +848,7 @@ AirServe Team
                     # Send penalty notice via Telegram
                     send_penalty_notification_telegram(customer, penalty_result)
             except Exception as e:
-                logger.exception(
-                    "Failed to process cancellation notification: %s", e
-                )
+                logger.exception("Failed to process cancellation notification: %s", e)
 
         serializer_data = dict(serializer.data)
         modified_data = include_all_info(serializer_data, request)
@@ -700,9 +857,12 @@ AirServe Team
     # DELETE request
     def destroy(self, request, pk=None):
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-        item = get_object_or_404(Appointments.objects.all(), pk=pk)
+        item = get_object_or_404(self.get_queryset(), pk=pk)
         item.delete()
         return Response(status=204)
 
@@ -712,7 +872,13 @@ AirServe Team
         Customer rates technician (1-5 stars). Call from customer context.
         Body: { rating: 1-5, customerId: uuid }
         """
-        appointment = get_object_or_404(Appointments.objects.all(), pk=pk)
+        if not self._require_role(request, ["customer"]):
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        appointment = get_object_or_404(self.get_queryset(), pk=pk)
+        authenticated_user_id = self._get_user_id(request)
         customer_id = request.data.get("customerId")
         rating = request.data.get("rating")
         if not customer_id:
@@ -723,6 +889,12 @@ AirServe Team
             rating = int(rating)
         except (TypeError, ValueError):
             return Response({"error": "rating must be an integer 1-5"}, status=400)
+
+        if str(customer_id) != str(authenticated_user_id):
+            return Response(
+                {"error": "You can only rate appointments that belong to you."},
+                status=403,
+            )
 
         if str(appointment.customerId.id) != str(customer_id):
             return Response(
@@ -778,7 +950,13 @@ AirServe Team
         Technician rates customer (1-5 stars). Call from technician context.
         Body: { rating: 1-5, technicianId: uuid }
         """
-        appointment = get_object_or_404(Appointments.objects.all(), pk=pk)
+        if not self._require_role(request, ["technician"]):
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        appointment = get_object_or_404(self.get_queryset(), pk=pk)
+        authenticated_user_id = self._get_user_id(request)
         technician_id = request.data.get("technicianId")
         rating = request.data.get("rating")
         if not technician_id:
@@ -789,6 +967,12 @@ AirServe Team
             rating = int(rating)
         except (TypeError, ValueError):
             return Response({"error": "rating must be an integer 1-5"}, status=400)
+
+        if str(technician_id) != str(authenticated_user_id):
+            return Response(
+                {"error": "You can only rate appointments assigned to you."},
+                status=403,
+            )
 
         if not appointment.technicianId or str(appointment.technicianId.id) != str(
             technician_id
@@ -839,9 +1023,24 @@ AirServe Team
         Get penalty status for a customer
         Query params: customerId
         """
-        customer_id = request.query_params.get("customerId")
-        if not customer_id:
-            return Response({"error": "customerId is required"}, status=400)
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+        requested_customer_id = request.query_params.get("customerId")
+
+        if role == "customer":
+            if requested_customer_id and str(requested_customer_id) != str(user_id):
+                return Response(
+                    {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+                )
+            customer_id = user_id
+        elif role == "coordinator":
+            customer_id = requested_customer_id
+            if not customer_id:
+                return Response({"error": "customerId is required"}, status=400)
+        else:
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
 
         try:
             penalty_summary = get_penalty_summary(customer_id)
@@ -858,29 +1057,69 @@ AirServe Team
         Return completed appointments that the requesting user has not yet rated.
         Query params: customerId OR technicianId
         """
-        customer_id = request.query_params.get("customerId")
-        technician_id = request.query_params.get("technicianId")
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+        requested_customer_id = request.query_params.get("customerId")
+        requested_technician_id = request.query_params.get("technicianId")
 
-        if customer_id:
-            completed = Appointments.objects.filter(
-                customerId=customer_id,
-                appointmentStatus="3",
-                technicianId__isnull=False,
-            ).exclude(ratings__ratedBy="customer")
-        elif technician_id:
-            completed = Appointments.objects.filter(
-                technicianId=technician_id,
-                appointmentStatus="3",
-            ).exclude(ratings__ratedBy="technician")
+        if role == "customer":
+            if requested_technician_id or (
+                requested_customer_id and str(requested_customer_id) != str(user_id)
+            ):
+                return Response(
+                    {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+                )
+            completed = (
+                self.get_queryset()
+                .filter(
+                    appointmentStatus="3",
+                    technicianId__isnull=False,
+                )
+                .exclude(ratings__ratedBy="customer")
+            )
+        elif role == "technician":
+            if requested_customer_id or (
+                requested_technician_id and str(requested_technician_id) != str(user_id)
+            ):
+                return Response(
+                    {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+                )
+            completed = (
+                self.get_queryset()
+                .filter(
+                    appointmentStatus="3",
+                )
+                .exclude(ratings__ratedBy="technician")
+            )
+        elif role == "coordinator":
+            base_qs = Appointments.objects.select_related("customerId", "technicianId")
+            if requested_customer_id:
+                completed = base_qs.filter(
+                    customerId=requested_customer_id,
+                    appointmentStatus="3",
+                    technicianId__isnull=False,
+                ).exclude(ratings__ratedBy="customer")
+            elif requested_technician_id:
+                completed = base_qs.filter(
+                    technicianId=requested_technician_id,
+                    appointmentStatus="3",
+                ).exclude(ratings__ratedBy="technician")
+            else:
+                return Response(
+                    {"error": "customerId or technicianId is required"}, status=400
+                )
         else:
             return Response(
-                {"error": "customerId or technicianId is required"}, status=400
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
             )
 
         serializer = AppointmentSerializer(completed, many=True)
         serialized_data = [dict(item) for item in serializer.data]
         prefetched = prefetch_related_data(serialized_data)
-        modified_data = [include_all_info(data, request, prefetched=prefetched) for data in serialized_data]
+        modified_data = [
+            include_all_info(data, request, prefetched=prefetched)
+            for data in serialized_data
+        ]
         return Response(modified_data, status=200)
 
     @action(detail=True, methods=["get"], url_path="ratings")
@@ -889,7 +1128,12 @@ AirServe Team
         Get individual ratings for a specific appointment.
         Used by coordinators to view per-appointment rating details.
         """
-        appointment = get_object_or_404(Appointments, pk=pk)
+        if not self._require_role(request, ["coordinator"]):
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        appointment = get_object_or_404(self.get_queryset(), pk=pk)
         ratings = AppointmentRating.objects.filter(appointment=appointment)
 
         result = []
@@ -943,21 +1187,30 @@ AirServe Team
                 devices = aircon_devices_data
             else:
                 # Legacy single-device format (backward compat)
-                devices = [{
-                    "brand": request.data.get("airconBrand", ""),
-                    "model": request.data.get("airconModel", "Standard"),
-                    "units": int(request.data.get("numberOfUnits", 1))
-                }]
+                devices = [
+                    {
+                        "brand": request.data.get("airconBrand", ""),
+                        "model": request.data.get("airconModel", "Standard"),
+                        "units": int(request.data.get("numberOfUnits", 1)),
+                    }
+                ]
 
             # Validate devices
             if not devices or len(devices) == 0:
-                return Response({"error": "At least one aircon device is required"}, status=400)
+                return Response(
+                    {"error": "At least one aircon device is required"}, status=400
+                )
 
             for device in devices:
                 if not device.get("brand"):
-                    return Response({"error": "Aircon brand is required for each device"}, status=400)
+                    return Response(
+                        {"error": "Aircon brand is required for each device"},
+                        status=400,
+                    )
                 if int(device.get("units", 1)) < 1:
-                    return Response({"error": "Number of units must be at least 1"}, status=400)
+                    return Response(
+                        {"error": "Number of units must be at least 1"}, status=400
+                    )
 
             total_units = sum(int(d.get("units", 1)) for d in devices)
 
@@ -983,28 +1236,31 @@ AirServe Team
                     status=400,
                 )
 
-            # Check if customer already exists by phone or email
+            # Check if customer already exists — refuse guest booking for existing accounts
             existing_customer = Customers.objects.filter(
                 models.Q(customerPhone=phone) | models.Q(customerEmail=email)
             ).first()
 
             if existing_customer:
-                # Use existing customer for association only — do NOT overwrite
-                # their verified profile fields from unverified guest input
-                customer = existing_customer
-            else:
-                # Create temporary guest customer with a default password
-                customer = Customers.objects.create(
-                    customerName=name,
-                    customerPhone=phone,
-                    customerEmail=email,
-                    customerAddress=address,
-                    customerPostalCode=postal_code,
-                    customerLocation=geo_onemap.get_location_from_postal(postal_code),
-                    customerPassword=make_password(
-                        "GUEST_ACCOUNT_" + str(uuid.uuid4())[:8]
-                    ),  # Hashed random password for guest
+                return Response(
+                    {
+                        "error": "An account with this phone number or email already exists. Please log in to book an appointment."
+                    },
+                    status=status.HTTP_409_CONFLICT,
                 )
+
+            # Create temporary guest customer with a default password
+            customer = Customers.objects.create(
+                customerName=name,
+                customerPhone=phone,
+                customerEmail=email,
+                customerAddress=address,
+                customerPostalCode=postal_code,
+                customerLocation=geo_onemap.get_location_from_postal(postal_code),
+                customerPassword=make_password(
+                    "GUEST_ACCOUNT_" + str(uuid.uuid4())[:8]
+                ),  # Hashed random password for guest
+            )
 
             # Create aircon device records for this booking
             # Add timestamp to make the name unique for each booking
@@ -1012,9 +1268,16 @@ AirServe Team
 
             # Map brand name to airconType choice
             brand_to_type = {
-                "Daikin": "daikin", "Mitsubishi": "mitsubishi", "Panasonic": "panasonic",
-                "LG": "lg", "Samsung": "samsung", "Fujitsu": "fujitsu", "Sharp": "sharp",
-                "Toshiba": "toshiba", "Hitachi": "hitachi", "York": "york",
+                "Daikin": "daikin",
+                "Mitsubishi": "mitsubishi",
+                "Panasonic": "panasonic",
+                "LG": "lg",
+                "Samsung": "samsung",
+                "Fujitsu": "fujitsu",
+                "Sharp": "sharp",
+                "Toshiba": "toshiba",
+                "Hitachi": "hitachi",
+                "York": "york",
             }
 
             aircon_device_ids = []
@@ -1093,7 +1356,9 @@ AirServe Team
             else:
                 device_lines = []
                 for i, d in enumerate(devices, 1):
-                    device_lines.append(f"  {i}. {d.get('brand', '')} - {d.get('model', 'Standard')} ({int(d.get('units', 1))} unit(s))")
+                    device_lines.append(
+                        f"  {i}. {d.get('brand', '')} - {d.get('model', 'Standard')} ({int(d.get('units', 1))} unit(s))"
+                    )
                 device_summary = "Aircon Devices:\n" + "\n".join(device_lines)
                 device_detail = f"Total Units: {total_units}"
 
