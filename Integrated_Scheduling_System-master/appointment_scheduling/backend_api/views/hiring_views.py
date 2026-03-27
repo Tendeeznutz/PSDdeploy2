@@ -29,16 +29,38 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def _require_role(self, request, allowed_roles):
-        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        role = (
+            getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        )
         return role in allowed_roles
 
     def _get_user_id(self, request):
-        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+        return (
+            getattr(request.auth, "payload", {}).get("user_id")
+            if request.auth
+            else None
+        )
+
+    def _verify_applicant_email(self, request, application):
+        email = (
+            request.data.get("applicantEmail")
+            or request.query_params.get("email")
+            or request.headers.get("X-Applicant-Email")
+        )
+        if not email or application.applicantEmail.lower() != email.strip().lower():
+            return Response(
+                {"error": "Email verification failed"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
 
     def list(self, request):
         """Get all hiring applications with optional filtering"""
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         queryset = TechnicianHiringApplication.objects.all()
 
@@ -64,7 +86,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, pk):
         """Get a specific hiring application"""
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
@@ -86,7 +111,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, pk):
         """Update a hiring application — coordinator only"""
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
@@ -101,7 +129,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     def destroy(self, request, pk):
         """Delete a hiring application"""
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
@@ -115,6 +146,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
+
+        verification_error = self._verify_applicant_email(request, application)
+        if verification_error:
+            return verification_error
 
         # Update confirmation status
         application.personalDetailsConfirmed = True
@@ -131,6 +166,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
+
+        verification_error = self._verify_applicant_email(request, application)
+        if verification_error:
+            return verification_error
 
         # Validate that personal details were confirmed
         if not application.personalDetailsConfirmed:
@@ -157,7 +196,10 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
         Stage 3: Coordinator approves application and creates technician account
         """
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
@@ -171,7 +213,7 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
             )
 
         # Get coordinator details and pay rate from request
-        coordinator_id = request.data.get("coordinatorId")
+        coordinator_id = self._get_user_id(request)
         pay_rate = request.data.get("payRate")
         coordinator_notes = request.data.get("coordinatorNotes", "")
         coordinator_approved = request.data.get("coordinatorApproved", False)
@@ -236,13 +278,16 @@ class TechnicianHiringApplicationViewSet(viewsets.ModelViewSet):
     def coordinator_reject(self, request, pk=None):
         """Coordinator rejects application"""
         if not self._require_role(request, ["coordinator"]):
-            return Response({"error": "Coordinator access required"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Coordinator access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         application = get_object_or_404(
             TechnicianHiringApplication.objects.all(), pk=pk
         )
 
-        coordinator_id = request.data.get("coordinatorId")
+        coordinator_id = self._get_user_id(request)
         coordinator_notes = request.data.get("coordinatorNotes", "")
 
         application.coordinatorId_id = coordinator_id
