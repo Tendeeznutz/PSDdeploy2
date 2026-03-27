@@ -2,12 +2,52 @@ import axios from 'axios';
 import type {
   Customer,
   Appointment,
+  AppointmentDisplay,
   CustomerAirconDevice,
   BookingFormData,
   AuthResponse
 } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
+/**
+ * Normalize a raw backend appointment response into the shape the frontend expects.
+ * The backend returns related data under a flat `display` dict; the frontend reads
+ * `appointment.customer.*` and `appointment.technician.*` as nested objects.
+ */
+function normalizeAppointment(raw: Record<string, unknown>): Appointment {
+  const display = (raw.display || {}) as AppointmentDisplay;
+
+  // Build nested customer object from display fields
+  const customer: Partial<Customer> | undefined =
+    display.customerName
+      ? {
+          customerName: display.customerName,
+          customerPhone: display.customerPhone ?? '',
+          customerEmail: display.customerEmail ?? '',
+          customerAddress: display.customerAddress ?? '',
+          customerPostalCode: display.customerPostalCode ?? '',
+        }
+      : (raw.customer as Partial<Customer> | undefined);
+
+  // Build nested technician object from display fields
+  const technician: Partial<import('./types').Technician> | null | undefined =
+    display.technicianName
+      ? {
+          technicianName: display.technicianName,
+          technicianPhone: display.technicianPhone ?? '',
+          technicianAddress: display.technicianAddress,
+          technicianPostalCode: display.technicianPostalCode,
+        }
+      : (raw.technician as Partial<import('./types').Technician> | null | undefined);
+
+  return {
+    ...(raw as unknown as Appointment),
+    customer,
+    technician: technician ?? null,
+    display,
+  };
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -153,12 +193,13 @@ export const appointmentApi = {
     const response = await api.get('/appointments/', {
       params: { customerId },
     });
-    return response.data;
+    const data = Array.isArray(response.data) ? response.data : [];
+    return data.map(normalizeAppointment);
   },
 
   getAppointment: async (appointmentId: string): Promise<Appointment> => {
     const response = await api.get(`/appointments/${appointmentId}/`);
-    return response.data;
+    return normalizeAppointment(response.data);
   },
 
   createAppointment: async (data: {
@@ -169,7 +210,7 @@ export const appointmentApi = {
     paymentMethod: string;
   }): Promise<Appointment> => {
     const response = await api.post('/appointments/', data);
-    return response.data;
+    return normalizeAppointment(response.data);
   },
 
   updateAppointment: async (
@@ -177,7 +218,7 @@ export const appointmentApi = {
     data: Partial<Appointment>
   ): Promise<Appointment> => {
     const response = await api.patch(`/appointments/${appointmentId}/`, data);
-    return response.data;
+    return normalizeAppointment(response.data);
   },
 
   cancelAppointment: async (
@@ -189,7 +230,7 @@ export const appointmentApi = {
       cancellationReason,
       cancelledBy: 'customer',
     });
-    return response.data;
+    return normalizeAppointment(response.data);
   },
 
   getUnavailableSlots: async (customerId: string): Promise<{
@@ -204,7 +245,8 @@ export const appointmentApi = {
 
   getUnratedCompleted: async (customerId: string) => {
     const response = await api.get(`/appointments/unrated-completed/?customerId=${customerId}`);
-    return response.data;
+    const data = Array.isArray(response.data) ? response.data : [];
+    return data.map(normalizeAppointment);
   },
 
   rateTechnician: async (appointmentId: string, data: { rating: number; customerId: string }) => {

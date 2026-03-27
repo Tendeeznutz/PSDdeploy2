@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Phone, Mail, MapPin, Facebook, Instagram, Twitter } from 'lucide-react';
+import { APP_CONFIG } from '@/lib/config';
 
 export default function Footer() {
   return (
@@ -8,7 +9,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Company Info */}
           <div>
-            <h3 className="text-white text-xl font-bold mb-4">AirServe</h3>
+            <h3 className="text-white text-xl font-bold mb-4">{APP_CONFIG.companyName}</h3>
             <p className="text-sm mb-4">
               Professional aircon servicing with licensed technicians. Fast, reliable, and transparent.
             </p>
@@ -85,11 +86,11 @@ export default function Footer() {
             <ul className="space-y-3 text-sm">
               <li className="flex items-start space-x-2">
                 <Phone className="w-4 h-4 mt-1 flex-shrink-0" />
-                <span>+65 1234 5678</span>
+                <span>{APP_CONFIG.supportPhone}</span>
               </li>
               <li className="flex items-start space-x-2">
                 <Mail className="w-4 h-4 mt-1 flex-shrink-0" />
-                <span>support@airserve.sg</span>
+                <span>{APP_CONFIG.supportEmail}</span>
               </li>
               <li className="flex items-start space-x-2">
                 <MapPin className="w-4 h-4 mt-1 flex-shrink-0" />
@@ -100,7 +101,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm">
-          <p>&copy; {new Date().getFullYear()} AirServe. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} {APP_CONFIG.companyName}. All rights reserved.</p>
         </div>
       </div>
     </footer>

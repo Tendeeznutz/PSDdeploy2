@@ -35,6 +35,31 @@ export type AppointmentStatus = '1' | '2' | '3' | '4'; // Pending | Confirmed | 
 
 export type PaymentMethod = 'cash' | 'cheque' | 'card' | 'bank_transfer' | 'paynow';
 
+// Shape returned by the backend's format_response `display` dict
+export interface AppointmentDisplay {
+  appointmentStatus?: string;
+  paymentMethod?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  customerPostalCode?: string;
+  customerRating?: number;
+  customerRatingCount?: number;
+  technicianName?: string;
+  technicianPhone?: string;
+  technicianPostalCode?: string;
+  technicianAddress?: string;
+  technicianRating?: number;
+  technicianRatingCount?: number;
+  airconToService?: string[];
+  airconBrand?: string[];
+  airconModel?: string[];
+  airconType?: string[];
+  hasRatedTechnician?: boolean;
+  hasRatedCustomer?: boolean;
+}
+
 export interface Appointment {
   id: string;
   customerId: string;
@@ -48,10 +73,12 @@ export interface Appointment {
   cancellationReason?: string | null;
   cancelledBy?: string;
   cancelledAt?: string;
-  // Extended fields from format_response
-  customer?: Customer;
-  technician?: Technician | null;
+  // Normalized from backend display dict
+  customer?: Partial<Customer>;
+  technician?: Partial<Technician> | null;
   airconDevices?: CustomerAirconDevice[];
+  // Raw backend display data (used by some components directly)
+  display?: AppointmentDisplay;
 }
 
 export interface ServiceOption {

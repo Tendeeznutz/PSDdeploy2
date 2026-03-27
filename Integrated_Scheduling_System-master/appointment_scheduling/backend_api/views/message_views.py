@@ -7,7 +7,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from ..models import Messages, Coordinators, Appointments
+from ..models import Messages, Coordinators, Appointments, Customers, Technicians
 from ..serializers import MessageSerializer
 from ..utils.notifications import send_new_message_telegram
 
@@ -18,12 +18,87 @@ class MessageViewSet(viewsets.ModelViewSet):
     queryset = Messages.objects.all()
     serializer_class = MessageSerializer
 
+    def _role(self, request):
+        role = (
+            getattr(request.auth, "payload", {}).get("role") if request.auth else None
+        )
+        return role or getattr(request.user, "role", None)
+
     def _require_role(self, request, allowed_roles):
-        role = getattr(request.auth, "payload", {}).get("role") if request.auth else None
-        return role in allowed_roles
+        return self._role(request) in allowed_roles
 
     def _get_user_id(self, request):
-        return getattr(request.auth, "payload", {}).get("user_id") if request.auth else None
+        user_id = (
+            getattr(request.auth, "payload", {}).get("user_id")
+            if request.auth
+            else None
+        )
+        if user_id is None:
+            user_id = getattr(request.user, "id", None) or getattr(
+                request.user, "pk", None
+            )
+        return str(user_id) if user_id is not None else None
+
+    def _get_user_name(self, role, user_id):
+        if role == "customer":
+            return (
+                Customers.objects.filter(pk=user_id)
+                .values_list("customerName", flat=True)
+                .first()
+            )
+        if role == "technician":
+            return (
+                Technicians.objects.filter(pk=user_id)
+                .values_list("technicianName", flat=True)
+                .first()
+            )
+        if role == "coordinator":
+            return (
+                Coordinators.objects.filter(pk=user_id)
+                .values_list("coordinatorName", flat=True)
+                .first()
+            )
+        return None
+
+    def get_queryset(self):
+        qs = Messages.objects.select_related("relatedAppointment")
+        request = getattr(self, "request", None)
+        if request is None:
+            return qs
+
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+
+        if role == "coordinator":
+            return qs
+        if role in ("customer", "technician") and user_id:
+            return qs.filter(
+                models.Q(recipientId=user_id, recipientType=role)
+                | models.Q(senderId=user_id, senderType=role)
+            )
+        return qs.none()
+
+    def _get_message_participant_filters(self, request):
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+
+        if role == "coordinator":
+            target_id = request.query_params.get("userId")
+            target_type = request.query_params.get("userType")
+            if target_id and target_type:
+                return target_id, target_type
+
+            recipient_id = request.query_params.get("recipientId")
+            recipient_type = request.query_params.get("recipientType")
+            if recipient_id and recipient_type:
+                return recipient_id, recipient_type
+
+            sender_id = request.query_params.get("senderId")
+            sender_type = request.query_params.get("senderType")
+            if sender_id and sender_type:
+                return sender_id, sender_type
+
+        return user_id, role
 
     def list(self, request, *args, **kwargs):
         """
@@ -31,46 +106,62 @@ class MessageViewSet(viewsets.ModelViewSet):
         Query params: recipientId, recipientType, senderId, senderType
         """
         query_params = request.query_params
+        role = self._role(request)
+        user_id = self._get_user_id(request)
+        messages = self.get_queryset()
 
-        # Filter by recipient
-        if "recipientId" in query_params and "recipientType" in query_params:
-            messages = Messages.objects.filter(
-                recipientId=query_params["recipientId"],
-                recipientType=query_params["recipientType"],
+        if role not in ("customer", "technician", "coordinator") or not user_id:
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
             )
-        # Filter by sender
-        elif "senderId" in query_params and "senderType" in query_params:
-            messages = Messages.objects.filter(
-                senderId=query_params["senderId"], senderType=query_params["senderType"]
-            )
-        # Get both sent and received messages for a user
-        elif "userId" in query_params and "userType" in query_params:
-            user_id = query_params["userId"]
-            user_type = query_params["userType"]
-            messages = Messages.objects.filter(
-                models.Q(recipientId=user_id, recipientType=user_type)
-                | models.Q(senderId=user_id, senderType=user_type)
-            )
-        # Filter by unread messages
+
+        if role == "coordinator":
+            if "recipientId" in query_params and "recipientType" in query_params:
+                messages = messages.filter(
+                    recipientId=query_params["recipientId"],
+                    recipientType=query_params["recipientType"],
+                )
+            elif "senderId" in query_params and "senderType" in query_params:
+                messages = messages.filter(
+                    senderId=query_params["senderId"],
+                    senderType=query_params["senderType"],
+                )
+            elif "userId" in query_params and "userType" in query_params:
+                messages = messages.filter(
+                    models.Q(
+                        recipientId=query_params["userId"],
+                        recipientType=query_params["userType"],
+                    )
+                    | models.Q(
+                        senderId=query_params["userId"],
+                        senderType=query_params["userType"],
+                    )
+                )
+            elif "unread" in query_params:
+                target_id, target_type = self._get_message_participant_filters(request)
+                messages = messages.filter(
+                    recipientId=target_id,
+                    recipientType=target_type,
+                    isRead=False,
+                )
         elif "unread" in query_params:
-            recipient_id = query_params.get("recipientId")
-            recipient_type = query_params.get("recipientType")
-            if recipient_id and recipient_type:
-                messages = Messages.objects.filter(
-                    recipientId=recipient_id, recipientType=recipient_type, isRead=False
-                )
-            else:
-                return Response(
-                    {
-                        "error": "recipientId and recipientType required for unread messages"
-                    },
-                    status=400,
-                )
+            messages = messages.filter(
+                recipientId=user_id,
+                recipientType=role,
+                isRead=False,
+            )
+        elif "recipientId" in query_params or "recipientType" in query_params:
+            messages = messages.filter(
+                recipientId=user_id,
+                recipientType=role,
+            )
+        elif "senderId" in query_params or "senderType" in query_params:
+            messages = messages.filter(
+                senderId=user_id,
+                senderType=role,
+            )
         else:
-            if self._require_role(request, ["coordinator"]):
-                messages = Messages.objects.all()
-            else:
-                return Response({"error": "Filter parameters required"}, status=400)
+            messages = messages.order_by("-created_at")
 
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data, status=200)
@@ -80,22 +171,34 @@ class MessageViewSet(viewsets.ModelViewSet):
         Create a new message.
         Special handling for customer messages: they are sent to both coordinator AND technician
         """
-        data = request.data
-        sender_type = data.get("senderType")
+        data = request.data.copy()
+        sender_id = self._get_user_id(request)
+        sender_type = self._role(request)
+        sender_name = self._get_user_name(sender_type, sender_id)
+
+        if (
+            sender_type not in ("customer", "technician", "coordinator")
+            or not sender_id
+        ):
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+        if not sender_name:
+            return Response(
+                {"error": "Sender not found"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        data["senderId"] = sender_id
+        data["senderType"] = sender_type
+        data["senderName"] = sender_name
 
         # Special handling for customer messages
         if sender_type == "customer":
-            sender_id = data.get("senderId")
-            sender_name = data.get("senderName")
             subject = data.get("subject")
             body = data.get("body")
 
             # Detailed validation
             missing_fields = []
-            if not sender_id:
-                missing_fields.append("senderId")
-            if not sender_name:
-                missing_fields.append("senderName")
             if not subject:
                 missing_fields.append("subject")
             if not body:
@@ -178,7 +281,7 @@ class MessageViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Failed to create any messages"}, status=400)
 
         # For non-customer messages, use standard creation
-        serializer = MessageSerializer(data=request.data)
+        serializer = MessageSerializer(data=data)
         if serializer.is_valid():
             message = serializer.save()
 
@@ -198,7 +301,18 @@ class MessageViewSet(viewsets.ModelViewSet):
         """
         Mark a message as read
         """
-        message = get_object_or_404(Messages, pk=pk)
+        user_id = self._get_user_id(request)
+        role = self._role(request)
+
+        if role not in ("customer", "technician", "coordinator") or not user_id:
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        message = get_object_or_404(
+            Messages.objects.filter(recipientId=user_id, recipientType=role),
+            pk=pk,
+        )
         message.isRead = True
         message.readAt = timezone.now()
         message.save()
@@ -206,22 +320,52 @@ class MessageViewSet(viewsets.ModelViewSet):
         serializer = MessageSerializer(message)
         return Response(serializer.data, status=200)
 
+    @action(detail=False, methods=["patch"], url_path="mark-all-read")
+    def mark_all_read(self, request):
+        """
+        Mark all inbox messages for the authenticated user as read
+        """
+        user_id = self._get_user_id(request)
+        role = self._role(request)
+
+        if role not in ("customer", "technician", "coordinator") or not user_id:
+            return Response(
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        updated = Messages.objects.filter(
+            recipientId=user_id,
+            recipientType=role,
+            isRead=False,
+        ).update(isRead=True, readAt=timezone.now())
+
+        return Response({"updated": updated}, status=200)
+
     @action(detail=False, methods=["get"], url_path="inbox")
     def inbox(self, request):
         """
         Get inbox (received messages) for a user
         """
-        recipient_id = request.query_params.get("recipientId")
-        recipient_type = request.query_params.get("recipientType")
+        role = self._role(request)
+        user_id = self._get_user_id(request)
 
-        if not recipient_id or not recipient_type:
+        if role not in ("customer", "technician", "coordinator") or not user_id:
             return Response(
-                {"error": "recipientId and recipientType are required"}, status=400
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
             )
 
-        messages = Messages.objects.filter(
-            recipientId=recipient_id, recipientType=recipient_type
-        ).order_by("-created_at")
+        if role == "coordinator":
+            recipient_id = request.query_params.get("recipientId") or user_id
+            recipient_type = request.query_params.get("recipientType") or role
+        else:
+            recipient_id = user_id
+            recipient_type = role
+
+        messages = (
+            self.get_queryset()
+            .filter(recipientId=recipient_id, recipientType=recipient_type)
+            .order_by("-created_at")
+        )
 
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data, status=200)
@@ -231,17 +375,26 @@ class MessageViewSet(viewsets.ModelViewSet):
         """
         Get sent messages for a user
         """
-        sender_id = request.query_params.get("senderId")
-        sender_type = request.query_params.get("senderType")
+        role = self._role(request)
+        user_id = self._get_user_id(request)
 
-        if not sender_id or not sender_type:
+        if role not in ("customer", "technician", "coordinator") or not user_id:
             return Response(
-                {"error": "senderId and senderType are required"}, status=400
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
             )
 
-        messages = Messages.objects.filter(
-            senderId=sender_id, senderType=sender_type
-        ).order_by("-created_at")
+        if role == "coordinator":
+            sender_id = request.query_params.get("senderId") or user_id
+            sender_type = request.query_params.get("senderType") or role
+        else:
+            sender_id = user_id
+            sender_type = role
+
+        messages = (
+            self.get_queryset()
+            .filter(senderId=sender_id, senderType=sender_type)
+            .order_by("-created_at")
+        )
 
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data, status=200)
@@ -251,16 +404,16 @@ class MessageViewSet(viewsets.ModelViewSet):
         """
         Get count of unread messages for a user
         """
-        recipient_id = request.query_params.get("recipientId")
-        recipient_type = request.query_params.get("recipientType")
+        user_id = self._get_user_id(request)
+        role = self._role(request)
 
-        if not recipient_id or not recipient_type:
+        if role not in ("customer", "technician", "coordinator") or not user_id:
             return Response(
-                {"error": "recipientId and recipientType are required"}, status=400
+                {"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN
             )
 
         count = Messages.objects.filter(
-            recipientId=recipient_id, recipientType=recipient_type, isRead=False
+            recipientId=user_id, recipientType=role, isRead=False
         ).count()
 
         return Response({"unreadCount": count}, status=200)

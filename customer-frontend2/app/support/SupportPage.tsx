@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { initScrollAnimations } from '@/lib/animations';
 import { messageApi } from '@/lib/api';
+import { APP_CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/lib/store';
 
 const faqs = [
@@ -149,11 +150,11 @@ export default function SupportPage() {
                 <div className="mt-6 flex flex-wrap gap-4">
                   <div className="flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-4 py-2 text-sm text-gray-700">
                     <Phone className="h-4 w-4 text-primary-600" />
-                    +65 1234 5678
+                    {APP_CONFIG.supportPhone}
                   </div>
                   <div className="flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-4 py-2 text-sm text-gray-700">
                     <Mail className="h-4 w-4 text-primary-600" />
-                    support@airserve.sg
+                    {APP_CONFIG.supportEmail}
                   </div>
                 </div>
                 <div className="mt-8 flex flex-col sm:flex-row gap-3">

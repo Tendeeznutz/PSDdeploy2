@@ -13,10 +13,13 @@ const nextConfig = {
     ],
   },
   async rewrites() {
+    // Only used in local development; in Docker, Caddy proxies /api/* to the backend
+    const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },

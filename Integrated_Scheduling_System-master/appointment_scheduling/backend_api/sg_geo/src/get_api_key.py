@@ -3,47 +3,45 @@ import os
 
 import requests
 from dotenv import load_dotenv, find_dotenv
+from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
 
+load_dotenv(find_dotenv())
+ONEMAP_API_KEY = os.getenv("ONEMAP_API_KEY", "")
+
 
 def update_api_key():
-    env = find_dotenv()
-    load_dotenv(env)
+    global ONEMAP_API_KEY
+
+    load_dotenv(find_dotenv())
 
     url = "https://www.onemap.gov.sg/api/auth/post/getToken"
 
     payload = {
-        "email": os.getenv("ONEMAP_API_EMAIL"),
-        "password": os.getenv("ONEMAP_API_PASSWORD"),
+        "email": os.getenv("ONEMAP_EMAIL"),
+        "password": os.getenv("ONEMAP_PASSWORD"),
     }
 
-    response = requests.request("POST", url, json=payload, timeout=10)
-    if response.status_code != 200:
-        logger.error("Error: %s", response.json())
-        return
+    if not payload["email"] or not payload["password"]:
+        raise ValueError("ONEMAP_EMAIL and ONEMAP_PASSWORD must be set")
 
-    # update the token in .env file
-    with open(env, "r+") as file:
-        data = file.readlines()
-        key_found = False
-        for i, line in enumerate(data):
-            if line.startswith("ONEMAP_API_KEY"):
-                data[i] = "ONEMAP_API_KEY=" + response.json()["access_token"] + "\n"
-                key_found = True
-                break
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+    except RequestException as exc:
+        logger.error("Failed to refresh OneMap token: %s", exc)
+        raise RuntimeError("Failed to refresh OneMap token") from exc
 
-        if not key_found:
-            data.append("\nONEMAP_API_KEY=" + response.json()["access_token"] + "\n")
+    try:
+        access_token = response.json()["access_token"]
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.error("Invalid OneMap token response: %s", response.text)
+        raise RuntimeError("Invalid response while refreshing OneMap token") from exc
 
-        # Move the pointer to the beginning of the file to overwrite
-        file.seek(0)
-        file.writelines(data)
-        # Truncate the file to the current position to remove any old content beyond this point
-        file.truncate()
-
-    logger.info("Token updated successfully!")
-    return response.json()["access_token"]
+    ONEMAP_API_KEY = access_token
+    logger.info("Token refreshed successfully")
+    return access_token
 
 
 if __name__ == "__main__":

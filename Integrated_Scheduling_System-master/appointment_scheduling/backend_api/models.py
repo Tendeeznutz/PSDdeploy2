@@ -233,7 +233,9 @@ class Appointments(TimeStampedModel):
         indexes = [
             models.Index(fields=['appointmentStatus'], name='appt_status_idx'),
             models.Index(fields=['customerId', 'appointmentStatus'], name='appt_cust_status_idx'),
+            models.Index(fields=['customerId', 'appointmentStatus', 'cancelledAt'], name='appt_cust_cancel_idx'),
             models.Index(fields=['technicianId', 'appointmentStatus'], name='appt_tech_status_idx'),
+            models.Index(fields=['technicianId', 'cancelledBy', 'cancelledAt'], name='appt_tech_cancel_idx'),
             models.Index(fields=['appointmentStartTime'], name='appt_start_time_idx'),
         ]
     def __str__(self):
@@ -272,11 +274,6 @@ class AppointmentRating(TimeStampedModel):
     def __str__(self):
         return f'Rating {self.rating} by {self.ratedBy} for Appt {self.appointment.id}'
 
-
-class AppointmentRequest(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    class Meta:
-        managed = True
 
 class Messages(TimeStampedModel):
     """

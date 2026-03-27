@@ -10,6 +10,7 @@ import dynamic from 'next/dynamic';
 
 const Modal = dynamic(() => import('@/components/Modal'));
 import { appointmentApi } from '@/lib/api';
+import { APP_CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/lib/store';
 
 import { TIME_SLOTS } from '@/lib/constants';
@@ -205,7 +206,7 @@ function RescheduleContent() {
                 <p className={`text-sm mt-1 ${canRescheduleNow ? 'text-blue-800' : 'text-yellow-800'}`}>
                   {canRescheduleNow
                     ? 'You can reschedule this appointment for free. Changes must be made at least 24 hours before the scheduled time.'
-                    : 'This appointment is less than 24 hours away. Please contact support at support@airserve.sg to reschedule.'}
+                    : `This appointment is less than 24 hours away. Please contact support at ${APP_CONFIG.supportEmail} to reschedule.`}
                 </p>
               </div>
             </div>
@@ -337,7 +338,7 @@ function RescheduleContent() {
                 This appointment is less than 24 hours away. Please contact our support team for assistance.
               </p>
               <div className="space-y-3">
-                <a href="mailto:support@airserve.sg" className="block">
+                <a href={`mailto:${APP_CONFIG.supportEmail}`} className="block">
                   <Button className="w-full">Contact Support</Button>
                 </a>
                 <Link href={`/bookings/${appointment.id}`}>

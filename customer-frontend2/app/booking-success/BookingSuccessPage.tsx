@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useRef, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -9,46 +8,34 @@ import Button from '@/components/Button';
 import { CheckCircle, Download, Mail, Calendar, MapPin, Package, CreditCard } from 'lucide-react';
 import { format } from 'date-fns';
 import { SERVICES, ADD_ONS, TRAVEL_FEE } from '@/lib/constants';
+import { APP_CONFIG } from '@/lib/config';
 
 function BookingSuccessContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const contentRef = useRef<HTMLDivElement>(null);
   const [bookingData, setBookingData] = useState<any>(null);
+  const [hasCheckedSession, setHasCheckedSession] = useState(false);
 
   useEffect(() => {
     // Get booking data from URL params or sessionStorage (cleared when tab closes)
     const storedData = sessionStorage.getItem('lastBooking');
     if (storedData) {
-      const parsed = JSON.parse(storedData);
-      // Convert date string back to Date object (handle both old and new field names)
-      if (parsed.appointmentDate) {
-        parsed.date = new Date(parsed.appointmentDate);
-      } else if (parsed.date) {
-        parsed.date = new Date(parsed.date);
+      try {
+        const parsed = JSON.parse(storedData);
+        // Convert date string back to Date object (handle both old and new field names)
+        if (parsed.appointmentDate) {
+          parsed.date = new Date(parsed.appointmentDate);
+        } else if (parsed.date) {
+          parsed.date = new Date(parsed.date);
+        }
+        if (parsed.appointmentTime) {
+          parsed.time = parsed.appointmentTime;
+        }
+        setBookingData(parsed);
+      } catch {
+        setBookingData(null);
       }
-      if (parsed.appointmentTime) {
-        parsed.time = parsed.appointmentTime;
-      }
-      setBookingData(parsed);
-    } else {
-      // Create mock data if none exists
-      setBookingData({
-        bookingId: 'BK' + Date.now().toString().slice(-8),
-        service: 'General Servicing',
-        units: 1,
-        addOns: ['Filter Replacement'],
-        date: new Date(),
-        time: '11:00 AM',
-        address: '123 Main Street',
-        postalCode: '123456',
-        name: 'John Doe',
-        email: 'john@example.com',
-        phone: '12345678',
-        paymentMethod: 'Credit/Debit Card',
-        total: 90,
-      });
     }
+    setHasCheckedSession(true);
 
     // Animate content on mount
     if (contentRef.current) {
@@ -153,7 +140,7 @@ function BookingSuccessContent() {
         </head>
         <body>
           <div class="header">
-            <h1 style="color: #0ea5e9; margin: 0;">AirServe</h1>
+            <h1 style="color: #0ea5e9; margin: 0;">${APP_CONFIG.companyName}</h1>
             <p style="color: #6b7280; margin: 5px 0;">Professional Aircon Servicing</p>
           </div>
           
@@ -222,9 +209,9 @@ function BookingSuccessContent() {
           </div>
 
           <div class="footer">
-            <p>Thank you for choosing AirServe!</p>
+            <p>Thank you for choosing ${APP_CONFIG.companyName}!</p>
             <p>This invoice has been sent to ${bookingData?.email}</p>
-            <p>For any inquiries, please contact us at support@airserve.sg</p>
+            <p>For any inquiries, please contact us at ${APP_CONFIG.supportEmail}</p>
           </div>
         </body>
       </html>
@@ -239,12 +226,34 @@ function BookingSuccessContent() {
     }, 250);
   };
 
-  if (!bookingData) {
+  if (!hasCheckedSession) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <div className="pt-24 pb-16 text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!bookingData) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="pt-24 pb-16">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">No booking found</h2>
+              <p className="text-gray-600 mb-6">
+                It looks like you arrived here without completing a booking.
+              </p>
+              <Link href="/book">
+                <Button>Book an appointment</Button>
+              </Link>
+            </div>
+          </div>
         </div>
         <Footer />
       </div>
