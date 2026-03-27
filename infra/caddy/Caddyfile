@@ -1,28 +1,24 @@
-# AirServe reverse proxy — scaffolded for future use
-# Not referenced in docker-compose.yml yet.
+# AirServe reverse proxy
+# Caddy handles HTTPS termination (auto Let's Encrypt) and routes
+# traffic to the backend API and Next.js frontend containers.
 #
-# To activate: add a caddy service to docker-compose.yml
-# and mount this file at /etc/caddy/Caddyfile
-#
-# Example docker-compose service:
-#   caddy:
-#     image: caddy:2-alpine
-#     restart: unless-stopped
-#     ports:
-#       - "80:80"
-#       - "443:443"
-#     volumes:
-#       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-#       - caddy_data:/data
-#       - caddy_config:/config
-#     networks:
-#       - airserve-net
-#     depends_on:
-#       backend:
-#         condition: service_healthy
+# Set DOMAIN env var in .env (e.g., DOMAIN=ay2526-tp-j.coding36.net)
+# For local dev without HTTPS, use DOMAIN=:80
 
 {$DOMAIN:localhost} {
-    reverse_proxy backend:8000
+    # API and admin routes → Django backend
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /admin/* {
+        reverse_proxy backend:8000
+    }
+
+    # Everything else → Next.js frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
 
     header {
         -Server

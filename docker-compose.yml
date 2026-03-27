@@ -40,6 +40,43 @@ services:
       retries: 5
       start_period: 10s
 
+  # ── Next.js Frontend ────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    image: ghcr.io/${GHCR_REPO:-your-org/airserve-frontend}:latest
+    restart: unless-stopped
+    networks:
+      - airserve-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Caddy (reverse proxy + auto-HTTPS) ─────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - airserve-net
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
   # ── Django Backend ──────────────────────────────────────────
   backend:
     build:
@@ -60,8 +97,6 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_STORAGE_BUCKET_NAME: ${MINIO_BUCKET:-airserve-media}
-    ports:
-      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -83,3 +118,5 @@ networks:
 volumes:
   pg_data:
   minio_data:
+  caddy_data:
+  caddy_config:

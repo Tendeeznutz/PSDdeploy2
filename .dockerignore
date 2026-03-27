@@ -11,9 +11,8 @@
 **/env
 *.egg-info
 
-# Node (frontend not containerized here)
+# Node
 **/node_modules
-**/frontend
 
 # IDE / OS
 .idea
@@ -28,7 +27,8 @@ Thumbs.db
 *.tex
 *.gz
 *.md
-customer-frontend2/
+# Exclude CRA frontend (only Next.js is containerized)
+Integrated_Scheduling_System-master/appointment_scheduling/frontend/
 
 # Django dev artifacts
 **/db.sqlite3
@@ -41,7 +41,6 @@ audit.log
 .env.*
 !.env.example
 docker-compose*.yml
-infra/caddy/
 
 # Temp files
 .claude/
