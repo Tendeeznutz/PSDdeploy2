@@ -6,8 +6,9 @@ The system automatically tracks customer cancellations and applies penalty fees 
 ## Penalty Rules
 
 - **Free Cancellations**: 5 per month
-- **Penalty Amount**: $20 per cancellation over the limit
-- **Reset Period**: Monthly (resets on the 1st of each month)
+- **Monthly Excess Penalty**: $20 per cancellation over the limit
+- **Short-Notice Penalty**: $20 for cancelling within 30 minutes of appointment start time
+- **Reset Period**: Monthly cancellation count resets on the 1st of each month
 
 ## How It Works
 
@@ -69,8 +70,8 @@ Located in `backend_api/penalty_utils.py`:
 ### `get_monthly_cancellation_count(customer_id, month=None, year=None)`
 Returns the count of cancelled appointments for a customer in a specific month.
 
-### `check_and_apply_penalty(customer_id)`
-Checks if penalty should be applied and adds it to the customer's pending fees.
+### `check_and_apply_penalty(customer_id, appointment_start_time_unix=None)`
+Checks if penalty should be applied and adds it to the customer's pending fees. If `appointment_start_time_unix` is provided, also checks for short-notice cancellation (within 30 minutes of start).
 
 Returns:
 ```python
@@ -78,7 +79,9 @@ Returns:
     'penalty_applied': bool,
     'cancellation_count': int,
     'penalty_amount': Decimal,
-    'total_pending_penalty': Decimal
+    'total_pending_penalty': Decimal,
+    'short_notice_penalty': bool,
+    'monthly_limit_penalty': bool
 }
 ```
 
@@ -149,6 +152,8 @@ To change penalty settings, edit `backend_api/penalty_utils.py`:
 ```python
 CANCELLATION_THRESHOLD = 5  # Free cancellations per month
 PENALTY_AMOUNT = Decimal('20.00')  # Penalty per excess cancellation
+SHORT_NOTICE_SECONDS = 1800  # 30 minutes - short-notice window
+SHORT_NOTICE_PENALTY = Decimal('20.00')  # Penalty for short-notice cancellation
 ```
 
 ## Notes

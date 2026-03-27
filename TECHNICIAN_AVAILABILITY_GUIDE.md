@@ -7,20 +7,23 @@ The Technician Availability System allows technicians to define their working sc
 - **Weekly Schedule Management**: Define which days technicians work each week
 - **Time Range Configuration**: Set working hours for each day
 - **Specific Date Overrides**: Mark specific dates as available/unavailable (e.g., for leaves)
-- **2.5 Hour Time Blocking**: Each appointment blocks 2.5 hours (service + travel time)
+- **30-Minute Travel Buffer**: Each appointment includes a 30-minute buffer after the end time for travel
 - **Minimum Working Days**: Technicians must work at least 5 days per week
 
 ---
 
 ## Key Features
 
-### 1. 2.5 Hour Time Buffer
-- Each appointment automatically blocks **2.5 hours** total time
-- This includes:
-  - Service time (varies by number of aircon units)
-  - Travel time to and from the location
-  - Buffer for unexpected delays
-- Example: If appointment is from 9:00 AM to 10:00 AM (1 hour), the system blocks time until 12:30 PM (10:00 AM + 2.5 hours)
+### 1. 30-Minute Travel Buffer
+- Each appointment includes a **30-minute** travel buffer after the appointment end time
+- This accounts for travel time between appointments
+- Service time is already included in the appointment duration (1 hour per AC unit)
+- Example: If appointment is from 9:00 AM to 10:00 AM (1 hour), the system blocks time until 10:30 AM (10:00 AM + 30 minutes)
+
+### 1b. Lunch Break
+- A **lunch break from 12:00 PM to 1:00 PM (SGT)** is enforced
+- Appointments cannot be scheduled during this period
+- The system automatically skips lunch slots when generating available times
 
 ### 2. Minimum Working Days Requirement
 - Each technician must have **at least 5 working days** configured per week
@@ -111,7 +114,7 @@ The Technician Availability System allows technicians to define their working sc
 
 **Endpoint**: `GET /api/technician-availability/available-slots/`
 
-**Description**: Get all available time slots for a technician on a specific date, considering existing appointments and the 2.5-hour buffer.
+**Description**: Get all available time slots for a technician on a specific date, considering existing appointments and the 30-minute travel buffer.
 
 **Query Parameters**:
 - `technicianId` (required): UUID of the technician
@@ -156,7 +159,7 @@ GET /api/technician-availability/available-slots/?technicianId=123e4567-e89b-12d
 
 **Notes**:
 - Time slots are generated in 30-minute intervals
-- Each slot accounts for the 2.5-hour buffer after the appointment
+- Each slot accounts for the 30-minute travel buffer after the appointment
 - Slots are only returned during the technician's working hours
 - Slots avoid conflicts with existing appointments
 
@@ -470,7 +473,7 @@ curl -X GET "http://localhost:8000/api/technician-availability/working-days/?tec
      - Is the technician scheduled to work on that day of the week?
      - Is there a specific date override for that date?
      - Does the requested time fall within working hours?
-     - Is there a conflict with existing appointments (including 2.5-hour buffer)?
+     - Is there a conflict with existing appointments (including 30-minute travel buffer)?
 
 3. **Technician Assignment**:
    - Only technicians passing all checks are considered "available"
@@ -479,8 +482,9 @@ curl -X GET "http://localhost:8000/api/technician-availability/working-days/?tec
 
 4. **Time Blocking**:
    - Once appointment is confirmed, that time slot is blocked
-   - Additional 2.5 hours after appointment end time is also blocked
-   - Example: Appointment 10:00-11:00 blocks time until 13:30 (11:00 + 2.5 hours)
+   - Additional 30 minutes after appointment end time is also blocked for travel
+   - Example: Appointment 10:00-11:00 blocks time until 11:30 (11:00 + 30 minutes)
+   - The 12:00-13:00 lunch break is also blocked automatically
 
 ### Modified Scheduling Algorithm Functions
 
@@ -492,7 +496,7 @@ Checks if technician works on the requested day and time:
 
 #### `is_slot_available()`
 Checks if time slot is free:
-- Applies 2.5-hour buffer to existing appointments
+- Applies 30-minute travel buffer to existing appointments
 - Checks for conflicts with new appointment (including its own buffer)
 - Returns True only if no conflicts found
 
@@ -500,7 +504,7 @@ Checks if time slot is free:
 Generates list of available slots:
 - Considers working hours for the day
 - Excludes time slots with existing appointments
-- Accounts for 2.5-hour buffer after each appointment
+- Accounts for 30-minute travel buffer after each appointment
 - Returns slots in 30-minute intervals
 
 ---
@@ -652,7 +656,7 @@ The TechnicianAvailability model is registered in the Django admin panel with th
 # Expected: Empty slots array
 
 # Test: Check slots on day with existing appointment
-# Expected: Slots excluding appointment + 2.5 hour buffer
+# Expected: Slots excluding appointment + 30 min travel buffer
 ```
 
 #### 3. Specific Date Overrides
@@ -699,7 +703,7 @@ python manage.py migrate backend_api
 - **Solution**: Ensure `is_slot_available()` is called with `technician_id` parameter
 
 **Issue**: Slots still showing after booking
-- **Solution**: Verify 2.5-hour buffer is being applied correctly
+- **Solution**: Verify 30-minute travel buffer is being applied correctly
 
 **Issue**: Cannot delete working day
 - **Solution**: This is by design. Add another working day first, then delete
@@ -713,7 +717,6 @@ python manage.py migrate backend_api
 
 Potential improvements for consideration:
 1. **Variable Time Buffers**: Allow different buffer times based on service type
-2. **Break Times**: Support for lunch breaks and rest periods
 3. **Recurring Overrides**: Monthly leave patterns (e.g., first Monday of each month)
 4. **Availability Templates**: Pre-defined schedule templates for quick setup
 5. **Notification System**: Alert technicians of schedule changes
@@ -725,7 +728,8 @@ Potential improvements for consideration:
 
 - **v1.0.0** (2024-01-15): Initial implementation
   - Weekly schedule management
-  - 2.5-hour time buffer
+  - 30-minute travel buffer between appointments
+  - Lunch break blocking (12:00-13:00 SGT)
   - Minimum 5 working days requirement
   - Specific date overrides
   - Available slots calculation

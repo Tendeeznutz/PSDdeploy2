@@ -1,7 +1,7 @@
 # Technician Availability System - Implementation Summary
 
 ## Overview
-This document provides a quick summary of the changes made to implement the technician availability system with working day schedules and 2.5-hour time blocking.
+This document provides a quick summary of the changes made to implement the technician availability system with working day schedules and 30-minute travel buffer.
 
 ---
 
@@ -36,7 +36,9 @@ Added `TechnicianAvailabilitySerializer` with:
 **File**: `backend_api/scheduling_algo.py`
 
 **New Constants**:
-- `TIME_BUFFER_SECONDS = 2.5 * 60 * 60` (9000 seconds)
+- `TRAVEL_BUFFER_SECONDS = 30 * 60` (1800 seconds, 30 minutes)
+- `LUNCH_BREAK_START_HOUR = 12` (12:00 PM SGT)
+- `LUNCH_BREAK_END_HOUR = 13` (1:00 PM SGT)
 
 **Updated Functions**:
 
@@ -47,7 +49,7 @@ Added `TechnicianAvailabilitySerializer` with:
 
 2. `is_slot_available(start, end, appointments, technician_id)`
    - Now includes `technician_id` parameter
-   - Applies 2.5-hour buffer to existing appointments
+   - Applies 30-minute travel buffer to existing appointments
    - Checks technician availability schedule
 
 3. `get_technician_to_assign(nearby_technicians, start, end, ...)`
@@ -58,7 +60,7 @@ Added `TechnicianAvailabilitySerializer` with:
 
 4. `get_available_time_slots(technician_id, date_str, duration_hours)`
    - Returns all available time slots for a technician on a date
-   - Accounts for 2.5-hour buffer after each appointment
+   - Accounts for 30-minute travel buffer and 12:00-13:00 lunch break
    - Generates slots in 30-minute intervals
 
 ---
@@ -119,10 +121,14 @@ from .availability_views import TechnicianAvailabilityViewSet
 - Each day has specific working hours (start and end time)
 - Minimum 5 working days per week enforced
 
-### ✅ 2. 2.5 Hour Time Blocking
-- Each appointment blocks 2.5 hours total (service + travel)
+### ✅ 2. 30-Minute Travel Buffer
+- Each appointment includes a 30-minute buffer after the end time for travel
 - Prevents overlapping appointments
-- Ensures adequate buffer between appointments
+- Ensures adequate gap between consecutive appointments
+
+### ✅ 2b. Lunch Break Blocking
+- Appointments are blocked during the 12:00-13:00 SGT lunch period
+- The system automatically skips lunch slots when generating available times
 
 ### ✅ 3. Specific Date Overrides
 - Technicians can mark specific dates as unavailable (leaves)
@@ -150,8 +156,9 @@ Before releasing to production, test:
 - [ ] Mark specific date as unavailable
 - [ ] Book appointment on working day (should succeed)
 - [ ] Try to book on non-working day (should fail with no available technicians)
-- [ ] Book two appointments with <2.5 hours gap (second should fail)
-- [ ] Book two appointments with >2.5 hours gap (both should succeed)
+- [ ] Book two appointments with <30 min gap (second should fail)
+- [ ] Book two appointments with >30 min gap (both should succeed)
+- [ ] Try to book during lunch break 12:00-13:00 (should fail)
 - [ ] Query available slots for a technician
 - [ ] Try to delete working day (leaving <5 days, should fail)
 - [ ] Delete working day (leaving ≥5 days, should succeed)
@@ -326,8 +333,8 @@ curl "http://localhost:8000/api/technician-availability/available-slots/?technic
    - Consider adding timezone support for international operations
 
 2. **Break Times**:
-   - No support for lunch breaks or rest periods
-   - All time between start and end is considered available
+   - Lunch break (12:00-13:00 SGT) is enforced
+   - No support for additional custom break periods
 
 3. **Holiday Management**:
    - No built-in holiday calendar
@@ -364,5 +371,6 @@ For bug reports or feature requests, contact the development team.
 ---
 
 **Implementation Date**: 2024-01-22
-**Version**: 1.0.0
-**Status**: ✅ Ready for Testing
+**Version**: 1.1.0
+**Last Updated**: March 2026
+**Status**: Production

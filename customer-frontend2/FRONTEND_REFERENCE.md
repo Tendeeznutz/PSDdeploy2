@@ -31,25 +31,31 @@
 | State | Zustand |
 | Forms | React Hook Form |
 | HTTP | Axios |
-| Animations | GSAP |
+| Animations | CSS + IntersectionObserver |
 | Date Handling | date-fns |
-| PDF Export | jsPDF + html2canvas |
 
 ---
 
 ## Quick Start
 
+### Docker (Recommended)
+
+From the repository root:
+
 ```bash
-# 1. Make sure you are on the correct branch (source files live here)
-git checkout dan-frontend-included
+git checkout dockerized
+cp .env.example .env
+docker compose build
+docker compose up -d
+```
 
-# 2. Navigate to the frontend directory
+The frontend is available at **http://localhost** (served through Caddy reverse proxy).
+
+### Local Development
+
+```bash
 cd customer-frontend2
-
-# 3. Install dependencies
 npm install
-
-# 4. Start the dev server
 npm run dev
 ```
 
@@ -315,9 +321,10 @@ Standard email + password login form.
 
 **Behaviour:**
 
-1. If credentials match the built-in demo account (`test@hotmail.com` / `123`), logs in with mock data immediately — **no backend required**.
-2. Otherwise, calls `POST /api/customers/login` on the Django backend.
-3. On success, stores customer data in Zustand store and redirects to `/dashboard`.
+1. Calls `POST /api/customers/login` on the Django backend.
+2. On success, stores customer data in Zustand store and redirects to `/dashboard`.
+
+> **Note:** The backend must be running for login to work. Some pages (dashboard, profile) use mock data from `lib/mockData.ts` for the demo account (`test@hotmail.com`), but the login itself requires a backend response.
 
 **Links on this page:**
 
@@ -551,6 +558,8 @@ Allows rescheduling an appointment to a new date and time.
 /                          Landing page (public)
 ├── /login                 Sign in
 ├── /register              Create account
+├── /forgot-password       Request password reset email
+├── /reset-password        Set new password (via token)
 ├── /services              Services catalog
 │   └── /services/[slug]   Service detail
 │       slugs: general | chemical | troubleshooting | installation | gas-topup
@@ -573,27 +582,29 @@ All API calls are defined in `lib/api.ts` and grouped by resource:
 
 | Export | Resource | Key Methods |
 |---|---|---|
-| `customerApi` | `/api/customers` | `login`, `register`, `getProfile`, `updateProfile` |
+| `customerApi` | `/api/customers` | `login`, `register`, `getProfile`, `updateProfile`, `forgotPassword`, `validateResetToken`, `resetPassword` |
 | `airconDeviceApi` | `/api/customeraircondevices` | `getDevices`, `createDevice`, `updateDevice`, `deleteDevice` |
-| `appointmentApi` | `/api/appointments` | `getAppointments`, `getAppointment`, `createAppointment`, `updateAppointment`, `cancelAppointment` |
+| `appointmentApi` | `/api/appointments` | `getAppointments`, `getAppointment`, `createAppointment`, `updateAppointment`, `cancelAppointment`, `getUnavailableSlots`, `rateTechnician`, `getPenaltyStatus` |
 | `messageApi` | `/api/messages` | `getInbox`, `getSent`, `getUnreadCount`, `markAsRead`, `sendMessage` |
+| `telegramApi` | `/api/telegram` | `generateLink`, `checkStatus`, `unlink` |
+| `authApi` | `/api/auth` | `logout` |
 
-Authentication uses **JWT Bearer tokens** (managed by Django REST Framework SimpleJWT).
+Authentication uses **HTTP-only cookie-based JWT sessions** (managed by Django REST Framework SimpleJWT). The frontend sets `withCredentials: true` on all Axios requests, and tokens are refreshed automatically via `/api/token/refresh/`.
 
 ---
 
 ## Demo Credentials
 
-The app works out-of-the-box with this built-in test account (no backend required):
+The following test account is configured for demo purposes:
 
 | Field | Value |
 |---|---|
 | Email | `test@hotmail.com` |
 | Password | `123` |
 
-This account uses fully local mock data — appointments, devices, and messages are all pre-populated from `lib/mockData.ts`.
+> **Note:** The backend must be running for login. Once logged in with this account, some pages (dashboard, profile) display mock data from `lib/mockData.ts` for demonstration.
 
-To test with a real account and live database, follow the [Running the Backend](#running-the-backend-django) steps and register a new account via `/register`.
+To test with real data, follow the [Running the Backend](#running-the-backend-django) steps and register a new account via `/register`, or use the seeded test accounts (see main [README](../README.md)).
 
 ---
 
