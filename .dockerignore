@@ -13,6 +13,13 @@
 
 # Node
 **/node_modules
+**/.next
+
+# Build artifacts
+**/.pytest_cache
+**/.mypy_cache
+**/coverage
+**/.ruff_cache
 
 # IDE / OS
 .idea
@@ -26,13 +33,16 @@ Thumbs.db
 *.pptx
 *.tex
 *.gz
-*.md
 # Exclude CRA frontend (only Next.js is containerized)
 Integrated_Scheduling_System-master/appointment_scheduling/frontend/
 
 # Django dev artifacts
 **/db.sqlite3
 **/media
+**/media/nric_photos
+**/media/driving_licenses
+**/media/resumes
+**/media/profile_photos
 **/staticfiles
 audit.log
 

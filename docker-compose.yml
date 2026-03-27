@@ -3,6 +3,13 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -23,6 +30,13 @@ services:
   minio:
     image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     restart: unless-stopped
+    mem_limit: 384m
+    memswap_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -49,6 +63,13 @@ services:
         NEXT_PUBLIC_API_URL: /api
     image: ghcr.io/${GHCR_REPO_FRONTEND:-tendeeznutz/airserve-frontend}:latest
     restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "127.0.0.1:3000:3000"
     networks:
@@ -64,6 +85,15 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    mem_limit: 64m
+    memswap_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "80:80"
       - "443:443"
@@ -84,9 +114,16 @@ services:
     build:
       context: .
       dockerfile: infra/backend/Dockerfile
-    image: ghcr.io/${GHCR_REPO:-your-org/airserve-backend}:latest
+    image: ghcr.io/${GHCR_REPO:-tendeeznutz/airserve-backend}:latest
     restart: unless-stopped
     env_file: .env
+    mem_limit: 512m
+    memswap_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       DB_ENGINE: django.db.backends.postgresql
       DB_NAME: ${POSTGRES_DB}
@@ -95,10 +132,12 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       AWS_S3_ENDPOINT_URL: http://minio:9000
-      # TODO: Use a scoped MinIO service account instead of root credentials
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
       AWS_STORAGE_BUCKET_NAME: ${MINIO_BUCKET:-airserve-media}
+      MEDIA_PROXY_DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - media_data:/app/media
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -122,5 +161,6 @@ networks:
 volumes:
   pg_data:
   minio_data:
+  media_data:
   caddy_data:
   caddy_config:

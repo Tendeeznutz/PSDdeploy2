@@ -3,27 +3,65 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$REPO_DIR/.env"
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+BACKEND_HEALTH_URL="http://localhost:${BACKEND_PORT}/api/health/"
+HEALTHCHECK_ATTEMPTS=30
+HEALTHCHECK_SLEEP_SECONDS=3
+
+generate_secret() {
+    python3 -c "import secrets; print(secrets.token_urlsafe($1))" 2>/dev/null || openssl rand -base64 "$1"
+}
+
+show_unhealthy_logs() {
+    local has_unhealthy=0
+    local container_id
+    local service_name
+    local status
+
+    while IFS= read -r container_id; do
+        [ -n "$container_id" ] || continue
+
+        service_name="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.service" }}' "$container_id" 2>/dev/null || true)"
+        status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+
+        case "$status" in
+            healthy|running)
+                ;;
+            *)
+                has_unhealthy=1
+                echo "[WARN] Service ${service_name:-unknown} status: ${status:-unknown}"
+                ;;
+        esac
+    done < <(docker compose ps -q)
+
+    if [ "$has_unhealthy" -eq 1 ]; then
+        echo ""
+        echo "[WARN] Showing last 20 log lines for troubleshooting..."
+        docker compose logs --tail=20
+    fi
+
+    return "$has_unhealthy"
+}
 
 echo "==========================================="
 echo "  AirServe Docker Deployment"
 echo "==========================================="
 
-# ── Step 1: Kill any existing Gunicorn on port 8000 ──
 echo ""
-echo "[INFO] Stopping any existing process on port 8000..."
-if command -v lsof &>/dev/null; then
-    kill "$(lsof -t -i:${BACKEND_PORT:-8000})" 2>/dev/null || true
+echo "[INFO] Stopping any existing process on port ${BACKEND_PORT}..."
+if command -v lsof >/dev/null 2>&1; then
+    if lsof -t -i:"${BACKEND_PORT}" >/dev/null 2>&1; then
+        kill "$(lsof -t -i:"${BACKEND_PORT}")" 2>/dev/null || true
+    fi
 fi
 
-# ── Step 2: Create .env if it doesn't exist ──
 if [ ! -f "$ENV_FILE" ]; then
     echo ""
     echo "[INFO] Creating .env from template..."
 
-    # Generate secrets
-    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))" 2>/dev/null || openssl rand -base64 50)
-    PG_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))" 2>/dev/null || openssl rand -base64 24)
-    MINIO_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))" 2>/dev/null || openssl rand -base64 24)
+    SECRET_KEY="$(generate_secret 50)"
+    PG_PASS="$(generate_secret 24)"
+    MINIO_PASS="$(generate_secret 24)"
 
     cat > "$ENV_FILE" <<ENVEOF
 # ================================================================
@@ -38,9 +76,13 @@ POSTGRES_DB=airserve_db
 MINIO_ROOT_USER=airserve
 MINIO_ROOT_PASSWORD=$MINIO_PASS
 MINIO_BUCKET=airserve-media
+# MINIO_ACCESS_KEY=         # Optional: create a scoped MinIO service account for the app
+# MINIO_SECRET_KEY=         # Optional: create a scoped MinIO service account for the app
 
 BACKEND_PORT=8000
-GHCR_REPO=Tendeeznutz/airserve-backend
+DOMAIN=ay2526-tp-j.coding36.net
+GHCR_REPO=tendeeznutz/airserve-backend
+GHCR_REPO_FRONTEND=tendeeznutz/airserve-frontend
 
 # ── Django Core ──────────────────────────────────────────────
 SECRET_KEY=$SECRET_KEY
@@ -77,42 +119,51 @@ RUN_SEED=false
 ENVEOF
 
     echo "[INFO] .env created with auto-generated secrets."
-    echo "[WARN] Edit .env to fill in EMAIL, ONEMAP, and TELEGRAM values if needed."
-    echo ""
+    echo "[WARN] Review .env before production use, especially email, OneMap, Telegram, and optional scoped MinIO credentials."
 else
     echo "[INFO] .env already exists, skipping creation."
 fi
 
-# ── Step 3: Build and start ──
 echo ""
 echo "[INFO] Building Docker images..."
 cd "$REPO_DIR"
-docker compose build
+docker compose build --pull
 
 echo ""
 echo "[INFO] Starting containers..."
 docker compose up -d
 
-# ── Step 4: Wait and verify ──
 echo ""
 echo "[INFO] Waiting for backend to become healthy..."
-for i in $(seq 1 30); do
-    if curl -sf "http://localhost:${BACKEND_PORT:-8000}/api/health/" > /dev/null 2>&1; then
-        echo "[OK] Backend is healthy!"
+backend_healthy=0
+for i in $(seq 1 "$HEALTHCHECK_ATTEMPTS"); do
+    if curl -fsS "$BACKEND_HEALTH_URL" >/dev/null 2>&1; then
+        backend_healthy=1
+        echo "[OK] Backend is healthy."
         break
     fi
-    echo "[INFO] Waiting... ($i/30)"
-    sleep 3
+
+    echo "[INFO] Waiting... (${i}/${HEALTHCHECK_ATTEMPTS})"
+    sleep "$HEALTHCHECK_SLEEP_SECONDS"
 done
 
 echo ""
 echo "[INFO] Container status:"
 docker compose ps
 
+if [ "$backend_healthy" -ne 1 ]; then
+    echo ""
+    echo "[ERROR] Backend failed to become healthy at ${BACKEND_HEALTH_URL}"
+    show_unhealthy_logs || true
+    exit 1
+fi
+
+show_unhealthy_logs || true
+
 echo ""
 echo "==========================================="
 echo "  Deployment complete!"
-echo "  Backend:       http://localhost:8000"
+echo "  Backend:       http://localhost:${BACKEND_PORT}"
 echo "  MinIO Console: http://localhost:9001 (SSH tunnel only)"
 echo "  Logs:          docker compose logs -f backend"
 echo "==========================================="
