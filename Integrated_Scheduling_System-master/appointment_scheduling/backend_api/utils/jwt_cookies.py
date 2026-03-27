@@ -24,13 +24,17 @@ _REFRESH_MAX_AGE = int(
 )
 
 
+def _is_secure() -> bool:
+    """Use Secure cookies only when HTTPS is available."""
+    return getattr(settings, "CSRF_COOKIE_SECURE", not settings.DEBUG)
+
+
 def _cookie_kwargs(max_age: int) -> dict:
     """Base keyword arguments shared by set/delete helpers."""
-    secure = not settings.DEBUG
     return {
         "max_age": max_age,
         "httponly": True,
-        "secure": secure,
+        "secure": _is_secure(),
         "samesite": "Lax",
         "path": "/",
     }
@@ -49,12 +53,11 @@ def set_jwt_cookies(response, access: str, refresh: str):
 
 def clear_jwt_cookies(response):
     """Delete both JWT cookies from the browser."""
-    secure = not settings.DEBUG
     for name in (ACCESS_COOKIE, REFRESH_COOKIE):
         response.delete_cookie(
             name,
             path="/",
             samesite="Lax",
-            secure=secure,
+            secure=_is_secure(),
         )
     return response

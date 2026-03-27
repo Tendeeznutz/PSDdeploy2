@@ -8,12 +8,12 @@ echo "==========================================="
 echo "  AirServe Docker Deployment"
 echo "==========================================="
 
-# ── Step 1: Kill any existing Gunicorn on port 8000 ──
+# ── Step 1: Kill any existing bare-metal processes (no sudo needed) ──
 echo ""
-echo "[INFO] Stopping any existing process on port 8000..."
-if command -v lsof &>/dev/null; then
-    kill "$(lsof -t -i:${BACKEND_PORT:-8000})" 2>/dev/null || true
-fi
+echo "[INFO] Stopping any existing processes on ports 3000 and 8000..."
+pkill -f "next-server" 2>/dev/null || true
+pkill -f "node.*3000" 2>/dev/null || true
+pkill -f gunicorn 2>/dev/null || true
 
 # ── Step 2: Create .env if it doesn't exist ──
 if [ ! -f "$ENV_FILE" ]; then
@@ -41,14 +41,19 @@ MINIO_BUCKET=airserve-media
 
 BACKEND_PORT=8000
 GHCR_REPO=Tendeeznutz/airserve-backend
+DOMAIN=:80
+HTTP_PORT=8080
+HTTPS_PORT=8443
 
 # ── Django Core ──────────────────────────────────────────────
 SECRET_KEY=$SECRET_KEY
 DEBUG=False
+USE_HTTPS=False
 
 ALLOWED_HOSTS=ay2526-tp-j.coding36.net,localhost,127.0.0.1
-CORS_ALLOWED_ORIGINS=https://ay2526-tp-j.coding36.net
-FRONTEND_BASE_URL=https://ay2526-tp-j.coding36.net
+CORS_ALLOWED_ORIGINS=http://ay2526-tp-j.coding36.net:8080
+CSRF_TRUSTED_ORIGINS=http://ay2526-tp-j.coding36.net:8080
+FRONTEND_BASE_URL=http://ay2526-tp-j.coding36.net:8080
 
 # ── Email (Gmail SMTP) ──────────────────────────────────────
 EMAIL_HOST_USER=

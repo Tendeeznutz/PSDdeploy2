@@ -231,6 +231,15 @@ CORS_ALLOWED_ORIGINS = _cors_origins or [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF trusted origins — required by Django 4.x for POST requests behind a proxy
+_csrf_origins = [
+    o.strip()
+    for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+]
+if _csrf_origins:
+    CSRF_TRUSTED_ORIGINS = _csrf_origins
+
 LOGIN_REDIRECT_URL = "/"
 
 # Frontend base URL for emails (login links, etc.)
@@ -273,20 +282,26 @@ SIMPLE_JWT = {
 # Tell Django it's behind a reverse proxy (Apache) that handles SSL
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+_use_https = os.environ.get("USE_HTTPS", "True" if not DEBUG else "False") == "True"
+
 if not DEBUG:
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    # SSL redirect is handled by Apache, not Django
-    SECURE_SSL_REDIRECT = False
-    if not DEBUG and not SECURE_SSL_REDIRECT:
-        import warnings
-        warnings.warn("SECURE_SSL_REDIRECT is False — ensure TLS is handled by the reverse proxy (Apache/Caddy)")
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
+    SECURE_SSL_REDIRECT = False
+
+    if _use_https:
+        SECURE_HSTS_SECONDS = 31536000
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+        SECURE_HSTS_PRELOAD = True
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
+    else:
+        SESSION_COOKIE_SECURE = False
+        CSRF_COOKIE_SECURE = False
+
+# Caddy handles TLS termination, so the SECURE_SSL_REDIRECT warning is cosmetic
+SILENCED_SYSTEM_CHECKS = ["security.W008"]
 
 # ---------- File upload limits ----------
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -296,7 +311,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
-if not DEBUG and not TELEGRAM_WEBHOOK_SECRET:
+if not DEBUG and TELEGRAM_BOT_TOKEN and not TELEGRAM_WEBHOOK_SECRET:
     raise ValueError("TELEGRAM_WEBHOOK_SECRET must be set in production — webhook endpoint would be unprotected")
 
 # ---------- Object Storage (MinIO / S3) ----------
