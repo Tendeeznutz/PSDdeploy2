@@ -1,0 +1,24 @@
+{$DOMAIN:localhost} {
+
+    @api    { path /api/* }
+    @admin  { path /admin/* }
+    @media  { path /media/* }
+
+    reverse_proxy @api   backend:8000
+    reverse_proxy @admin backend:8000
+    reverse_proxy @media backend:8000
+    reverse_proxy        frontend:3000
+
+    header {
+        -Server
+        X-Frame-Options        "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy        "strict-origin-when-cross-origin"
+        Permissions-Policy     "geolocation=(), camera=(), microphone=()"
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

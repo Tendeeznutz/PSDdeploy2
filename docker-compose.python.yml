@@ -1,0 +1,46 @@
+# docker-compose.python.yml
+# Hotswap override — replaces the Go backend with the Python/Django backend.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.python.yml up -d
+#
+# Everything else (Postgres, Valkey, MinIO, Caddy, Adminer) is identical.
+# The Python backend binds on :8000 — Caddy routes to it without any change.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: infra/python/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Django reads these env names from settings.py
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ${POSTGRES_DB:-airserve_db}
+      DB_USER: ${POSTGRES_USER:-airserve}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required for Python backend}
+      DEBUG: ${DJANGO_DEBUG:-False}
+      ALLOWED_HOSTS: ${DOMAIN:-localhost}
+      CORS_ALLOWED_ORIGINS: "http://${DOMAIN:-localhost}"
+      FRONTEND_BASE_URL: "http://${DOMAIN:-localhost}"
+      RUN_SEED: ${RUN_SEED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      ONEMAP_API_EMAIL: ${ONEMAP_API_EMAIL:-}
+      ONEMAP_API_PASSWORD: ${ONEMAP_API_PASSWORD:-}
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/health/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5

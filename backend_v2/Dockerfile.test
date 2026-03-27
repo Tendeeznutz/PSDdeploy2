@@ -1,0 +1,21 @@
+# Test runner image — golang:1.25-alpine + docker-cli so testcontainers
+# can reach the host Docker socket mounted at /var/run/docker.sock.
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache docker-cli ca-certificates
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# -tags integration  : only compile files with //go:build integration
+# -race              : data-race detector (zero overhead cost at test time)
+# -count=1           : disable test result caching — always hit the real DB
+# -timeout=300s      : 5 min ceiling for the full suite
+ENTRYPOINT ["go", "test", \
+    "-tags", "integration", \
+    "-v", "-race", "-count=1", \
+    "-timeout=300s", \
+    "./integration/..."]
